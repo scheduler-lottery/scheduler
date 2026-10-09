@@ -246,7 +246,7 @@ def verify():
             session.pop("dev_code", None)
             _sign_in(email)
             destination = session.pop("teach_next", None)
-            if not (destination and destination.startswith("/teach")):
+            if not (destination and destination.startswith(("/teach", "/owner"))):
                 destination = url_for("teach.dashboard")
             return redirect(destination)
         if check.status != "missing":

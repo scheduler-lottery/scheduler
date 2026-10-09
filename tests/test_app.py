@@ -1971,3 +1971,13 @@ def test_a_professor_sets_the_look_for_the_whole_class(prof, browser):
     # Copying for next term keeps the look.
     new_sid = prof.post(f"/teach/s/{sid}/duplicate").headers["Location"].split("/")[-2]
     assert q(prof.app, "SELECT font FROM sheets WHERE id = :sid", sid=new_sid) == "readable"
+
+
+def test_the_owner_page_asks_a_signed_out_visitor_to_sign_in_and_returns(browser):
+    visitor = browser()
+    r = visitor.get("/owner/")
+    assert r.status_code == 302 and r.headers["Location"].endswith("/teach/login")
+    visitor.post("/teach/login", {"email": "owner@gmail.com"})
+    r = visitor.post("/teach/verify", {"code": visitor.last_code("owner@gmail.com")})
+    assert r.headers["Location"].endswith("/owner/")  # straight back to the owner page
+    assert visitor.get("/owner/").status_code == 200

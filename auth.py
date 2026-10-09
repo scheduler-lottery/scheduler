@@ -79,10 +79,17 @@ def instructor_required(view):
 
 
 def owner_required(view):
+    """The site owner's page. Signed out, you're asked to sign in (and
+    brought back); signed in as anyone else, it doesn't exist."""
     @wraps(view)
     def wrapped(*args, **kwargs):
+        if not current_instructor():
+            if request.method == "GET":
+                session["teach_next"] = request.path
+            flash("Sign in with the site owner's email to open that page.", "info")
+            return redirect(url_for("teach.login"))
         if not is_owner():
-            abort(404)  # don't even confirm the page exists
+            abort(404)
         return view(*args, **kwargs)
 
     return wrapped
