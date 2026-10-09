@@ -75,6 +75,15 @@ CRON_SECRET = _env("CRON_SECRET")
 # to switched-off accounts). Optional; leave it unset to show no address.
 CONTACT_EMAIL = _env("CONTACT_EMAIL").lower()
 
+# Where the site's code is published, linked from the privacy notes so anyone
+# can check what it does with a class list.
+SOURCE_URL = _env("SOURCE_URL", "https://github.com/scheduler-lottery/scheduler")
+
+# The credit at the foot of every page. Running your own copy? Set these to
+# yourself (or BUILT_BY to "-" to show no credit).
+BUILT_BY = _env("BUILT_BY", "Nathan Reitinger")
+BUILT_BY_EMAIL = _env("BUILT_BY_EMAIL", "nathan.reitinger@law.northwestern.edu").lower()
+
 # Times in downloads and emails use the instructor's own time zone, which
 # their browser reports when they sign in. This is the fallback until then.
 DEFAULT_TIMEZONE = _env("DEFAULT_TIMEZONE", "America/Chicago")

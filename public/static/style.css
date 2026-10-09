@@ -1557,11 +1557,14 @@ section[id], main[id] { scroll-margin-top: 80px; }
 
 .sheet-row { display: flex; gap: 8px; align-items: stretch; }
 .sheet-row .sheet-item { flex: 1 1 auto; }
-.sheet-copy { display: flex; align-items: center; margin: 0; }
+.sheet-actions { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; justify-content: flex-end; }
+.sheet-actions form { margin: 0; }
 @media (max-width: 560px) {
   .sheet-row { flex-direction: column; }
-  .sheet-copy { justify-content: flex-end; }
 }
+.short-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.short-row form { margin: 0; }
+.share-short { max-width: 260px; }
 
 .confirm-box {
   border: 1px solid var(--danger);
@@ -1700,3 +1703,57 @@ details.guide:not([open]) { padding-bottom: 20px; }
   .dock-optional { display: none; }
   .icon-dock-label { padding: 0 7px; }
 }
+
+/* =============================================================
+   Picking days on a calendar (create/edit form)
+   ============================================================= */
+.day-chips { list-style: none; margin: 8px 0 12px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.day-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 6px 6px 12px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent-strong); font-weight: 600;
+}
+.day-chip-empty { color: var(--muted); font-style: italic; }
+.chip-remove {
+  border: 0; background: transparent; color: inherit; cursor: pointer;
+  font-size: 1.1rem; line-height: 1; padding: 2px 6px; border-radius: 999px;
+}
+.chip-remove:hover, .chip-remove:focus-visible { background: var(--surface-strong); }
+.noscript-day { display: inline-block; margin: 0 8px 8px 0; }
+.modal-calendar { max-width: 640px; }
+.cal-nav { display: flex; justify-content: space-between; margin: 12px 0 4px; }
+.cal-months { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 18px; user-select: none; }
+.cal-title { margin: 4px 0 8px; font-size: 1.05rem; text-align: center; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; touch-action: none; }
+.cal-head { text-align: center; font-size: 0.8rem; color: var(--muted); padding-bottom: 2px; }
+.cal-day {
+  aspect-ratio: 1 / 1; min-height: 34px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--card-bg); color: var(--text);
+  font: inherit; cursor: pointer;
+}
+.cal-day:hover { border-color: var(--accent); }
+.cal-day:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.cal-day.today { border: 2px solid var(--accent); }
+.cal-day.past { color: var(--muted); background: var(--surface-soft); }
+.cal-day[aria-pressed="true"] {
+  background: linear-gradient(135deg, var(--accent-btn-1), var(--accent-btn-2));
+  border-color: transparent; color: #fff; font-weight: 700;
+}
+.cal-summary { margin: 14px 0 6px; color: var(--muted); line-height: 1.5; }
+
+/* Class list: privacy, and the list's two states */
+.privacy-panel {
+  border: 1px solid var(--border-strong); border-left: 4px solid var(--success);
+  border-radius: var(--radius-md); padding: 14px 18px; margin: 14px 0; background: var(--card-bg);
+}
+.privacy-title { margin: 0 0 8px; font-weight: 700; color: var(--success); }
+.privacy-panel ul { margin: 0 0 8px; padding-left: 20px; line-height: 1.55; }
+.privacy-panel li { margin: 4px 0; }
+.privacy-line { margin: 4px 0 12px; color: var(--muted); }
+.replace-list { margin: 10px 0; }
+.replace-list > summary { cursor: pointer; color: var(--accent-strong); font-weight: 600; }
+.replace-list[open] > summary { margin-bottom: 10px; }
+.canvas-open input { width: 100%; max-width: 520px; margin-top: 6px; }
+.guide-steps .btn { margin: 6px 0 2px; }
+
+.footer-credit { margin: 8px 0 0; font-size: 0.85rem; color: var(--muted); }

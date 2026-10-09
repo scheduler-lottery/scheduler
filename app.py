@@ -181,6 +181,9 @@ def template_globals():
         "nav_sheet": g.get("sheet"),
         "nav_student": g.get("student"),
         "contact_email": settings.CONTACT_EMAIL,
+        "source_url": settings.SOURCE_URL,
+        "built_by": "" if settings.BUILT_BY == "-" else settings.BUILT_BY,
+        "built_by_email": settings.BUILT_BY_EMAIL,
         "code_sender": settings.SMTP_FROM,
         # On the general pages a student might wander to (Privacy, How it
         # works), a way back to their class.
@@ -197,7 +200,7 @@ def http_error(err):
         413: ("That file is too big", "Uploads can be up to 2 MB — a class list is usually far smaller. Is it the right file?"),
     }
     title, message = messages.get(err.code, (err.name, err.description))
-    found = re.match(r"^/(teach/s|c)/([a-z0-9]{8})/", request.path)
+    found = re.match(r"^/(teach/s|c)/([a-z0-9]{8,16})/", request.path)
     if err.code == 405 and request.method == "GET" and found:
         # Reopening a page that only exists as the answer to a button (a
         # refresh, the back button, a bookmark): go to the sheet instead.
@@ -232,15 +235,18 @@ def landing():
 
 def find_code(raw):
     """The sheet code in whatever a student pasted: the code itself, the
-    whole link (with or without anything after it), "Code: k7q2mx9p", or the
-    code typed with a space or dash in the middle ("k7q2 mx9p")."""
+    whole link (with or without anything after it), "Code: k7q2mx9pa3fh", or
+    the code typed with spaces or dashes in it ("k7q2 mx9p a3fh"). Every way
+    of reading it is tried, longest first, and the first that's a real sheet
+    (or a deleted one that can still come back) wins; "" if none is."""
     text = (raw or "").strip().split("?")[0].split("#")[0]
     if "/c/" in text:
         text = text.split("/c/", 1)[1].split("/")[0]
     tokens = [t.lower() for t in re.findall(r"[A-Za-z0-9]+", text)]
-    joined = "".join(tokens)
-    for token in tokens + ([joined] if len(joined) == 8 else []):
-        if len(token) == 8 and all(ch in ID_ALPHABET for ch in token):
+    candidates = sorted(set(tokens + ["".join(tokens)]), key=len, reverse=True)
+    for token in candidates:
+        if len(token) in sheets.SHEET_ID_LENGTHS and all(ch in ID_ALPHABET for ch in token) and (
+                sheets.get_sheet(token) or _was_deleted(token)):
             return token
     return ""
 
@@ -271,7 +277,7 @@ def join():
     """Students who were given a code instead of a link."""
     raw = (request.args.get("code") or "").strip()
     code = find_code(raw)
-    if code and (sheets.get_sheet(code) or _was_deleted(code)):
+    if code:
         return redirect(url_for("student.signin", sid=code))
     if raw and _join_misses() >= JOIN_MISSES_PER_HOUR:
         flash("Too many codes that didn't match were tried from here. Use the link your instructor shared, "
@@ -280,21 +286,22 @@ def join():
     if raw:
         _join_misses(record=True)
     if not raw:
-        flash("Type the 8-character code your instructor gave you (letters and numbers).", "error")
+        flash("Type the code your instructor gave you: the letters and numbers at the end of the class link.",
+              "error")
     elif raw.isdigit() and len(raw) == 6:
         flash("That looks like the sign-in code from your email. Open your class's link first, then type "
               "the code there.", "error")
     else:
-        flash(f"We couldn't find a sign-up with the code “{raw[:40]}”. Check it with your instructor — it's "
-              "8 letters and numbers, like k7q2mx9p.", "error")
+        flash(f"We couldn't find a sign-up with the code “{raw[:40]}”. Check it with your instructor. It's the "
+              "letters and numbers at the end of the class link, like k7q2mx9pa3fh.", "error")
     return redirect(url_for("landing", code=raw[:80]))
 
 
 @app.route("/<code>")
 def short_link(code):
-    """example.com/k7q2mx9p works as well as example.com/c/k7q2mx9p."""
+    """example.com/k7q2mx9pa3fh works as well as example.com/c/k7q2mx9pa3fh."""
     sid = find_code(code)
-    if sid and (sheets.get_sheet(sid) or _was_deleted(sid)):
+    if sid:
         return redirect(url_for("student.signin", sid=sid))
     abort(404)
 

@@ -345,7 +345,7 @@
         noteBtn.className = "mini-toggle note-toggle";
         const hasNote = !!(comments[dayKey] || "").trim();
         commentWrap.hidden = !hasNote && !excluded.has(dayKey);
-        noteBtn.textContent = hasNote ? "✏️ Edit note" : "＋ Add a note";
+        noteBtn.textContent = hasNote ? "Edit note" : "＋ Add a note";
         if (hasNote) noteBtn.classList.add("has-note");
         noteBtn.setAttribute("aria-expanded", String(!commentWrap.hidden));
         noteBtn.addEventListener("click", () => {
@@ -363,7 +363,7 @@
         commentBox.addEventListener("input", () => {
           comments[dayKey] = commentBox.value;
           const filled = !!commentBox.value.trim();
-          noteBtn.textContent = filled ? "✏️ Edit note" : "＋ Add a note";
+          noteBtn.textContent = filled ? "Edit note" : "＋ Add a note";
           noteBtn.classList.toggle("has-note", filled);
           markDirty();
         });

@@ -7,7 +7,7 @@
     <div>
       <h1>{{ 'Rank the days' if bidding_open else 'Your ranking' }}</h1>
       {% if not bidding_open and not has_submitted %}
-        <p class="subtitle locked"><span aria-hidden="true">🔒</span> Sign-ups are closed, and you don't have a ranking saved.
+        <p class="subtitle locked">Sign-ups are closed, and you don't have a ranking saved.
           If you still need a presentation day, <a href="mailto:{{ sheet.owner_email }}?subject={{ ('I still need to rank — ' ~ sheet.title) | urlencode }}">email your instructor</a>.</p>
       {% elif bidding_open %}
         <p class="subtitle">
@@ -16,7 +16,7 @@
         </p>
         {% if sheet.rank_by %}<p class="deadline">Please rank by <strong>{{ sheet.rank_by }}</strong>.</p>{% endif %}
       {% else %}
-        <p class="subtitle locked"><span aria-hidden="true">🔒</span> Sign-ups are closed — here's what you sent. If
+        <p class="subtitle locked">Sign-ups are closed — here's what you sent. If
           something needs to change, <a href="mailto:{{ sheet.owner_email }}?subject={{ ('My ranking — ' ~ sheet.title) | urlencode }}">email your instructor</a>.</p>
       {% endif %}
     </div>
@@ -64,7 +64,7 @@
         ever. If you mark every day, or every day you can do fills up, your instructor decides where you go —
         nobody is bumped automatically. Notes are seen only by your instructor.
       </p>
-      <p><a href="{{ url_for('how_it_works') }}">More about how days are given out →</a></p>
+      <p><a href="{{ url_for('how_it_works') }}">More about how days are assigned →</a></p>
     </div>
   </details>
   {% if sheet.show_preview %}
@@ -86,7 +86,7 @@
   </div>
   {% elif has_submitted %}
   <div class="save-row">
-    <span class="save-status">🔒 This is locked in — no changes possible now.</span>
+    <span class="save-status">This is locked in — no changes possible now.</span>
   </div>
   {% endif %}
 

@@ -77,7 +77,7 @@
         </form>
       {% endif %}
 
-      <a href="{{ url_for('how_it_works') }}" class="icon-dock-btn dock-optional" aria-label="How days are given out" title="How days are given out">
+      <a href="{{ url_for('how_it_works') }}" class="icon-dock-btn dock-optional" aria-label="How days are assigned" title="How days are assigned">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <circle cx="6" cy="7" r="2.5" stroke="currentColor" stroke-width="1.7"/>
           <circle cx="18" cy="7" r="2.5" stroke="currentColor" stroke-width="1.7"/>
@@ -131,12 +131,15 @@
   {% if nav_sheet and nav_sheet.owner_email %}
   <p class="footer-contact">Questions about this sign-up? <a href="mailto:{{ nav_sheet.owner_email }}?subject={{ ('Question about ' ~ nav_sheet.title) | urlencode }}">Email your instructor</a></p>
   {% endif %}
-  <a href="{{ url_for('how_it_works') }}">How days are given out</a>
+  <a href="{{ url_for('how_it_works') }}">How days are assigned</a>
   <span aria-hidden="true">·</span>
   <a href="{{ url_for('privacy') }}">Privacy</a>
   {% if not instructor and not nav_sheet %}
   <span aria-hidden="true">·</span>
   <a href="{{ url_for('teach.login') }}">Instructors: get started or sign in</a>
+  {% endif %}
+  {% if built_by %}
+  <p class="footer-credit">Built by {{ built_by }}{% if built_by_email %} · <a href="mailto:{{ built_by_email }}">{{ built_by_email }}</a>{% endif %}</p>
   {% endif %}
 </footer>
 

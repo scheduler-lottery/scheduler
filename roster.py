@@ -72,7 +72,9 @@ class RosterResult:
     canvas_rows: int = 0  # Canvas's "Points Possible" and "Test Student" rows
     email_only: list = field(default_factory=list)  # emails found on lines with no name
     non_students: int = 0  # teachers/TAs dropped by a role column
-    duplicates: list = field(default_factory=list)  # [(display name, dropped email)]: two people, one name
+    duplicates: list = field(default_factory=list)  # [(display name, dropped email)]: one name, can't tell apart
+    numbered: list = field(default_factory=list)  # ["Alex Kim (2)"]: two people, one name, told apart by email
+    same_name: list = field(default_factory=list)  # (while reading) the second of two people with one name
     repeated: list = field(default_factory=list)  # one person listed twice
     bad_emails: list = field(default_factory=list)  # [(display name, the incomplete address)]
     flipped: bool = False  # names arrived "Last, First" and were turned around
@@ -401,6 +403,7 @@ def _parse_rows(rows, lines):
         _parse_table(header, data_rows, name_cols, result)
     if result.error:
         return result
+    _number_same_names(result)
     _check_emails(result)
     if not result.students:
         result.error = (
@@ -443,16 +446,56 @@ def _add(result, raw_name, email, seen):
         return
     if key in seen:
         first = next(st for st in result.students if st["name_key"] == key)
-        if not email or email == first["email"]:
+        if not email or email == first["email"] or any(e["email"] == email for e in result.same_name
+                                                         if e["name_key"] == key):
             result.repeated.append(display_name)  # the same person listed twice (two sections, say)
         elif not first["email"]:
             first["email"] = email
             result.repeated.append(display_name)
         else:
-            result.duplicates.append((display_name, email))
+            # Two students with one name: both stay, told apart by their emails.
+            result.same_name.append({"name_key": key, "display_name": display_name, "email": email})
         return
     seen.add(key)
     result.students.append({"name_key": key, "display_name": display_name, "email": email})
+
+
+SAME_NAME_SUFFIX = re.compile(r" \((\d+)\)$")
+
+
+def base_key(name_key):
+    """"alex kim 2" (the second Alex Kim) -> "alex kim"."""
+    return re.sub(r" \d+$", "", name_key)
+
+
+def numbered(display_name, n):
+    return display_name if n == 1 else f"{SAME_NAME_SUFFIX.sub('', display_name)} ({n})"
+
+
+def _number_same_names(result):
+    """Two students with one name both stay on the list: "Alex Kim" and
+    "Alex Kim (2)", numbered in email order so the same file always numbers
+    them the same way. Each signs in with a code sent to their own email."""
+    if not result.same_name:
+        return
+    final = []
+    for s in result.students:
+        group = [s] + [e for e in result.same_name if e["name_key"] == s["name_key"]]
+        if len(group) == 1:
+            final.append(s)
+            continue
+        group.sort(key=lambda e: e["email"])
+        # One spelling for all of them, preferring one that isn't all lower
+        # or upper case.
+        spelling = max((e["display_name"] for e in group),
+                       key=lambda name: name not in (name.lower(), name.upper()))
+        for n, e in enumerate(group, start=1):
+            name = numbered(spelling, n)
+            final.append({"name_key": normalize_name(name), "display_name": name, "email": e["email"]})
+            if n > 1:
+                result.numbered.append(name)
+    result.students = final
+    result.same_name = []
 
 
 def _parse_table(header, data_rows, name_cols, result):
@@ -622,6 +665,10 @@ def describe(result, source=""):
     if result.repeated:
         shown = ", ".join(result.repeated[:5])
         tips.append(f"{shown} {'was' if len(result.repeated) == 1 else 'were'} listed twice; we kept one of each.")
+    for name in result.numbered[:5]:
+        first = SAME_NAME_SUFFIX.sub("", name)
+        tips.append(f"Two students are named {first}, so they're listed as “{first}” and “{name}”. Each one signs "
+                    "in with a code sent to their own email, so they can't mix them up.")
     if result.duplicates:
         shown = ", ".join(f"{name}{f' ({email})' if email else ''}" for name, email in result.duplicates[:5])
         first = result.duplicates[0][0].split()

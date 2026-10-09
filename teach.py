@@ -13,6 +13,7 @@ import os
 import re
 import unicodedata
 from collections import Counter
+from datetime import timedelta
 from itertools import zip_longest
 
 from flask import (
@@ -32,14 +33,13 @@ from matching_engine import (
 )
 from roster import describe, find_email, flip_last_first, parse_roster, _is_last_first
 from util import (
-    clean_name, clean_text, fold, friendly_time, iso, mask_email, new_id, normalize_name, now, parse_iso, plural,
-    slugify, valid_email,
+    clean_name, clean_text, date_label, fold, friendly_time, iso, mask_email, new_id, normalize_name, now, parse_iso,
+    plural, read_date, slugify, valid_email,
 )
 
 bp = Blueprint("teach", __name__, url_prefix="/teach")
 
 MAX_UPLOAD_BYTES = 1024 * 1024
-DEFAULT_DAY_ROWS = 4
 BACKUP_EMAIL_GAP_MINUTES = 10
 TITLE_LIMIT = 100
 NOTE_LIMIT = 2000
@@ -332,7 +332,7 @@ def dashboard():
     instructor = current_instructor()
     mine = db.rows(
         """
-        SELECT s.id, s.title, s.bidding_open, s.allow_unlisted, s.published_at, s.created_at,
+        SELECT s.id, s.title, s.bidding_open, s.allow_unlisted, s.published_at, s.created_at, s.archived_at,
             (SELECT COUNT(*) FROM roster r WHERE r.sheet_id = s.id AND r.is_test = 0) AS roster_count,
             (SELECT COUNT(*) FROM submissions x JOIN roster r
                 ON r.sheet_id = x.sheet_id AND r.name_key = x.name_key AND r.is_test = 0
@@ -357,7 +357,8 @@ def dashboard():
         if download and sheets.get_snapshot(download, instructor["id"]) else None
     )
     return render_template(
-        "teach_dashboard.html", sheets=mine, deleted=sheets.deleted_sheets(instructor["id"]),
+        "teach_dashboard.html", sheets=[s for s in mine if not s["archived_at"]],
+        archived=[s for s in mine if s["archived_at"]], deleted=sheets.deleted_sheets(instructor["id"]),
         download_url=download_url,
     )
 
@@ -365,7 +366,7 @@ def dashboard():
 def _blank_form():
     return {
         "title": "",
-        "days": [{"key": "", "label": ""} for _ in range(DEFAULT_DAY_ROWS)],
+        "days": [],
         "capacity": 4,
         "note": "",
         "rank_by": "",
@@ -374,22 +375,43 @@ def _blank_form():
     }
 
 
+def _read_days(form):
+    """The days from the form: dates picked on the calendar (YYYY-MM-DD) —
+    each checked to be a real date — plus any day saved before days were
+    picked on a calendar, kept by its key. Returns (days, problems)."""
+    keys, dates, labels = form.getlist("day_key"), form.getlist("day_date"), form.getlist("day_label")
+    picked, undated, problems = {}, [], []
+    for key, raw, label in zip_longest(keys, dates, labels, fillvalue=""):
+        key, raw = (key or "").strip()[:20], (raw or "").strip()
+        if raw:
+            day = read_date(raw)
+            if day is None:
+                problems.append(f"“{raw[:20]}” isn't a real date. Pick the days on the calendar.")
+            else:
+                picked.setdefault(day, key)
+        elif key and (label or "").strip():
+            undated.append({"key": key, "label": clean_text(label, DAY_LABEL_LIMIT + 50), "date": None})
+    today = now().date()
+    outside = [d for d in picked if not (today - timedelta(days=366) <= d <= today + timedelta(days=3 * 366))]
+    if outside:
+        problems.append(f"{date_label(outside[0], True)} is too far from today — pick days within the next "
+                        "three years.")
+    with_year = len({d.year for d in picked}) > 1
+    days = [{"key": key, "label": date_label(day, with_year), "date": day.isoformat()}
+            for day, key in sorted(picked.items())] + undated
+    return days, problems
+
+
 def _read_sheet_form(form):
     """Returns (values, errors). Values are shaped like _blank_form() so the
     page can be shown again with everything the instructor typed."""
-    labels = form.getlist("day_label")
-    keys = form.getlist("day_key")
-    days = [
-        {"key": (k or "").strip()[:20], "label": clean_text(label, DAY_LABEL_LIMIT + 50)}
-        for k, label in zip_longest(keys, labels, fillvalue="")
-    ]
-    filled = [d for d in days if d["label"]]
+    filled, day_problems = _read_days(form)
     title = clean_text(form.get("title"), TITLE_LIMIT + 50)
     note = clean_text(form.get("note"), NOTE_LIMIT + 50, keep_newlines=True)
     rank_by = clean_text(form.get("rank_by"), RANK_BY_LIMIT + 50)
     values = {
         "title": title,
-        "days": filled + [{"key": "", "label": ""}] * max(0, 2 - len(filled)),
+        "days": filled,
         "capacity": (form.get("capacity") or "").strip(),
         "note": note,
         "rank_by": rank_by,
@@ -405,18 +427,9 @@ def _read_sheet_form(form):
         errors.append(f"The note to students is {len(note)} characters; the most is {NOTE_LIMIT}.")
     if len(rank_by) > RANK_BY_LIMIT:
         errors.append(f"The “rank by” date is too long — keep it under {RANK_BY_LIMIT} characters.")
-    long_days = [d["label"] for d in filled if len(d["label"]) > DAY_LABEL_LIMIT]
-    if long_days:
-        errors.append(f"Day names can be up to {DAY_LABEL_LIMIT} characters — “{long_days[0][:40]}…” is longer.")
-    seen = set()
-    for d in filled:
-        key = fold(d["label"])
-        if key in seen:
-            errors.append(f"“{d['label']}” is listed twice — remove one, or tell them apart (like “{d['label']} (morning)”).")
-            break
-        seen.add(key)
-    if len({fold(d["label"]) for d in filled}) < 2:
-        errors.append("Add at least two different days for students to choose between.")
+    errors += day_problems
+    if len(filled) < 2:
+        errors.append("Pick at least two days on the calendar for students to choose between.")
     if len(filled) > sheets.MAX_DAYS:
         errors.append(f"That's {len(filled)} days — the most is {sheets.MAX_DAYS}. Please trim the list.")
     try:
@@ -441,7 +454,7 @@ def new_sheet():
         if errors:
             for error in errors:
                 flash(error, "error")
-            return render_template("sheet_form.html", form=values, mode="new")
+            return render_template("sheet_form.html", form=values, mode="new", max_days=sheets.MAX_DAYS)
         mine = [fold(r["title"]) for r in db.rows(
             "SELECT title FROM sheets WHERE owner_id = :me", me=current_instructor()["id"]
         )]
@@ -459,8 +472,9 @@ def new_sheet():
             unlisted=int(values["allow_unlisted"]), preview=int(values["show_preview"]),
             seed=sheets.new_lottery_seed(), at=at,
         )
-        sheets.save_days(sid, [("", d["label"]) for d in values["days"] if d["label"]])
+        sheets.save_days(sid, [("", d["label"], d["date"]) for d in values["days"]])
         db.commit()
+        _warn_past_days(values["days"])
         flash("Your sign-up sheet is ready. Next: "
               + ("share the link with your class (or add your class list)." if values["allow_unlisted"]
                  else "add your class list."), "success")
@@ -468,20 +482,29 @@ def new_sheet():
             flash("You already have a sheet with this title — the link code under each title on your list "
                   "tells them apart.", "info")
         return redirect(url_for("teach.sheet", sid=sid) + "#class-list")
-    return render_template("sheet_form.html", form=_blank_form(), mode="new")
+    return render_template("sheet_form.html", form=_blank_form(), mode="new", max_days=sheets.MAX_DAYS)
+
+
+def _warn_past_days(days):
+    today = now().date()
+    past = [d["label"] for d in days if d["date"] and read_date(d["date"]) < today]
+    if past:
+        flash(f"Heads up: {', '.join(past[:3])}{' …' if len(past) > 3 else ''} "
+              f"{'has' if len(past) == 1 else 'have'} already passed. If that's a mistake, change it under "
+              "“Edit days & settings”.", "info")
 
 
 def _form_version(sheet, days):
     """Changes whenever the sheet's editable settings do, so a stale Edit
     page left open in another tab can't put back what was changed since."""
     parts = [sheet["title"], sheet["note"], sheet["rank_by"], sheet["capacity_per_day"],
-             sheet["allow_unlisted"], sheet["show_preview"], [[d["key"], d["label"]] for d in days]]
+             sheet["allow_unlisted"], sheet["show_preview"], [[d["key"], d["label"], d["date"]] for d in days]]
     return hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:16]
 
 
 def _edit_context(sheet, days):
     counts = sheets.counts(sheet["id"])
-    return {"sheet": sheet, "version": _form_version(sheet, days), "counts": counts}
+    return {"sheet": sheet, "version": _form_version(sheet, days), "counts": counts, "max_days": sheets.MAX_DAYS}
 
 
 @bp.route("/s/<sid>/edit", methods=["GET", "POST"])
@@ -491,6 +514,12 @@ def edit_sheet(sid):
     days = sheets.get_days(sheet["id"])
     if request.method == "POST":
         values, errors = _read_sheet_form(request.form)
+        # A date picked again is the same day as before (same rankings and
+        # notes), whatever the page sent along with it.
+        by_date = {d["date"]: d["key"] for d in days if d["date"]}
+        for d in values["days"]:
+            if d["date"]:
+                d["key"] = by_date.get(d["date"], "")
         if request.form.get("version") != _form_version(sheet, days):
             flash(
                 "This sheet was changed in another window or tab after you opened this page, so nothing was "
@@ -502,7 +531,7 @@ def edit_sheet(sid):
             for error in errors:
                 flash(error, "error")
             return render_template("sheet_form.html", form=values, mode="edit", **_edit_context(sheet, days))
-        kept_keys = {d["key"] for d in values["days"] if d["label"]}
+        kept_keys = {d["key"] for d in values["days"]}
         removing = [d for d in days if d["key"] not in kept_keys]
         impact = sheets.day_impact(sheet["id"], [d["key"] for d in removing]) if removing else None
         affected = impact and (impact["ranked"] or impact["scheduled"] or impact["notes"])
@@ -513,7 +542,7 @@ def edit_sheet(sid):
             )
         old_labels = {d["key"]: d["label"] for d in days}
         renamed = [(old_labels[d["key"]], d["label"]) for d in values["days"]
-                   if d["label"] and d["key"] in old_labels and old_labels[d["key"]] != d["label"]]
+                   if not d["date"] and d["key"] in old_labels and old_labels[d["key"]] != d["label"]]
         has_work = db.scalar("SELECT 1 FROM submissions WHERE sheet_id = :sid LIMIT 1", sid=sheet["id"]) or \
             db.scalar("SELECT 1 FROM assignments WHERE sheet_id = :sid LIMIT 1", sid=sheet["id"])
         if affected:
@@ -530,9 +559,10 @@ def edit_sheet(sid):
             unlisted=int(values["allow_unlisted"]), preview=int(values["show_preview"]), at=iso(),
             sid=sheet["id"],
         )
-        removed = sheets.save_days(sheet["id"], [(d["key"], d["label"]) for d in values["days"] if d["label"]])
+        removed = sheets.save_days(sheet["id"], [(d["key"], d["label"], d["date"]) for d in values["days"]])
         db.commit()
         flash("Saved.", "success")
+        _warn_past_days([d for d in values["days"] if d["key"] not in old_labels])
         if renamed and has_work:
             flash(
                 "Renamed " + "; ".join(f"“{old}” → “{new}”" for old, new in renamed) + ". Students who ranked "
@@ -542,7 +572,7 @@ def edit_sheet(sid):
                 + ". (A copy from before is saved under Backups.)",
                 "info",
             )
-        added = [d["label"] for d in values["days"] if d["label"] and d["key"] not in old_labels]
+        added = [d["label"] for d in values["days"] if d["key"] not in old_labels]
         has_rankings = db.scalar("SELECT 1 FROM submissions WHERE sheet_id = :sid LIMIT 1", sid=sheet["id"])
         if added and has_rankings:
             flash(
@@ -904,7 +934,7 @@ def sheet(sid):
         {"title": "Create your sign-up sheet", "done": True, "anchor": "top"},
         {"title": "Add your class list", "done": counts["roster"] > 0, "anchor": "class-list",
          "optional": bool(sheet["allow_unlisted"]),
-         "hint": "Drag in the Class Roster file from Canvas."},
+         "hint": "One link and one button in Canvas, then drag the file in."},
         {"title": "See it as a student", "done": bool(sheet["tested_at"] or sheet["shared_at"]), "anchor": "try-it",
          "optional": True, "hint": "Opens in a new tab; this page stays open."},
         {"title": "Share the link with your class", "done": bool(sheet["shared_at"]),
@@ -914,6 +944,8 @@ def sheet(sid):
         {"title": "Publish the schedule", "done": published and not sheet["bidding_open"], "anchor": "schedule",
          "hint": "Each student sees their day."},
     ]
+    # Once the list is in, point straight at what comes next.
+    list_next = next((step for step in steps[2:] if not step["done"]), None) if counts["roster"] else None
 
     download = request.args.get("download", "")
     download_url = (
@@ -978,6 +1010,7 @@ def sheet(sid):
         undo=undo,
         handoff=handoff,
         stuck=stuck,
+        list_next=list_next,
         add_form=add_form,
         download_url=download_url,
         email_on=signin.email_mode() == "smtp",
@@ -1321,6 +1354,21 @@ def add_student(sid):
     roster_rows = sheets.get_roster(sheet["id"])
     same_key = next((r for r in roster_rows if r["name_key"] == key), None)
     same_email = next((r for r in roster_rows if email and r["email"] == email), None)
+    twin_note = ""
+    second = (not problem and same_key and email and same_key["email"] and not same_email
+              and not same_key["is_test"])
+    if second and request.form.get("same_name") == "1":
+        # A different student with the same name: they're told apart by email.
+        from roster import numbered
+
+        taken = {r["name_key"] for r in roster_rows}
+        n = 2
+        while normalize_name(numbered(name, n)) in taken:
+            n += 1
+        twin_note = (f" There's already a {name} on your list, so this one is “{numbered(name, n)}”. Each signs in "
+                     "with a code sent to their own email.")
+        name = numbered(name, n)
+        key, same_key = normalize_name(name), None
     if not problem and same_key:
         problem = (
             f"{same_key['display_name']} is already on your list"
@@ -1332,7 +1380,7 @@ def add_student(sid):
         problem = f"That email is already on your list for {same_email['display_name']}."
     if problem:
         flash(problem, "error")
-        session["add_form"] = {"sid": sheet["id"], "name": name, "email": email}
+        session["add_form"] = {"sid": sheet["id"], "name": name, "email": email, "twin": bool(second)}
         return _back(sheet, "add-student")
     db.run(
         "INSERT INTO roster (sheet_id, name_key, display_name, email, is_test) VALUES (:sid, :key, :name, :email, 0)",
@@ -1347,7 +1395,7 @@ def add_student(sid):
         auth.end_student_sessions(sheet["id"], [key], reason="list")
     already = db.scalar("SELECT 1 FROM submissions WHERE sheet_id = :sid AND name_key = :key", sid=sheet["id"], key=key)
     db.commit()
-    message = f"Added {name} to the class list."
+    message = f"Added {name} to the class list." + twin_note
     if already:
         message += " They had already signed up, so their ranking now counts as on your list."
     if not email and any(r["email"] for r in roster_rows if not r["is_test"]):
@@ -2064,7 +2112,7 @@ def publish(sid):
     rankers, didnt_rank = sheets.unplaced(sheets.get_assignments(sheet["id"]), inputs.rows,
                                           sheets.get_roster(sheet["id"]), inputs.days, inputs.tests_counted)
     nobody = [r["display_name"] for r in rankers + didnt_rank]
-    message = ("Published! Each student now sees their day when they open the class link. Post the message below "
+    message = ("Published. Each student now sees their day when they open the class link. Post the message below "
                "to let them know.")
     if nobody:
         message += (f" {plural(len(nobody), 'student has', 'students have')} no day yet and will see that: "
@@ -2320,13 +2368,75 @@ def delete_all(sid):
     return redirect(url_for("teach.sheet", sid=sheet["id"], download=snap_id) + "#signups")
 
 
+@bp.route("/s/<sid>/archive", methods=["POST"])
+@instructor_required
+def archive_sheet(sid):
+    """Tuck a sheet away on the dashboard. Nothing else changes: its link
+    keeps working, and it can be unarchived any time."""
+    sheet = owned_sheet(sid)
+    archive = request.form.get("archive", "1") == "1"
+    db.run("UPDATE sheets SET archived_at = :at WHERE id = :sid", at=iso() if archive else None, sid=sheet["id"])
+    db.commit()
+    if archive:
+        flash(f"Archived “{sheet['title']}”. It's under Archived sheets at the bottom of this page, and its link "
+              "still works for students.", "success")
+    else:
+        flash(f"“{sheet['title']}” is back on your list.", "success")
+    return redirect(url_for("teach.dashboard"))
+
+
+# Free link-shortening services, tried in order. Only the class link is
+# sent, and only after the instructor agrees to it.
+SHORTENERS = (
+    ("is.gd", "https://is.gd/create.php?format=simple&url={}", re.compile(r"^https://is\.gd/[A-Za-z0-9_]{1,30}$")),
+    ("TinyURL", "https://tinyurl.com/api-create.php?url={}", re.compile(r"^https://tinyurl\.com/[A-Za-z0-9_-]{1,40}$")),
+)
+
+
+def _shorten(url):
+    """A short link to `url` from the first service that answers, or ""."""
+    import urllib.parse
+    import urllib.request
+
+    for _name, api, shape in SHORTENERS:
+        try:
+            ask = urllib.request.Request(api.format(urllib.parse.quote(url, safe="")),
+                                         headers={"User-Agent": f"{settings.APP_NAME} (link shortener)"})
+            with urllib.request.urlopen(ask, timeout=8) as answer:
+                short = answer.read(300).decode("utf-8", "replace").strip()
+        except Exception:  # noqa: BLE001 - a service being down just means trying the next
+            continue
+        if short.startswith("http://"):
+            short = "https://" + short[len("http://"):]
+        if shape.match(short):
+            return short
+    return ""
+
+
+@bp.route("/s/<sid>/shorten", methods=["POST"])
+@instructor_required
+def shorten_link(sid):
+    sheet = owned_sheet(sid)
+    if not sheet["short_url"]:
+        short = _shorten(url_for("student.signin", sid=sheet["id"], _external=True))
+        if not short:
+            flash("The link-shortening services didn't answer just now. Please try again in a minute; your full "
+                  "link works either way.", "error")
+            return _back(sheet)
+        db.run("UPDATE sheets SET short_url = :url WHERE id = :sid", url=short, sid=sheet["id"])
+        db.commit()
+        sheet = sheets.get_sheet(sheet["id"])
+    flash(f"Short link: {sheet['short_url']}. It opens the same sign-up page as the full link.", "success")
+    return _back(sheet)
+
+
 @bp.route("/s/<sid>/delete-sheet", methods=["POST"])
 @instructor_required
 def delete_sheet(sid):
     sheet = owned_sheet(sid)
     if request.form.get("confirm", "").strip().upper() != "DELETE":
         flash("Nothing was deleted — type DELETE to confirm.", "error")
-        return _back(sheet)
+        return redirect(url_for("teach.dashboard")) if request.form.get("back") == "dashboard" else _back(sheet)
     snap_id = sheets.delete_sheet(sheet)
     db.commit()
     flash(

@@ -25,6 +25,21 @@
     <button class="btn btn-primary" type="button" data-copy="#share-url"
             data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}">Copy student link</button>
   </div>
+  <div class="short-row">
+    {% if sheet.short_url %}
+    <label for="short-url" class="mini-hint">Short link:</label>
+    <input id="short-url" type="text" readonly value="{{ sheet.short_url }}" class="share-input share-short">
+    <button class="btn btn-secondary btn-small" type="button" data-copy="#short-url"
+            data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}">Copy short link</button>
+    {% else %}
+    <form method="post" action="{{ url_for('teach.shorten_link', sid=sheet.id) }}"
+          data-confirm="Make a short link? Your class link will be sent to is.gd, a free link-shortening service (or TinyURL, if is.gd is down), which then knows the link. Anyone with the short link can open your sign-up page, just as with the full link, and short links are easier for strangers to come across. Students still need to be on your class list and confirm with an emailed code to sign in.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-ghost btn-small">Shorten this link</button>
+    </form>
+    <span class="mini-hint">Uses a free outside service; you'll be asked first.</span>
+    {% endif %}
+  </div>
   <nav class="section-nav" aria-label="On this page">
     <a href="#class-list">Class list</a>
     <a href="#try-it">See it as a student</a>
@@ -74,12 +89,12 @@
   <h2 class="next-step-title"><a href="#{{ next_step.anchor }}">{{ next_step.title }}</a></h2>
   <p>{{ next_step.text }}</p>
   {% if seat_warning %}
-  <p class="warn-line">⚠️ {{ seat_warning.people }} {{ 'students' if seat_warning.counting_unranked else 'people have ranked' }} but only {{ seat_warning.seats }} seats — see <a href="#schedule">Schedule</a>.</p>
+  <p class="warn-line">{{ seat_warning.people }} {{ 'students' if seat_warning.counting_unranked else 'people have ranked' }} but only {{ seat_warning.seats }} seats — see <a href="#schedule">Schedule</a>.</p>
   {% endif %}
   {% if email_room is not none and email_room <= 0 %}
-  <p class="warn-line">⚠️ The site has used up today's sign-in emails, so no new code emails go out until tomorrow. Students already signed in aren't affected, a sign-in link from an earlier email still works, and you can give anyone else a sign-in code under <a href="#signups">Sign-ups</a>.</p>
+  <p class="warn-line">The site has used up today's sign-in emails, so no new code emails go out until tomorrow. Students already signed in aren't affected, a sign-in link from an earlier email still works, and you can give anyone else a sign-in code under <a href="#signups">Sign-ups</a>.</p>
   {% elif email_room is not none and email_room < 15 %}
-  <p class="warn-line">⚠️ Only {{ email_room | plural('sign-in email') }} left on this site today. If a student can't get one, give them a sign-in code under <a href="#signups">Sign-ups</a>.</p>
+  <p class="warn-line">Only {{ email_room | plural('sign-in email') }} left on this site today. If a student can't get one, give them a sign-in code under <a href="#signups">Sign-ups</a>.</p>
   {% endif %}
 </section>
 
@@ -91,7 +106,7 @@
   <ol class="checklist">
     {% for step in steps %}
     <li class="check-item{{ ' done' if step.done }}">
-      <span class="check-mark" aria-hidden="true">{{ '✓' if step.done else loop.index }}</span>
+      <span class="check-mark" aria-hidden="true">{% if step.done %}<svg viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>{% else %}{{ loop.index }}{% endif %}</span>
       <span class="check-text">
         <a href="#{{ step.anchor }}">{{ step.title }}</a>{% if step.optional and not step.done %} <span class="muted">(optional)</span>{% endif %}
         {% if step.hint and not step.done %}<span class="check-hint">{{ step.hint }}</span>{% endif %}
@@ -109,7 +124,7 @@
 
   {% if report %}
   <div class="report{{ ' report-warn' if report.warn }}">
-    <p class="report-main">{{ '⚠️' if report.warn else '✅' }} {{ report.message }}</p>
+    <p class="report-main">{{ report.message }}</p>
     {% if report.tips %}
     <ul class="tips">{% for tip in report.tips %}<li>{{ tip }}</li>{% endfor %}</ul>
     {% endif %}
@@ -118,7 +133,7 @@
       <form method="post" action="{{ url_for('teach.undo', sid=sheet.id, snap_id=report.undo) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="parts" value="roster">
-        <button type="submit" class="btn btn-secondary btn-small">↩ Wrong list? Put the previous one back</button>
+        <button type="submit" class="btn btn-secondary btn-small">Wrong list? Put the previous one back</button>
       </form>
       {% endif %}
       <form method="post" action="{{ url_for('teach.dismiss_report', sid=sheet.id) }}">
@@ -132,7 +147,7 @@
   {% set paused = roster | selectattr('name_key', 'in', locked) | list %}
   {% if paused %}
   <div class="warn-box">
-    <p>⚠️ Signing in is paused for {{ paused | map(attribute='display_name') | join(', ') }} — too many wrong codes or PINs were tried. If that wasn't them, unlock it:</p>
+    <p>Signing in is paused for {{ paused | map(attribute='display_name') | join(', ') }} — too many wrong codes or PINs were tried. If that wasn't them, unlock it:</p>
     {% for r in paused %}
     <form method="post" action="{{ url_for('teach.unlock_pin', sid=sheet.id) }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -149,8 +164,20 @@
     <strong>{{ counts.roster | plural('student') }}</strong> on your list{% if counts.roster_with_email == counts.roster %}, all with email addresses — each confirms it's them with an emailed code.{% elif counts.roster_with_email %}: {{ counts.roster_with_email }} with email addresses (they get an emailed code); the rest sign in with a PIN.{% else %}, without email addresses — they sign in by name and a PIN.{% endif %}
   </p>
   {% if not counts.roster_with_email %}
-  <p class="warn-line">⚠️ Without emails, whoever types a name first can claim it. To prevent that, use Canvas's Class Roster report, which includes emails.</p>
+  <p class="warn-line">Without emails, whoever types a name first can claim it. To prevent that, use the Canvas file, which includes emails.</p>
   {% endif %}
+  <p class="privacy-line">Private: only names and emails are kept, everything is encrypted, and only you can see the list. <button type="button" class="btn-link" data-popover-target="privacy-details" aria-haspopup="dialog">How it's protected</button></p>
+  <div class="helper-row">
+    {% if list_next %}<a class="btn btn-primary btn-small" href="#{{ list_next.anchor }}">Next: {{ list_next.title }} →</a>{% endif %}
+    <form method="post" action="{{ url_for('teach.clear_roster', sid=sheet.id) }}" data-confirm="Delete the whole class list and start over? Rankings stay, and you can undo this right after.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-ghost btn-small">Delete this list and start over</button>
+    </form>
+  </div>
+  <details class="replace-list">
+    <summary>Replace it with a new file</summary>
+    {% include "_roster_upload.html" %}
+  </details>
   {% else %}
   <p class="lead-line">
     {% if sheet.allow_unlisted %}
@@ -160,42 +187,13 @@
       <strong>Add your class list next.</strong> Students find their name on it to sign in.
     {% endif %}
   </p>
-  {% endif %}
-
-  <form method="post" action="{{ url_for('teach.upload_roster', sid=sheet.id) }}" enctype="multipart/form-data" data-dropzone>
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="file" id="roster-file" name="roster" accept=".csv,.tsv,.txt,.xlsx,text/csv,text/plain" class="visually-hidden-file">
-    <label class="dropzone" for="roster-file">
-      <span class="dropzone-icon" aria-hidden="true">⬆</span>
-      <span class="dropzone-title">{{ 'Drop a new class list here' if counts.roster else 'Drag your class list here' }}</span>
-      <span class="dropzone-sub">the file Canvas downloads for you (or an Excel file) — or click to choose it{% if counts.roster %}. You'll see what changes before anything is replaced.{% endif %}</span>
-      <span class="dropzone-status" data-dropzone-status></span>
-    </label>
-    <noscript><button class="btn btn-primary" type="submit">Upload</button></noscript>
-    <details class="paste-box">
-      <summary>Or paste names (and emails) instead</summary>
-      <label for="pasted" class="field-help">One student per line: their name, then a comma and their email. You can also copy the whole table from Canvas → People.</label>
-      <textarea id="pasted" name="pasted" rows="6" placeholder="Alex Johnson, alex.johnson@school.edu&#10;Sam Lee, sam.lee@school.edu"></textarea>
-      <button class="btn btn-secondary btn-small" type="submit">Use these names</button>
-    </details>
-  </form>
-
+  {% include "_privacy_panel.html" %}
   <div class="helper-row">
-    <button type="button" class="btn btn-secondary" data-popover-target="canvas-guide" aria-haspopup="dialog">Where do I find this in Canvas?</button>
-    <span class="privacy-note">🔒 Only names and emails are kept. Grades and every other column are thrown away immediately.</span>
+    <button type="button" class="btn btn-primary" data-popover-target="canvas-guide" aria-haspopup="dialog">Get the list from Canvas</button>
+    <span class="mini-hint">About a minute: one link opens your class's student list, one button downloads it.</span>
   </div>
-
-  <div id="add-student" class="add-student-box">
-    <h3>Add a student who joined late</h3>
-    <form method="post" action="{{ url_for('teach.add_student', sid=sheet.id) }}" class="inline-form add-student">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label for="add-name" class="visually-hidden">Name</label>
-      <input type="text" id="add-name" name="name" placeholder="Their name" maxlength="60" required value="{{ add_form.name if add_form else '' }}">
-      <label for="add-email" class="visually-hidden">Email</label>
-      <input type="text" id="add-email" name="email" placeholder="Their school email" maxlength="254" value="{{ add_form.email if add_form else '' }}" inputmode="email">
-      <button type="submit" class="btn btn-secondary btn-small">Add</button>
-    </form>
-  </div>
+  {% include "_roster_upload.html" %}
+  {% endif %}
 
   <form method="post" action="{{ url_for('teach.set_who', sid=sheet.id) }}" class="who-row">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -210,9 +208,29 @@
     {% endif %}
   </form>
 
-  {% if roster %}
-  <details class="roster-details" {{ 'open' if edit_form }}>
-    <summary>See or change the list ({{ counts.roster }}{% if counts.test_students %} + {{ counts.test_students }} test{% endif %})</summary>
+  <details class="roster-details" {{ 'open' if edit_form or add_form or not roster }}>
+    <summary>{% if roster %}See or change the list ({{ counts.roster }}{% if counts.test_students %} + {{ counts.test_students }} test{% endif %}){% else %}Add one student at a time{% endif %}</summary>
+  <div id="add-student" class="add-student-box">
+    <h3>Add a student who joined late</h3>
+    <form method="post" action="{{ url_for('teach.add_student', sid=sheet.id) }}" class="inline-form add-student">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="add-name" class="visually-hidden">Name</label>
+      <input type="text" id="add-name" name="name" placeholder="Their name" maxlength="60" required value="{{ add_form.name if add_form else '' }}">
+      <label for="add-email" class="visually-hidden">Email</label>
+      <input type="text" id="add-email" name="email" placeholder="Their school email" maxlength="254" value="{{ add_form.email if add_form else '' }}" inputmode="email">
+      <button type="submit" class="btn btn-secondary btn-small">Add</button>
+    </form>
+    {% if add_form and add_form.twin %}
+    <form method="post" action="{{ url_for('teach.add_student', sid=sheet.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="name" value="{{ add_form.name }}">
+      <input type="hidden" name="email" value="{{ add_form.email }}">
+      <input type="hidden" name="same_name" value="1">
+      <button type="submit" class="btn btn-secondary btn-small">Add a second <bdi>{{ add_form.name }}</bdi> ({{ add_form.email }}) — a different student</button>
+    </form>
+    {% endif %}
+  </div>
+    {% if roster %}
     {% if counts.roster_with_email %}<p class="mini-hint">Student not getting their email? Press “Sign-in code” next to their name and read them the code.</p>{% endif %}
     <div class="table-wrap">
       <table class="admin-table compact">
@@ -279,14 +297,8 @@
         </tbody>
       </table>
     </div>
-    {% if real_roster %}
-    <form method="post" action="{{ url_for('teach.clear_roster', sid=sheet.id) }}" data-confirm="Remove the whole class list? Rankings stay, and you can undo this.">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit" class="btn btn-ghost btn-small">Remove the whole class list</button>
-    </form>
     {% endif %}
   </details>
-  {% endif %}
 </section>
 
 {# ---------------------------------------------------------------- try it #}
@@ -295,7 +307,7 @@
   <p>See exactly what your students will see, in a new tab — you stay signed in here. You'll be a pretend student called <strong>Test Student 1</strong>; its rankings stop counting once real students rank.</p>
   <form method="post" action="{{ url_for('teach.try_as_student', sid=sheet.id) }}" target="_blank">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="btn btn-primary" type="submit">See it as a student ↗</button>
+    <button class="btn btn-primary" type="submit">See it as a student </button>
   </form>
   {% if test_roster %}
   <p class="mini-hint">Test students on your list: {{ test_roster | map(attribute='display_name') | join(', ') }}.</p>
@@ -473,7 +485,7 @@
   <div class="helper-row">
     <label for="find-student" class="visually-hidden">Find a student</label>
     <input type="search" id="find-student" placeholder="Find a student…" data-filter="#signups-table tbody tr" class="input-medium">
-    <a class="btn btn-ghost btn-small" href="{{ url_for('teach.rankings_csv', sid=sheet.id) }}">⬇ Download rankings (opens in Excel)</a>
+    <a class="btn btn-ghost btn-small" href="{{ url_for('teach.rankings_csv', sid=sheet.id) }}">Download rankings (opens in Excel)</a>
   </div>
   {% if pins %}<p class="mini-hint">Student forgot their PIN? Press “Reset PIN” next to their name.</p>{% endif %}
   {% if submissions | length > 30 %}
@@ -547,7 +559,7 @@
 
   {% if seat_warning %}
   <div class="warn-box">
-    <p>⚠️ {% if seat_warning.counting_unranked %}{{ seat_warning.people }} students ({{ seat_warning.ranked }} ranked{{ ' so far' if sheet.bidding_open }}, and those who don't rank get leftover seats){% else %}{{ seat_warning.people }} people have ranked{% endif %}, but there are only {{ seat_warning.seats }} seats ({{ days | length }} days × {{ sheet.capacity_per_day }}).
+    <p>{% if seat_warning.counting_unranked %}{{ seat_warning.people }} students ({{ seat_warning.ranked }} ranked{{ ' so far' if sheet.bidding_open }}, and those who don't rank get leftover seats){% else %}{{ seat_warning.people }} people have ranked{% endif %}, but there are only {{ seat_warning.seats }} seats ({{ days | length }} days × {{ sheet.capacity_per_day }}).
     Raise seats per day to {{ seat_warning.need }}, or add {{ seat_warning.more_days | plural('more day') }} — otherwise some students won't get a day.</p>
     <form method="post" action="{{ url_for('teach.set_capacity', sid=sheet.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -718,7 +730,7 @@
       <button type="submit" class="btn btn-secondary">Move</button>
     </form>
 
-    <p><a href="{{ url_for('teach.export_csv', sid=sheet.id) }}" class="btn btn-secondary">⬇ Download the schedule (opens in Excel)</a></p>
+    <p><a href="{{ url_for('teach.export_csv', sid=sheet.id) }}" class="btn btn-secondary">Download the schedule (opens in Excel)</a></p>
 
     {% if stale and published and not sheet.bidding_open %}
     <div class="soft-note">
@@ -733,7 +745,7 @@
     {% if not sheet.bidding_open %}
     <div class="publish-box" id="publish">
       {% if published %}
-      <h3><span aria-hidden="true">✅</span> Published — students can see their day</h3>
+      <h3>Published — students can see their day</h3>
       <p>Each student sees their day when they open the class link. Post this to let them know:</p>
       <label for="publish-message" class="visually-hidden">Message for students</label>
       <textarea id="publish-message" rows="5" class="announcement">{{ publish_announcement }}</textarea>
@@ -749,7 +761,7 @@
       <h3>Happy with it? Publish it.</h3>
       <p>Publishing shows each student their own day when they open the class link{% if sheet.show_preview %}, and the whole schedule{% endif %}.</p>
       {% set nobody = (needs_day | map(attribute='name') | list) + (didnt_rank | map(attribute='display_name') | list) %}
-      {% if nobody %}<p class="warn-line">⚠️ {{ nobody | length | plural('student has', 'students have') }} no day yet: {{ nobody[:8] | join(', ') }}{{ ' …' if nobody | length > 8 }}. If you publish now, they'll see that they have no day.</p>{% endif %}
+      {% if nobody %}<p class="warn-line">{{ nobody | length | plural('student has', 'students have') }} no day yet: {{ nobody[:8] | join(', ') }}{{ ' …' if nobody | length > 8 }}. If you publish now, they'll see that they have no day.</p>{% endif %}
       <form method="post" action="{{ url_for('teach.publish', sid=sheet.id) }}"
             {% if stale or nobody %}data-confirm="{% if nobody %}{{ nobody | length | plural('student has', 'students have') }} no day yet ({{ nobody[:5] | join(', ') }}{{ ' …' if nobody | length > 5 }}). {% endif %}{% if stale %}The schedule is out of date (rankings or settings changed). {% endif %}Publish it anyway?"{% endif %}>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -776,7 +788,7 @@
     <p class="mini-hint">{{ algorithms[current_algorithm].description }}</p>
     <form method="post" action="{{ url_for('teach.compare', sid=sheet.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit" class="btn btn-ghost btn-small" {{ 'disabled' if not submissions }}>📊 Compare the options on your class's rankings</button>
+      <button type="submit" class="btn btn-ghost btn-small" {{ 'disabled' if not submissions }}>Compare the options on your class's rankings</button>
     </form>
   </details>
 </section>
@@ -789,11 +801,11 @@
     deleted or replaced. You can go back to any of these, or keep your own copy.
   </p>
   <div class="roster-row">
-    <a class="btn btn-secondary" href="{{ url_for('teach.download_backup', sid=sheet.id) }}">💾 Download a backup</a>
+    <a class="btn btn-secondary" href="{{ url_for('teach.download_backup', sid=sheet.id) }}">Download a backup</a>
     {% if email_on %}
     <form method="post" action="{{ url_for('teach.email_backup_now', sid=sheet.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit" class="btn btn-secondary">✉️ Email me a backup</button>
+      <button type="submit" class="btn btn-secondary">Email me a backup</button>
     </form>
     {% endif %}
   </div>
@@ -860,33 +872,39 @@
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
     </button>
     <h2 id="canvas-guide-title" class="modal-title">Get your class list from Canvas</h2>
-    <p class="modal-body">Keep this open while you click through Canvas in another tab. It takes about a minute.</p>
-
-    <div class="canvas-open">
-      <label for="canvas-host" class="field-help">Your school's Canvas address (we'll remember it on this computer)</label>
-      <div class="inline-form">
-        <input type="text" id="canvas-host" placeholder="e.g. canvas.myschool.edu" autocomplete="off" spellcheck="false">
-        <a class="btn btn-primary" id="canvas-open" href="https://canvas.instructure.com/courses" target="_blank" rel="noopener">Open Canvas ↗</a>
-      </div>
-    </div>
+    <p class="modal-body">Canvas doesn't let outside sites read your class directly, so you download the list and drop it here. It takes about a minute.</p>
 
     <ol class="guide-steps">
-      <li><strong>Open your course</strong> in Canvas.</li>
-      <li>In the course menu on the left, click <strong>New Analytics</strong> (at some schools it's called
-        <strong>Course Analytics</strong>, or it's a button on the course's home page).
-        <span class="muted">Don't see it? Go to <strong>Settings → Navigation</strong>, drag it up into the visible list, and click <strong>Save</strong>.</span></li>
-      <li>Click the <strong>Reports</strong> tab, then <strong>Run Report</strong> next to <strong>Class Roster</strong>.
-        If it asks about filters, just run it.</li>
-      <li>A file like <code>roster-2026-10-08.csv</code> downloads. <strong>Drag it onto the box</strong> on this page — done.</li>
+      <li><strong>Paste your course's address.</strong> Open your course in Canvas and copy the address from the top of the browser. It looks like <code>https://canvas.myschool.edu/courses/123456</code>.
+        <div class="canvas-open" data-canvas-guide data-sheet="{{ sheet.id }}">
+          <label for="canvas-course" class="visually-hidden">Your Canvas course address</label>
+          <input type="text" id="canvas-course" placeholder="https://canvas.myschool.edu/courses/123456" autocomplete="off" spellcheck="false">
+          <p class="mini-hint" data-canvas-status>We'll remember it on this computer for this sheet.</p>
+        </div>
+      </li>
+      <li><strong>Open your student list.</strong>
+        <a class="btn btn-primary btn-small" id="canvas-open" href="https://canvas.instructure.com/courses" target="_blank" rel="noopener">Open my class's student list in Canvas</a>
+        <span class="mini-hint" data-canvas-where>It opens Canvas's New Analytics page for your course (sometimes called Course Analytics).</span></li>
+      <li><strong>Click Download CSV</strong>, the download icon at the top right of the student table. A file named like <code>students.csv</code> lands in your Downloads folder.</li>
+      <li><strong>Drag that file onto the box</strong> on this page. Done.</li>
     </ol>
 
     <div class="guide-tips">
-      <p><strong>Students missing?</strong> The course has to be published, and Canvas can take a day or two to add brand-new enrollments to this report.</p>
-      <p><strong>Only have a gradebook export?</strong> (Grades → Export → Export Entire Gradebook.) That works too, but it usually has no email addresses, so students would sign in with their name and a PIN.</p>
-      <p><strong>Not using Canvas?</strong> An Excel or CSV file with a “Name” column (and ideally “Email”) works — or paste the names in. Older Excel files (.xls) need saving as CSV first.</p>
-      <p><strong>Afterwards</strong>, delete the downloaded file — it holds more than this site needs.</p>
+      <p><strong>No Download CSV button?</strong> In New Analytics, open the <strong>Reports</strong> tab and click <strong>Run Report</strong> next to <strong>Class Roster</strong>. That file works too.</p>
+      <p><strong>No New Analytics in the course menu?</strong> Go to <strong>Settings → Navigation</strong>, drag it into the visible list, and click <strong>Save</strong>.</p>
+      <p><strong>Students missing?</strong> The course has to be published, and Canvas can take a day or two to add brand-new enrollments.</p>
+      <p><strong>Not using Canvas?</strong> An Excel or CSV file with a “Name” column (and ideally “Email”) works, or paste the names in.</p>
+      <p><strong>Afterwards</strong>, delete the downloaded file. It holds grades and more that this site doesn't keep.</p>
     </div>
-    <p class="mini-hint"><a href="https://community.canvaslms.com/t5/Instructor-Guide/How-do-I-view-and-download-reports-in-New-Analytics/ta-p/409936" target="_blank" rel="noopener">Canvas's own guide to these reports ↗</a></p>
+  </div>
+</div>
+
+<div id="privacy-details" class="modal-overlay" role="dialog" aria-modal="true" aria-label="How your class list is protected">
+  <div class="modal-dialog modal-wide">
+    <button type="button" class="modal-close" data-popover-close aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+    {% include "_privacy_panel.html" %}
   </div>
 </div>
 

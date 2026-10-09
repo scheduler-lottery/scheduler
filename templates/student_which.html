@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Which one is you? — {{ sheet.title }}{% endblock %}
+{% block content %}
+<div class="card center-card">
+  <p class="eyebrow">{{ sheet.title }}</p>
+  <h1>Which one is you?</h1>
+  <p class="subtitle">There are {{ options | length }} students named <strong><bdi>{{ name }}</bdi></strong> in this class. Pick your school email — we'll send your sign-in code there, so only you can use it.</p>
+  <div class="match-choices">
+    {% for key, masked in options %}
+    <form method="post" action="{{ url_for('student.login', sid=sheet.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="name" value="{{ typed }}">
+      <input type="hidden" name="pick" value="{{ key }}">
+      <input type="hidden" name="which" value="1">
+      <button type="submit" class="btn btn-primary btn-block">My email is {{ masked }}</button>
+    </form>
+    {% endfor %}
+  </div>
+  <a class="btn btn-secondary btn-block" href="{{ url_for('student.signin', sid=sheet.id) }}">← Go back</a>
+  <p class="hint">Neither one is yours? <a href="mailto:{{ sheet.owner_email }}?subject={{ ('My email for ' ~ sheet.title) | urlencode }}">Email your instructor</a> to fix it.</p>
+</div>
+{% endblock %}

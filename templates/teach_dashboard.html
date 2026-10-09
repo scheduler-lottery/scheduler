@@ -49,10 +49,18 @@
         <span class="status-pill {{ 'open' if s.bidding_open else 'closed' }}">{{ 'Open' if s.bidding_open else 'Closed' }}</span>
         {% endif %}
       </a>
-      <form method="post" action="{{ url_for('teach.duplicate_sheet', sid=s.id) }}" class="sheet-copy">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-ghost btn-small" title="Same days and settings, no students — for next term">Copy for next term</button>
-      </form>
+      <span class="sheet-actions">
+        <form method="post" action="{{ url_for('teach.duplicate_sheet', sid=s.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-ghost btn-small" title="Same days and settings, no students — for next term">Copy for next term</button>
+        </form>
+        <form method="post" action="{{ url_for('teach.archive_sheet', sid=s.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="archive" value="1">
+          <button type="submit" class="btn btn-ghost btn-small" aria-label="Archive {{ s.title }}">Archive</button>
+        </form>
+        <button type="button" class="btn btn-ghost btn-small" data-popover-target="delete-{{ s.id }}" aria-haspopup="dialog" aria-label="Delete {{ s.title }}">Delete…</button>
+      </span>
     </li>
     {% endfor %}
   </ul>
@@ -74,6 +82,29 @@
   </div>
   {% endif %}
 
+  {% if archived %}
+  <details class="more-options archived-sheets">
+    <summary>Archived sheets ({{ archived | length }})</summary>
+    <p class="mini-hint">Tucked away, not deleted: their links still work for students, and you can open or unarchive them any time.</p>
+    <ul class="plain-rows">
+      {% for s in archived %}
+      <li class="plain-row">
+        <span><a href="{{ url_for('teach.sheet', sid=s.id) }}"><strong>{{ s.title }}</strong></a>
+          <span class="muted">— archived <time datetime="{{ s.archived_at }}" data-local="date">{{ s.archived_at[:10] }}</time></span></span>
+        <span class="row-actions">
+          <form method="post" action="{{ url_for('teach.archive_sheet', sid=s.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="archive" value="0">
+            <button type="submit" class="btn btn-secondary btn-small" aria-label="Unarchive {{ s.title }}">Unarchive</button>
+          </form>
+          <button type="button" class="btn btn-ghost btn-small" data-popover-target="delete-{{ s.id }}" aria-haspopup="dialog" aria-label="Delete {{ s.title }}">Delete…</button>
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+
   <details class="more-options">
     <summary>Bring back a sheet from a backup file</summary>
     <form method="post" action="{{ url_for('teach.restore_file_as_new') }}" enctype="multipart/form-data" class="inline-form">
@@ -85,6 +116,33 @@
     <p class="field-help">Use the backup file (it ends in .zip) from “Download a backup” or a backup email. It becomes a new sheet with its own student link.</p>
   </details>
 </div>
+
+{% for s in sheets + archived %}
+<div id="delete-{{ s.id }}" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="delete-title-{{ s.id }}">
+  <div class="modal-dialog">
+    <button type="button" class="modal-close" data-popover-close aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+    <h2 id="delete-title-{{ s.id }}" class="modal-title">Delete “{{ s.title }}”?</h2>
+    <p class="modal-body">Students' link stops working, and the sheet, its class list and its rankings leave your list. A backup downloads first, and for 30 days you can bring the sheet back from the top of this page.</p>
+    {% if not s.archived_at %}
+    <p class="modal-body"><strong>Just want it out of the way?</strong> Archive it instead: it moves to Archived sheets, everything keeps working, and you can unarchive it any time.</p>
+    <form method="post" action="{{ url_for('teach.archive_sheet', sid=s.id) }}" class="choice-stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="archive" value="1">
+      <button type="submit" class="btn btn-primary btn-block">Archive it instead</button>
+    </form>
+    {% endif %}
+    <form method="post" action="{{ url_for('teach.delete_sheet', sid=s.id) }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="back" value="dashboard">
+      <label for="confirm-{{ s.id }}" class="field-label">To delete it, type DELETE:</label>
+      <input type="text" id="confirm-{{ s.id }}" name="confirm" autocomplete="off" required placeholder="DELETE">
+      <button type="submit" class="btn btn-danger">Back up and delete the sheet</button>
+    </form>
+  </div>
+</div>
+{% endfor %}
 
 {% if download_url %}<a href="{{ download_url }}" data-auto-download hidden>Download the backup</a>{% endif %}
 {% endblock %}

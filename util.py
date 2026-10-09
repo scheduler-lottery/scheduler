@@ -147,6 +147,28 @@ def mask_email(email):
     return f"{local[:shown]}{'*' * (len(local) - shown)}@{domain}"
 
 
+WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def date_label(day, with_year=False):
+    """A date the way students see it: "Tue, Oct 27" (with ", 2026" when a
+    sheet's days span more than one year). Spelled out here so the server's
+    locale can't change it."""
+    return f"{WEEKDAYS[day.weekday()]}, {MONTHS[day.month - 1]} {day.day}" + (f", {day.year}" if with_year else "")
+
+
+def read_date(value):
+    """A YYYY-MM-DD string as a date, or None if it isn't a real one
+    ("2026-10-70", "2026-02-30")."""
+    from datetime import date
+
+    try:
+        return date.fromisoformat((value or "").strip()[:10])
+    except ValueError:
+        return None
+
+
 def slugify(text, fallback="sheet"):
     slug = re.sub(r"[^a-z0-9]+", "-", fold(text)).strip("-")
     return slug[:40] or fallback

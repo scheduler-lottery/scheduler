@@ -104,12 +104,14 @@ def test_semicolons_tabs_bom_and_windows_encoding():
 def test_duplicates_and_bad_emails_are_reported():
     data = b"Name,Email\nAlex Johnson,alex@school.edu\nalex  johnson,other@school.edu\nSam Lee,not-an-email\n"
     result = parse_roster(data)
-    assert names(result) == ["Alex Johnson", "Sam Lee"]
-    assert result.duplicates == [("alex johnson", "other@school.edu")]
+    # Two students with one name both stay, told apart by their emails.
+    assert names(result) == ["Alex Johnson", "Alex Johnson (2)", "Sam Lee"]
+    assert [s["email"] for s in result.students][:2] == ["alex@school.edu", "other@school.edu"]
+    assert result.duplicates == [] and result.numbered == ["Alex Johnson (2)"]
     assert result.bad_emails == [("Sam Lee", "not-an-email")]
     message, tips = describe(result, "x.csv")
-    assert "Added 2 students" in message
-    assert any("can't have the same name" in t and "other@school.edu" in t for t in tips)
+    assert "Added 3 students" in message
+    assert any("Two students are named Alex Johnson" in t and "“Alex Johnson (2)”" in t for t in tips)
     assert any("“not-an-email” looks incomplete" in t and "Sam Lee" in t for t in tips)
 
 

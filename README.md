@@ -101,7 +101,8 @@ Supabase's automatic public API out of the data. The app connects directly, as t
    `EMAIL_DAILY_LIMIT` (default `90`), `APP_NAME` (default `Scheduler`), `CONTACT_EMAIL`
    (an address for questions about the site, shown on the Privacy page), and
    `DEFAULT_TIMEZONE` (default `America/Chicago`; each professor's own time zone is picked up
-   from their browser when they sign in).
+   from their browser when they sign in), and `BUILT_BY` / `BUILT_BY_EMAIL` (the credit at the
+   foot of every page; set `BUILT_BY` to `-` to hide it).
 5. Click **Deploy**.
 
 ### 5. Check it

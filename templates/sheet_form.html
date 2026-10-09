@@ -38,32 +38,29 @@
              placeholder="e.g. CS &amp; Law, Fall 2026">
     </div>
 
-    <fieldset class="field">
+    <fieldset class="field" data-day-field data-max="{{ max_days }}">
       <legend>Days students can pick from</legend>
-      <p class="field-help">One per box, in order. Write each the way students should see it — like “Tue, Oct 27”.</p>
-      <ol class="day-rows" data-day-rows>
+      <p class="field-help">Pick them on a calendar: click a date, or drag across several.</p>
+      <ul class="day-chips" data-day-chips>
         {% for d in form.days %}
-        <li class="day-row">
+        <li class="day-chip">
           <input type="hidden" name="day_key" value="{{ d.key }}">
-          <input type="text" name="day_label" value="{{ d.label }}" maxlength="80" placeholder="e.g. Tue, Oct 27" aria-label="Day {{ loop.index }}">
-          <button type="button" class="row-btn" data-row-up aria-label="Move this day up" title="Move up">▲</button>
-          <button type="button" class="row-btn" data-row-down aria-label="Move this day down" title="Move down">▼</button>
-          <button type="button" class="row-btn row-remove" data-row-remove aria-label="Remove this day" title="Remove">✕</button>
+          <input type="hidden" name="day_date" value="{{ d.date or '' }}">
+          <input type="hidden" name="day_label" value="{{ d.label }}">
+          <span>{{ d.label }}</span>
         </li>
         {% endfor %}
-      </ol>
-      <template data-day-template>
-        <li class="day-row">
-          <input type="hidden" name="day_key" value="">
-          <input type="text" name="day_label" value="" maxlength="80" placeholder="e.g. Tue, Oct 27" aria-label="Day">
-          <button type="button" class="row-btn" data-row-up aria-label="Move this day up" title="Move up">▲</button>
-          <button type="button" class="row-btn" data-row-down aria-label="Move this day down" title="Move down">▼</button>
-          <button type="button" class="row-btn row-remove" data-row-remove aria-label="Remove this day" title="Remove">✕</button>
-        </li>
-      </template>
-      <button type="button" class="btn btn-secondary btn-small" data-add-day>＋ Add another day</button>
+      </ul>
+      <button type="button" class="btn btn-primary" data-popover-target="day-calendar" aria-haspopup="dialog" data-day-open>{{ 'Change the days' if form.days else 'Pick days on a calendar' }}</button>
+      <noscript>
+        <p class="field-help">Or type dates here:</p>
+        {% for _ in range(4) %}
+        <span class="noscript-day"><input type="hidden" name="day_key" value=""><input type="hidden" name="day_label" value="">
+          <input type="date" name="day_date" aria-label="Another day"></span>
+        {% endfor %}
+      </noscript>
       {% if mode == 'edit' and counts.submissions %}
-      <p class="field-help warn">Students have already ranked. Renaming a day is fine; removing one asks you to confirm first.</p>
+      <p class="field-help warn">Students have already ranked. Adding a day is fine; removing one asks you to confirm first.</p>
       {% endif %}
     </fieldset>
 
@@ -115,4 +112,25 @@
     </div>
   </form>
 </div>
+
+<div id="day-calendar" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="day-calendar-title">
+  <div class="modal-dialog modal-wide modal-calendar">
+    <button type="button" class="modal-close" data-popover-close aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+    <h2 id="day-calendar-title" class="modal-title">Pick the presentation days</h2>
+    <p class="modal-body">Click a date to add it, and click it again to take it off. To add a run of days, press on the first one and drag to the last.</p>
+    <div class="cal-nav">
+      <button type="button" class="btn btn-ghost btn-small" data-cal-prev aria-label="Earlier months">‹ Earlier</button>
+      <button type="button" class="btn btn-ghost btn-small" data-cal-next aria-label="Later months">Later ›</button>
+    </div>
+    <div class="cal-months" data-calendar></div>
+    <p class="cal-summary" data-cal-summary aria-live="polite"></p>
+    <div class="form-actions">
+      <button type="button" class="btn btn-primary" data-popover-close>Done</button>
+      <button type="button" class="btn btn-ghost btn-small" data-cal-clear>Clear all</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='calendar.js') }}"></script>{% endblock %}

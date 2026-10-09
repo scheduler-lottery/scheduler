@@ -22,9 +22,9 @@
   <h2>Setup</h2>
   <ul class="plain-rows">
     {% for name, detail, ok in checks %}
-    <li class="plain-row"><span><strong>{{ '✅' if ok else '⚠️' }} {{ name }}</strong> <span class="muted">— {{ detail }}</span></span></li>
+    <li class="plain-row"><span><strong>{{ name }}{% if not ok %} (needs attention){% endif %}</strong> <span class="muted">— {{ detail }}</span></span></li>
     {% endfor %}
-    <li class="plain-row"><span><strong>✅ Who can make an account</strong> <span class="muted">— {{ 'anyone' if '*' in domains else 'emails ending in ' ~ domains | join(', ') }}</span></span></li>
+    <li class="plain-row"><span><strong>Who can make an account</strong> <span class="muted">— {{ 'anyone' if '*' in domains else 'emails ending in ' ~ domains | join(', ') }}</span></span></li>
   </ul>
 
   <h2>Switch an account off or on</h2>
@@ -61,7 +61,7 @@
     <button class="btn btn-ghost btn-small" type="submit">Clear the error log</button>
   </form>
   {% else %}
-  <p class="muted">None. 🎉</p>
+  <p class="muted">None.</p>
   {% endif %}
 </div>
 {% endblock %}

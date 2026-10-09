@@ -10,7 +10,7 @@
   </p>
 
   {% if different_sheet %}
-  <div class="warn-box"><p>⚠️ This backup is from a different sheet: “{{ different_sheet }}”. Most likely you want to bring it back as a new sheet.</p></div>
+  <div class="warn-box"><p>This backup is from a different sheet: “{{ different_sheet }}”. Most likely you want to bring it back as a new sheet.</p></div>
   {% endif %}
 
   <table class="admin-table compact">
@@ -21,7 +21,7 @@
   </table>
 
   {% if diff.takes_down_schedule %}
-  <div class="warn-box"><p>⚠️ That version has no schedule, so going back takes down the schedule your students can see now. They won't see a day until you make and publish one again.</p></div>
+  <div class="warn-box"><p>That version has no schedule, so going back takes down the schedule your students can see now. They won't see a day until you make and publish one again.</p></div>
   {% endif %}
   {% if diff.day_changes or diff.settings_changes or diff.seat_changes %}
   <ul class="diff-list">

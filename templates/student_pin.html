@@ -4,7 +4,7 @@
 <div class="card center-card">
   <p class="eyebrow">{{ sheet.title }}</p>
   {% if choosing %}
-  <h1><span aria-hidden="true">🔒</span> Choose a PIN</h1>
+  <h1>Choose a PIN</h1>
   {% if reset_note %}<div class="disclaimer disclaimer-yellow">{{ reset_note }}</div>{% endif %}
   {% if why == 'unlisted' and not has_roster %}
   <p class="subtitle">Hi <bdi>{{ name }}</bdi>! Choose a PIN to protect your name, so nobody else can sign in as you.</p>
@@ -38,7 +38,7 @@
     <button class="btn btn-primary" type="submit">Save my PIN and continue</button>
   </form>
   {% else %}
-  <h1><span aria-hidden="true">🔒</span> Enter your PIN</h1>
+  <h1>Enter your PIN</h1>
   <p class="subtitle">Welcome back, <bdi>{{ name }}</bdi>. Enter the PIN you chose the first time you signed in.</p>
   <form method="post" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

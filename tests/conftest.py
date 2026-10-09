@@ -142,7 +142,7 @@ class Browser:
                      capacity=2, allow_unlisted=True, show_preview=True):
         r = self.post("/teach/new", {
             "title": title,
-            "day_label": list(days),
+            "day_date": [test_date(label, i) for i, label in enumerate(days)],
             "day_key": [""] * len(days),
             "capacity": str(capacity),
             "allow_unlisted": "1" if allow_unlisted else "0",
@@ -196,6 +196,30 @@ def browser(app):
 @pytest.fixture
 def prof(browser):
     return browser().sign_in_instructor("prof@school.edu")
+
+
+WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+
+def test_date(label, i=0):
+    """A real date for a day named in a test: "Mon".."Sun" fall in the week
+    of Mon, Mar 1, 2027; "Oct 27" is that day in 2027; anything else is a
+    week apart. (Days are picked on a calendar, so they're always dates.)"""
+    from datetime import date, datetime, timedelta
+
+    if label[:3] in WEEKDAYS and len(label) <= 9:
+        return (date(2027, 3, 1) + timedelta(days=WEEKDAYS.index(label[:3]))).isoformat()
+    try:
+        return datetime.strptime(f"{label} 2027", "%b %d %Y").date().isoformat()
+    except ValueError:
+        return (date(2027, 3, 1) + timedelta(days=7 * i)).isoformat()
+
+
+def day_dates(sid):
+    with app_module.app.app_context():
+        return [d["day_date"] for d in db.rows(
+            "SELECT day_date FROM sheet_days WHERE sheet_id = :sid ORDER BY sort_order", sid=sid
+        )]
 
 
 def day_keys(sid):

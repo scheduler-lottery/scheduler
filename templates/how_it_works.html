@@ -1,74 +1,83 @@
 {% extends "base.html" %}
-{% block title %}How days are given out — {{ app_name }}{% endblock %}
+{% block title %}How days are assigned — {{ app_name }}{% endblock %}
 {% block content %}
-<div class="card">
-  <h1><span aria-hidden="true">🧩</span> How days are given out</h1>
+<div class="card prose">
+  <h1>How days are assigned</h1>
+  <p class="subtitle">Every student is placed as high on their own list as the available seats allow, and ties are broken by a fixed random draw.</p>
 
   <div class="note-box">
-    <p class="note-box-label">For students, in three sentences</p>
-    <p>Put the days in your real order of preference — your favorite at the top.</p>
-    <p>After sign-ups close, everyone gets a day as high on their own list as possible; when more people want a day than it has places, a fair random draw decides.</p>
-    <p>Ranking early doesn't help, and ranking a day higher than you really want it never helps you.</p>
+    <p class="note-box-label">Summary for students</p>
+    <p>Rank the days in your true order of preference, with your first choice at the top.</p>
+    <p>When sign-ups close, each student receives the highest-ranked day that still has room. When more students want a day than it has seats, a random draw decides.</p>
+    <p>Submitting early confers no advantage, and ranking a day above where you truly want it cannot improve your result.</p>
   </div>
 
-  <h2>“I really can't do this day”</h2>
+  <h2>Days you cannot attend</h2>
   <p>
-    Use it only for a real conflict. You won't be put on a day you marked — ever. If every
-    day you <em>can</em> do fills up, your instructor decides where you go, with your note in front of them —
-    nobody else is moved automatically to make room, so marking days you could really do never helps. Notes are
-    seen only by your instructor.
+    Mark a day “I really can't do this day” only for a genuine conflict. You will never be assigned a day you have
+    marked. If every day you can attend is full, your instructor assigns you a day personally, with your note in
+    front of them. No other student is moved to make room, so marking a day you could attend offers no advantage.
+    Notes are visible only to your instructor.
   </p>
 
-  <h2>Is it fair?</h2>
+  <h2>Fairness</h2>
   <ul>
-    <li><strong>Not first-come, first-served.</strong> When you ranked isn't used at all.</li>
-    <li><strong>Ties are broken by a random draw</strong>, made once for each sign-up sheet. Your place in it is fixed
-      — it doesn't change when classmates rank, change their minds, or mark days. The same rankings always
-      give the same schedule, so the draw can't simply be re-run until someone likes the result. (Your instructor picks
-      how ties are broken before making the schedule, and can move people by hand afterwards — every change is
-      kept in the sheet's history.)</li>
-    <li><strong>Honesty is your best strategy.</strong> Changing your order can't get you a better day, and
-      can't-do marks never move anyone else — they're read by your instructor.</li>
+    <li><strong>Not first-come, first-served.</strong> The time a ranking was submitted is never used.</li>
+    <li><strong>A fixed random draw breaks ties.</strong> Each sheet has its own draw, and each student's place in it
+      is fixed: it does not change when classmates rank, revise their choices, or mark days. The same rankings always
+      produce the same schedule, so the draw cannot be repeated until a preferred result appears. The instructor
+      chooses the tie-breaking method before making the schedule and may adjust assignments by hand afterwards;
+      every change is recorded in the sheet's history.</li>
+    <li><strong>Honest ranking is the best strategy.</strong> No other order can earn you a better day, and marking
+      days you cannot attend never affects other students.</li>
   </ul>
 
-  <h2>Common questions</h2>
+  <h2>Frequently asked questions</h2>
   <p>
-    <strong>Why didn't I get my first choice?</strong><br>
-    Places are limited. If more students want a day than it has places, the random draw decides who gets it — then
-    everyone else gets their next choice that still has room.
+    <strong>Why didn't I receive my first choice?</strong><br>
+    Seats are limited. When more students choose a day than it has seats, the random draw determines who receives
+    it, and everyone else receives their next choice that still has room.
   </p>
   <p>
-    <strong>Should I put a day I don't want first, to “game” it?</strong><br>
-    No. Ranking your honest order is always at least as good as anything else, no matter what anyone else does.
+    <strong>Could ranking strategically help me?</strong><br>
+    No. Ranking in your true order of preference is always at least as good as any other order, regardless of how
+    others rank.
   </p>
   <p>
     <strong>When will I know my day?</strong><br>
-    When your instructor publishes the schedule, your day appears on your class's page, where you ranked.
+    When your instructor publishes the schedule, your day appears on your class's sign-up page.
   </p>
 
   <details class="more-options">
-    <summary>For the curious: what the computer actually does</summary>
+    <summary>Technical details: the assignment algorithm</summary>
     <p>
-      Picture a very polite round of speed dating between students and days. Each student “asks” their favorite day.
-      If a day gets more requests than it has places, it holds on to some students (by its random draw, since days
-      don't have opinions) and turns the rest away. Anyone turned away asks their next favorite day. This repeats
-      until nobody is turned away. A day never locks anyone in until the very end — that's why it's called
-      <strong>deferred acceptance</strong>. It's the same family of methods some cities use to assign students to
-      public schools with limited seats.
+      Schedules are produced with <strong>deferred acceptance</strong> (the Gale–Shapley algorithm, extended to days
+      with several seats), the same method used by many school districts to assign students to schools with limited
+      places. It proceeds in rounds:
     </p>
-    <p>A small example: 4 students and 2 days, with 2 places each.</p>
+    <ol>
+      <li>Each student applies to the highest day on their list that has not yet declined them.</li>
+      <li>Each day holds the applicants it has room for, in the order set by its random draw, and declines the rest.
+        No hold is final until the process ends.</li>
+      <li>Declined students apply to their next choice, and the process repeats until no student is declined.</li>
+    </ol>
+    <p>
+      The result is <em>stable</em>: no student prefers a day that would have admitted them ahead of someone placed
+      there. It is also <em>strategy-proof</em> for students, which is why honest ranking is always the best approach.
+    </p>
+    <p><strong>Example.</strong> Four students and two days, with two seats each:</p>
     <ul>
-      <li><strong>Ana</strong>, <strong>Ben</strong> and <strong>Cleo</strong> rank Day 1 first, then Day 2.</li>
-      <li><strong>Dev</strong> ranks Day 2 first, then Day 1.</li>
-      <li>Day 1's random draw came out Ben, Ana, Cleo, Dev.</li>
+      <li>Ana, Ben, and Cleo rank Day 1 first, then Day 2.</li>
+      <li>Dev ranks Day 2 first, then Day 1.</li>
+      <li>Day 1's random draw orders the students Ben, Ana, Cleo, Dev.</li>
     </ul>
     <p>
-      Round 1: Ana, Ben and Cleo all ask Day 1, which has 2 places — by its draw it keeps Ben and Ana and turns Cleo
-      away. Dev asks Day 2, which keeps Dev. Round 2: Cleo asks Day 2, which still has room. Done: Day 1 has Ana and
-      Ben; Day 2 has Cleo and Dev. Cleo didn't get a first choice, but no change would help Cleo without bumping
-      someone the draw put ahead.
+      In the first round, Ana, Ben, and Cleo apply to Day 1, which has two seats; following its draw, it holds Ben
+      and Ana and declines Cleo. Dev applies to Day 2 and is held. In the second round, Cleo applies to Day 2, which
+      still has room. Final schedule: Day 1, Ana and Ben; Day 2, Cleo and Dev. Cleo did not receive her first choice,
+      but no change could give it to her without displacing a student the draw placed ahead of her.
     </p>
-    <h3>The options an instructor can pick</h3>
+    <h3>Options available to instructors</h3>
     {% for algo_id, algo in algorithms.items() %}
     <div class="algo-card">
       <h4>{{ algo.label }}</h4>
@@ -77,8 +86,9 @@
     </div>
     {% endfor %}
     <p class="mini-hint">
-      The core uses <a href="https://github.com/daffidwilde/matching" target="_blank" rel="noopener">matching</a>, an
-      open-source Python package for exactly this kind of problem.
+      The matching is computed with <a href="https://github.com/daffidwilde/matching" target="_blank" rel="noopener">matching</a>,
+      a peer-reviewed open-source Python library for problems of this kind.
+      {% if source_url %}This site's own code is <a href="{{ source_url }}" target="_blank" rel="noopener">public</a> as well.{% endif %}
     </p>
   </details>
 </div>

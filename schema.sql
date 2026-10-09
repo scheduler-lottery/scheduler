@@ -49,6 +49,8 @@ CREATE TABLE IF NOT EXISTS sheets (
     tested_at          TEXT,
     shared_at          TEXT,
     backup_emailed_at  TEXT,
+    short_url          TEXT,  -- a short link made on request (is.gd or TinyURL)
+    archived_at        TEXT,  -- tucked away on the dashboard (still works for students)
     created_at         TEXT NOT NULL,
     updated_at         TEXT NOT NULL
 );
@@ -60,6 +62,7 @@ CREATE TABLE IF NOT EXISTS sheet_days (
     day_key    TEXT NOT NULL,
     label      TEXT NOT NULL,
     sort_order INTEGER NOT NULL,
+    day_date   TEXT,  -- YYYY-MM-DD, picked on a calendar (so always a real date)
     PRIMARY KEY (sheet_id, day_key)
 );
 

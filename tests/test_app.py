@@ -11,7 +11,7 @@ import pytest
 
 import db
 import settings
-from conftest import CANVAS_ROSTER, day_keys
+from conftest import CANVAS_ROSTER, day_dates, day_keys
 
 
 def raw(response):
@@ -184,19 +184,38 @@ def test_missing_settings_on_vercel_show_a_setup_page(browser, monkeypatch):
 # Making and editing a sheet
 # ---------------------------------------------------------------------------
 def test_create_sheet_validation_keeps_what_was_typed(prof):
-    r = prof.post("/teach/new", {"title": "", "day_label": ["Oct 27"], "day_key": [""], "capacity": "4"})
+    r = prof.post("/teach/new", {"title": "", "day_date": ["2027-10-27"], "day_key": [""], "capacity": "4"})
     page = html(r)
-    assert "Give your sign-up sheet a title" in page and "at least two different days" in page
-    assert 'value="Oct 27"' in page
-    page = html(prof.post("/teach/new", {"title": "T", "day_label": ["Tue, Nov 3", "tue  nov 3"],
+    assert "Give your sign-up sheet a title" in page and "Pick at least two days" in page
+    assert 'value="2027-10-27"' in page and "Wed, Oct 27" in page  # the picked day is still there
+    page = html(prof.post("/teach/new", {"title": "T", "day_date": ["2027-11-03", "2027-11-03"],
                                          "day_key": ["", ""], "capacity": "600"}))
-    assert "listed twice" in page and "at most 500" in page
+    assert "Pick at least two days" in page and "at most 500" in page  # the same date twice is one day
     assert "the most is 2000" in html(prof.post("/teach/new", {
-        "title": "T", "day_label": ["A", "B"], "day_key": ["", ""], "capacity": "2", "note": "x" * 2100}))
+        "title": "T", "day_date": ["2027-03-01", "2027-03-02"], "day_key": ["", ""], "capacity": "2",
+        "note": "x" * 2100}))
+
+
+def test_days_must_be_real_dates(prof):
+    page = html(prof.post("/teach/new", {"title": "T", "day_date": ["2026-10-70", "2027-02-30", "2027-03-02"],
+                                         "day_key": ["", "", ""], "capacity": "2"}))
+    assert "“2026-10-70” isn't a real date" in page and "“2027-02-30” isn't a real date" in page
+    assert q(prof.app, "SELECT COUNT(*) FROM sheets") == 0
+    page = html(prof.post("/teach/new", {"title": "T", "day_date": ["2027-03-01", "2099-01-01"],
+                                         "day_key": ["", ""], "capacity": "2"}))
+    assert "too far from today" in page
+    r = prof.post("/teach/new", {"title": "T", "day_date": ["2027-03-02", "2027-03-01", "2028-01-04"],
+                                 "day_key": ["", "", ""], "capacity": "2"})
+    sid = r.headers["Location"].split("/")[-1].split("#")[0]
+    with prof.app.app_context():
+        days = db.rows("SELECT label, day_date FROM sheet_days WHERE sheet_id = :sid ORDER BY sort_order", sid=sid)
+    # In date order, labeled for students, with the year once the days span two years.
+    assert [(d["label"], d["day_date"]) for d in days] == [
+        ("Mon, Mar 1, 2027", "2027-03-01"), ("Tue, Mar 2, 2027", "2027-03-02"), ("Tue, Jan 4, 2028", "2028-01-04")]
 
 
 def test_new_sheets_are_private_by_default_and_point_at_the_next_step(prof):
-    r = prof.post("/teach/new", {"title": "Seminar", "day_label": ["Mon", "Tue"], "day_key": ["", ""],
+    r = prof.post("/teach/new", {"title": "Seminar", "day_date": ["2027-03-01", "2027-03-02"], "day_key": ["", ""],
                                  "capacity": "2"})
     sid = r.headers["Location"].split("/")[-1].split("#")[0]
     with prof.app.app_context():
@@ -217,10 +236,11 @@ def test_editing_days_keeps_rankings_and_asks_before_removing_a_ranked_day(prof,
     prof.post(f"/teach/s/{sid}/run")
     page = html(prof.get(f"/teach/s/{sid}/edit"))
     version = re.search(r'name="version" value="(\w+)"', page).group(1)
+    dates = day_dates(sid)
     form = {"title": "Renamed", "capacity": "2", "allow_unlisted": "1", "version": version,
-            "day_key": [keys[0], keys[1], ""], "day_label": ["Monday", "Tue", "Thu"]}
+            "day_key": ["", "", ""], "day_date": [dates[0], dates[1], "2027-03-04"]}
     page = html(prof.post(f"/teach/s/{sid}/edit", form))
-    assert "Remove Wed?" in page and "Pat Doe" in page  # asks first, naming who's affected
+    assert "Remove Wed, Mar 3?" in page and "Pat Doe" in page  # asks first, naming who's affected
     assert day_keys(sid) == keys  # nothing changed yet
     r = prof.post(f"/teach/s/{sid}/edit", {**form, "confirm_remove": "1"})
     assert r.status_code == 302
@@ -232,14 +252,14 @@ def test_editing_days_keeps_rankings_and_asks_before_removing_a_ranked_day(prof,
     init = init_data(html(student.get(f"/c/{sid}/rank")))
     assert init["ranking"] == [keys[0], keys[1]] and init["newDays"] == [new_keys[2]]
     home = text(student.get(f"/c/{sid}/home"))
-    assert "added Thu after you ranked" in home
+    assert "added Thu, Mar 4 after you ranked" in home
 
 
 def test_a_stale_edit_page_cannot_undo_newer_changes(prof):
     sid = prof.create_sheet(days=("Mon", "Tue"))
     keys = day_keys(sid)
     old_version = re.search(r'name="version" value="(\w+)"', html(prof.get(f"/teach/s/{sid}/edit"))).group(1)
-    form = {"title": "New title", "capacity": "2", "day_key": keys, "day_label": ["Mon", "Tue"], "version": old_version}
+    form = {"title": "New title", "capacity": "2", "day_key": keys, "day_date": day_dates(sid), "version": old_version}
     assert prof.post(f"/teach/s/{sid}/edit", form).status_code == 302
     page = html(prof.post(f"/teach/s/{sid}/edit", {**form, "title": "Stale title"}))
     assert "changed in another window" in page and 'value="Stale title"' in page  # what was typed is kept
@@ -333,7 +353,10 @@ def test_add_edit_and_remove_one_student(prof, browser):
     sid = prof.create_sheet()
     prof.upload(sid)
     page = follow(prof, prof.post(f"/teach/s/{sid}/roster/add", {"name": "Lee, Sam", "email": "x@school.edu"}))
-    assert "Sam Lee is already on your list" in page
+    assert "Sam Lee is already on your list" in page and "Add a second Sam Lee" in text(page)
+    page = follow(prof, prof.post(f"/teach/s/{sid}/roster/add",
+                                  {"name": "Sam Lee", "email": "x@school.edu", "same_name": "1"}))
+    assert "Added Sam Lee (2) to the class list. There's already a Sam Lee" in page
     assert "already on your list for Alex Johnson" in follow(
         prof, prof.post(f"/teach/s/{sid}/roster/add", {"name": "New Person", "email": "alex@school.edu"}))
     assert "Added Late Add" in follow(prof, prof.post(f"/teach/s/{sid}/roster/add",
@@ -451,7 +474,8 @@ def test_join_by_code_link_or_short_link(prof, browser):
     for typed in (sid.upper(), f"https://x.vercel.app/c/{sid}/home?x=1", f"Code: {sid}.", f" {sid} "):
         assert s.get(f"/join?code={typed}").headers["Location"].endswith(f"/c/{sid}"), typed
     assert "sign-in code from your email" in follow(s, s.get("/join?code=123456"))
-    assert "Type the 8-character code" in follow(s, s.get("/join?code="))
+    assert "Type the code your instructor gave you" in follow(s, s.get("/join?code="))
+    assert len(sid) == 12  # new sheets get 12-character codes
     assert "couldn't find a sign-up" in follow(s, s.get("/join?code=nope"))
     assert s.get(f"/{sid}").headers["Location"].endswith(f"/c/{sid}")
     assert s.get(f"/c/{sid}.").headers["Location"].endswith(f"/c/{sid}")
@@ -658,7 +682,7 @@ def test_cant_do_is_a_real_constraint_and_the_professor_decides(prof, browser):
     if "ana able" not in result:
         page = text(prof.get(f"/teach/s/{sid}"))
         assert "1 student has no day yet" in page and "clinic shift" in page
-        assert "Ana Able — every day they can do is full (can't do Mon)" in page
+        assert "Ana Able — every day they can do is full (can't do Mon, Mar 1)" in page
 
 
 def test_students_who_did_not_rank_get_leftover_seats_or_a_list(prof, browser):
@@ -705,7 +729,7 @@ def test_remaking_the_schedule_offers_undo_for_hand_moves(prof, browser):
     prof.post(f"/teach/s/{sid}/close-and-schedule")
     prof.post(f"/teach/s/{sid}/move", {"name_key": "ana able", "day_key": keys[1]})
     page = follow(prof, prof.post(f"/teach/s/{sid}/run"))
-    assert "hand-made move (Ana Able → Tue) was replaced" in page
+    assert "hand-made move (Ana Able → Tue, Mar 2) was replaced" in page
     snap = re.search(r"/undo/(\w+)", page).group(1)
     prof.post(f"/teach/s/{sid}/undo/{snap}", {"parts": "assignments"})
     assert assigned(prof.app, sid)["ana able"] == (keys[1], "manual")
@@ -1092,7 +1116,7 @@ def test_links_in_the_note_are_clickable_and_safe(prof, browser):
     keys = day_keys(sid)
     version = re.search(r'name="version" value="(\w+)"', html(prof.get(f"/teach/s/{sid}/edit"))).group(1)
     prof.post(f"/teach/s/{sid}/edit", {"title": "T", "capacity": "2", "allow_unlisted": "1", "version": version,
-                                      "day_key": keys, "day_label": ["Oct 27", "Nov 10", "Nov 17", "Nov 24"],
+                                      "day_key": keys, "day_date": day_dates(sid),
                                       "note": 'Rubric: https://example.edu/rubric?a=1&b=2 <b>"x"</b>'})
     page = raw(browser().get(f"/c/{sid}"))
     assert '<a href="https://example.edu/rubric?a=1&amp;b=2"' in page and "<b>" not in page
@@ -1280,7 +1304,7 @@ def test_replacing_with_a_list_without_emails_keeps_the_emails_we_have(prof):
 def test_wrong_course_and_typo_warnings(prof):
     sid = prof.create_sheet(title="LAW 310 seminar")
     page = follow(prof, prof.upload(sid, "Name,Email,Section\nAna Lima,ana@school.edu,BIO 101-2\nBo Chen,bo@school.edu,BIO 101-2\n"))
-    assert "⚠️" in page and "section “BIO 101-2”" in page
+    assert "report-warn" in page and "section “BIO 101-2”" in page  # shown as a warning
     page = follow(prof, prof.post(f"/teach/s/{sid}/roster/add", {"name": "Cy Cole", "email": "cy@school.edu"}))
     prof.post(f"/teach/s/{sid}/roster/add", {"name": "Di Dunn", "email": "di@school.edu"})
     page = follow(prof, prof.post(f"/teach/s/{sid}/roster/add", {"name": "Ed Ek", "email": "ed@shcool.edu"}))
@@ -1772,3 +1796,128 @@ def test_marking_every_day_cant_do_means_the_professor_decides(prof, browser):
     page = text(prof.get(f"/teach/s/{sid}"))
     assert "Ana Able — marked every day as one they can't do" in page and "surgery that week" in page
     assert "Give them the open seats (" not in page  # filling can't place her either
+
+
+# ---------------------------------------------------------------------------
+# Same-name students, archiving, short links, the class-list flow
+# ---------------------------------------------------------------------------
+TWINS = "Name,Email\nAlex Kim,akim7@school.edu\nAlex Kim,alex.kim@school.edu\nSam Lee,sam@school.edu\n"
+
+
+def test_two_students_with_one_name_each_sign_in_with_their_own_email(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid, TWINS)
+    page = text(prof.get(f"/teach/s/{sid}"))
+    assert "Two students are named Alex Kim" in page and "Alex Kim (2)" in page
+    s = browser()
+    page = text(s.post(f"/c/{sid}/login", {"name": "alex kim"}))
+    assert "Which one is you?" in page and "aki•••@school.edu" in page and "ale•••••@school.edu" in page
+    assert "akim7@school.edu" not in page  # never the whole address
+    sent = len(s.outbox)
+    r = s.post(f"/c/{sid}/login", {"name": "alex kim", "pick": "alex kim 2", "which": "1"})
+    assert r.headers["Location"].endswith("/verify") and len(s.outbox) == sent + 1
+    assert s.outbox[-1].to == ["alex.kim@school.edu"]
+    assert s.post(f"/c/{sid}/verify", {"code": s.last_code("alex.kim@school.edu")}).headers["Location"].endswith("/home")
+    assert "Hi Alex Kim (2)" in text(s.get(f"/c/{sid}/home"))
+    # Suggestions show the shared name once, without its number.
+    names = browser().get(f"/c/{sid}/names?q=ale").get_json()
+    assert names == ["Alex Kim"]
+
+
+def test_a_new_upload_keeps_each_same_name_student_with_their_ranking(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid, TWINS)
+    alex = browser()
+    alex.post(f"/c/{sid}/login", {"name": "Alex Kim", "pick": "alex kim 2", "which": "1"})
+    alex.post(f"/c/{sid}/verify", {"code": alex.last_code("alex.kim@school.edu")})
+    alex.rank(sid, day_keys(sid))
+    # The same class, listed in another order and with a newcomer: numbers follow the emails.
+    review = prof.upload(sid, "Name,Email\nSam Lee,sam@school.edu\nAlex Kim,alex.kim@school.edu\n"
+                              "Alex Kim,akim7@school.edu\nNew Person,new@school.edu\n")
+    pid = re.search(r"/roster/review/(\w+)", review.headers["Location"]).group(1)
+    prof.post(f"/teach/s/{sid}/roster/review/{pid}", {"action": "replace"})
+    with prof.app.app_context():
+        rows = {r["name_key"]: r["email"] for r in db.rows("SELECT * FROM roster WHERE sheet_id = :sid", sid=sid)}
+        ranked = db.scalar("SELECT name_key FROM submissions WHERE sheet_id = :sid", sid=sid)
+    assert rows["alex kim"] == "akim7@school.edu" and rows["alex kim 2"] == "alex.kim@school.edu"
+    assert rows[ranked] == "alex.kim@school.edu"  # the ranking still belongs to the one who made it
+
+
+def test_archiving_tucks_a_sheet_away_and_deleting_offers_it_first(prof, browser):
+    sid = prof.create_sheet(title="Old seminar")
+    other = prof.create_sheet(title="Current seminar")
+    page = text(prof.get("/teach/"))
+    assert "Archive it instead" in page and "To delete it, type DELETE" in page
+    follow(prof, prof.post(f"/teach/s/{sid}/archive", {"archive": "1"}))
+    page = html(prof.get("/teach/"))
+    assert "Archived sheets (1)" in page and "Unarchive" in page
+    assert browser().get(f"/c/{sid}").status_code == 200  # students' link still works
+    prof.post(f"/teach/s/{sid}/archive", {"archive": "0"})
+    assert "Archived sheets (" not in html(prof.get("/teach/"))
+    r = prof.post(f"/teach/s/{other}/delete-sheet", {"confirm": "nope", "back": "dashboard"})
+    assert r.headers["Location"].endswith("/teach/")
+    assert "Nothing was deleted" in follow(prof, r)
+
+
+def test_shortening_a_link_happens_only_when_asked(prof, monkeypatch):
+    import teach
+
+    sent = []
+    monkeypatch.setattr(teach, "_shorten", lambda url: sent.append(url) or "https://is.gd/AbC12")
+    sid = prof.create_sheet()
+    page = html(prof.get(f"/teach/s/{sid}"))
+    assert "Shorten this link" in page and "is.gd" in page and not sent  # nothing goes out by itself
+    page = text(follow(prof, prof.post(f"/teach/s/{sid}/shorten")))
+    assert sent == [f"http://localhost/c/{sid}"] and "Short link: https://is.gd/AbC12" in page
+    assert 'value="https://is.gd/AbC12"' in html(prof.get(f"/teach/s/{sid}"))
+    prof.post(f"/teach/s/{sid}/shorten")
+    assert len(sent) == 1  # made once, then reused
+
+
+def test_shortener_accepts_only_short_links_it_expects(monkeypatch):
+    import io
+    import urllib.request
+
+    import teach
+
+    answers = iter([b"<html>error</html>", b"https://tinyurl.com/2p8xk3ab"])
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: io.BytesIO(next(answers)))
+    assert teach._shorten("https://example.edu/c/x") == "https://tinyurl.com/2p8xk3ab"  # is.gd failed: TinyURL
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: io.BytesIO(b"javascript:alert(1)"))
+    assert teach._shorten("https://example.edu/c/x") == ""
+
+
+def test_the_class_list_steps_aside_once_it_is_in(prof):
+    sid = prof.create_sheet()
+    page = text(prof.get(f"/teach/s/{sid}"))
+    assert "Your class list stays private" in page and "Encrypted all the way" in page
+    assert "the site's code is public" in page and "Get the list from Canvas" in page
+    page = text(follow(prof, prof.upload(sid)))
+    assert "Next: See it as a student →" in page
+    assert "Replace it with a new file" in page and "Delete this list and start over" in page
+    assert "Drag your class list here" not in page  # the big drop box is gone
+    page = text(follow(prof, prof.post(f"/teach/s/{sid}/roster/clear")))
+    assert "Drag your class list here" in page  # start over
+
+
+def test_new_codes_are_long_and_never_reuse_a_deleted_sheets(prof, monkeypatch):
+    import sheets as sheets_module
+
+    first = prof.create_sheet(title="Gone")
+    prof.post(f"/teach/s/{first}/delete-sheet", {"confirm": "DELETE"})
+    codes = iter([first, "a" * 12])
+    monkeypatch.setattr(sheets_module, "new_id", lambda length: next(codes))
+    second = prof.create_sheet(title="New")
+    assert second == "a" * 12 and len(first) == 12  # the deleted sheet's code wasn't handed out again
+
+
+def test_no_emoji_on_the_site():
+    import pathlib
+    import re as regex
+
+    emoji = regex.compile("[\U0001F000-\U0001FAFF☀-➿⬀-⯿️↩↗]")
+    root = pathlib.Path(__file__).resolve().parent.parent
+    files = list((root / "templates").glob("*.html")) + list((root / "public" / "static").glob("*.js"))
+    files += [p for p in root.glob("*.py")]
+    found = [f"{p.name}: {line.strip()[:60]}" for p in files for line in p.read_text().splitlines() if emoji.search(line)]
+    assert not found, found

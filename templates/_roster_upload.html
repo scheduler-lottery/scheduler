@@ -1,0 +1,16 @@
+<form method="post" action="{{ url_for('teach.upload_roster', sid=sheet.id) }}" enctype="multipart/form-data" data-dropzone>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="file" id="roster-file" name="roster" accept=".csv,.tsv,.txt,.xlsx,text/csv,text/plain" class="visually-hidden-file">
+  <label class="dropzone" for="roster-file">
+    <span class="dropzone-title">{{ 'Drop the new class list here' if counts.roster else 'Drag your class list here' }}</span>
+    <span class="dropzone-sub">the file Canvas downloads for you (usually <strong>students.csv</strong>, in your Downloads folder), or an Excel file — or click to choose it{% if counts.roster %}. You'll see what changes before anything is replaced.{% endif %}</span>
+    <span class="dropzone-status" data-dropzone-status></span>
+  </label>
+  <noscript><button class="btn btn-primary" type="submit">Upload</button></noscript>
+  <details class="paste-box">
+    <summary>Or paste names (and emails) instead</summary>
+    <label for="pasted" class="field-help">One student per line: their name, then a comma and their email. You can also copy the whole table from Canvas → People.</label>
+    <textarea id="pasted" name="pasted" rows="6" placeholder="Alex Johnson, alex.johnson@school.edu&#10;Sam Lee, sam.lee@school.edu"></textarea>
+    <button class="btn btn-secondary btn-small" type="submit">Use these names</button>
+  </details>
+</form>

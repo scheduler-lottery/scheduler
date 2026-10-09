@@ -109,7 +109,7 @@
       var text = source.value;
       var done = function () {
         var label = btn.textContent;
-        btn.textContent = "Copied ✓";
+        btn.textContent = "Copied";
         setTimeout(function () { btn.textContent = label; }, 1800);
         var markUrl = btn.getAttribute("data-mark-shared");
         if (markUrl) {
@@ -170,55 +170,6 @@
     });
   });
 
-  // The days list on the create/edit form: add, remove, reorder.
-  document.querySelectorAll("[data-day-rows]").forEach(function (list) {
-    var template = document.querySelector("[data-day-template]");
-    var addBtn = document.querySelector("[data-add-day]");
-
-    function renumber() {
-      Array.from(list.children).forEach(function (li, i) {
-        var input = li.querySelector('input[name="day_label"]');
-        if (input) input.setAttribute("aria-label", "Day " + (i + 1));
-      });
-    }
-
-    function addRow(after) {
-      var li = template.content.firstElementChild.cloneNode(true);
-      if (after && after.nextSibling) list.insertBefore(li, after.nextSibling);
-      else list.appendChild(li);
-      renumber();
-      li.querySelector('input[name="day_label"]').focus();
-      return li;
-    }
-
-    if (addBtn && template) addBtn.addEventListener("click", function () { addRow(); });
-
-    list.addEventListener("click", function (e) {
-      var li = e.target.closest(".day-row");
-      if (!li) return;
-      if (e.target.closest("[data-row-remove]")) {
-        if (list.children.length > 1) li.remove();
-        else li.querySelector('input[name="day_label"]').value = "";
-      } else if (e.target.closest("[data-row-up]") && li.previousElementSibling) {
-        list.insertBefore(li, li.previousElementSibling);
-      } else if (e.target.closest("[data-row-down]") && li.nextElementSibling) {
-        list.insertBefore(li.nextElementSibling, li);
-      }
-      renumber();
-    });
-
-    // Enter moves to the next day (adding one at the end) instead of
-    // submitting the whole form half-filled.
-    list.addEventListener("keydown", function (e) {
-      if (e.key !== "Enter" || !e.target.matches('input[name="day_label"]')) return;
-      e.preventDefault();
-      var li = e.target.closest(".day-row");
-      var next = li.nextElementSibling;
-      if (next) next.querySelector('input[name="day_label"]').focus();
-      else if (template) addRow(li);
-    });
-  });
-
   // The getting-started checklist remembers being folded away, per sheet,
   // on this computer.
   document.querySelectorAll("details[data-guide]").forEach(function (guide) {
@@ -229,25 +180,57 @@
     });
   });
 
-  // The Canvas guide's "Open Canvas" button points at the school's own Canvas.
-  var hostInput = document.getElementById("canvas-host");
+  // The Canvas guide: from the course's address, a link straight to its
+  // student list (New Analytics), remembered on this computer per sheet.
+  var guide = document.querySelector("[data-canvas-guide]");
   var openLink = document.getElementById("canvas-open");
-  if (hostInput && openLink) {
-    var cleanHost = function (raw) {
-      var host = (raw || "").trim().toLowerCase().replace(/^[a-z]+:\/\//, "").split("/")[0];
-      return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(host) ? host : "";
+  if (guide && openLink) {
+    var courseInput = document.getElementById("canvas-course");
+    var status = guide.querySelector("[data-canvas-status]");
+    var where = document.querySelector("[data-canvas-where]");
+    var courseKey = "canvas-course-" + guide.getAttribute("data-sheet");
+    // The New Analytics tool's number at schools we know of. Pasting a New
+    // Analytics address teaches this computer the number for that school.
+    var KNOWN_TOOLS = { "canvas.northwestern.edu": "48685" };
+    var learned = {};
+    try { learned = JSON.parse(store("canvas-tools") || "{}") || {}; } catch (err) { learned = {}; }
+
+    var readCourse = function (raw) {
+      var m = (raw || "").trim().match(/^(?:https?:\/\/)?([a-z0-9.-]+\.[a-z]{2,})\/courses\/(\d+)(?:\/external_tools\/(\d+))?/i);
+      return m ? { host: m[1].toLowerCase(), course: m[2], tool: m[3] } : null;
     };
-    var apply = function () {
-      var host = cleanHost(hostInput.value);
-      openLink.href = "https://" + (host || "canvas.instructure.com") + "/courses";
-      return host;
+    var applyCourse = function (save) {
+      var found = readCourse(courseInput.value);
+      if (!found) {
+        var host = store("canvas-host") || "canvas.instructure.com";
+        openLink.href = "https://" + host + "/courses";
+        openLink.textContent = "Open Canvas";
+        where.textContent = "Open your course there, copy its address into the box above, and this button takes you straight to its student list.";
+        status.textContent = courseInput.value.trim()
+          ? "That doesn't look like a course address. It should have /courses/ and a number in it."
+          : "We'll remember it on this computer for this sheet.";
+        return;
+      }
+      if (found.tool) {
+        learned[found.host] = found.tool;
+        store("canvas-tools", JSON.stringify(learned));
+      }
+      var tool = found.tool || learned[found.host] || KNOWN_TOOLS[found.host];
+      openLink.href = "https://" + found.host + "/courses/" + found.course
+        + (tool ? "/external_tools/" + tool + "?launch_type=course_navigation" : "");
+      openLink.textContent = "Open my class's student list in Canvas";
+      where.textContent = tool
+        ? "It opens New Analytics for your course."
+        : "It opens your course. Click New Analytics (or Course Analytics) in the course menu on the left.";
+      status.textContent = "Got it: course " + found.course + " at " + found.host + ".";
+      if (save) {
+        store(courseKey, courseInput.value.trim());
+        store("canvas-host", found.host);
+      }
     };
-    hostInput.value = store("canvas-host") || "";
-    apply();
-    hostInput.addEventListener("input", function () {
-      var host = apply();
-      store("canvas-host", host || null);
-    });
+    courseInput.value = store(courseKey) || "";
+    applyCourse(false);
+    courseInput.addEventListener("input", function () { applyCourse(true); });
   }
 
   // Name fields start read-only so browsers don't autofill a stranger's name

@@ -18,7 +18,7 @@ import settings
 import sheets
 import signin
 from matching_engine import compute_assignment
-from roster import match_name
+from roster import SAME_NAME_SUFFIX, base_key, match_name
 from util import clean_text, fold, iso, mask_email, new_id, normalize_name, now, parse_iso, tidy_name
 
 bp = Blueprint("student", __name__, url_prefix="/c/<sid>")
@@ -55,7 +55,7 @@ def load_sheet():
             ), 410
         return render_template(
             "error.html", code=404, title="We couldn't find that sign-up",
-            message="Check that you copied the whole link your instructor shared (it ends in an 8-character "
+            message="Check that you copied the whole link your instructor shared (it ends in a 12-character "
                     "code), or type the code below.",
             show_join=True,
         ), 404
@@ -245,6 +245,38 @@ def _start_unlisted(typed):
     return redirect(_here("student.pin"))
 
 
+def _twins(rows, row):
+    """Everyone on the list who shares this student's name (with an email to
+    tell them apart), when there's more than one."""
+    found = [r for r in rows if base_key(r["name_key"]) == base_key(row["name_key"])
+             and r["email"] and not r["is_test"]]
+    return found if len(found) > 1 else []
+
+
+def _masks(emails):
+    """Partly hidden addresses, each different from the others: just enough
+    for a student to recognize their own."""
+    for shown in range(1, 30):
+        masks = []
+        for e in emails:
+            local, _, domain = e.partition("@")
+            n = min(len(local) - 1, max(shown, 3 if len(local) > 4 else 1))
+            masks.append(f"{local[:n]}{'•' * max(3, len(local) - n)}@{domain}")
+        if len(set(masks)) == len(masks):
+            return masks
+    return [mask_email(e) for e in emails]
+
+
+def _which_one(typed, twins):
+    """Two (or more) students share this name: the one signing in picks
+    their own email, and the code goes only there."""
+    twins = sorted(twins, key=lambda r: r["name_key"])
+    return render_template(
+        "student_which.html", sheet=g.sheet, typed=typed, name=SAME_NAME_SUFFIX.sub("", twins[0]["display_name"]),
+        options=list(zip([r["name_key"] for r in twins], _masks([r["email"] for r in twins]))),
+    )
+
+
 @bp.route("/login", methods=["GET"])
 def login_again(sid):
     """Reopening the "Did you mean…?" page (a refresh, the back button)."""
@@ -266,14 +298,16 @@ def login(sid):
         if not row or (row["is_test"] and not _owner_is_viewing() and fold(typed) != row["name_key"]):
             flash("Pick your name again.", "error")
             return redirect(_here("student.signin"))
-        return _start_listed(row)
+        twins = _twins(rows, row) if request.form.get("which") != "1" else []
+        return _which_one(typed, twins) if twins else _start_listed(row)
     if not typed:
         flash("Type your name to continue.", "error")
         return redirect(_here("student.signin"))
 
     row, suggestions = match_name(typed, rows)
     if row:
-        return _start_listed(row)
+        twins = _twins(rows, row)
+        return _which_one(typed, twins) if twins else _start_listed(row)
     key = normalize_name(typed)
     if _known_unlisted(key) or signin.get_pin(g.sheet["id"], key):
         return _start_unlisted(typed)
@@ -536,9 +570,10 @@ def names(sid):
             score = 1
         else:
             continue
-        scored.append((score, r["display_name"].lower(), r["display_name"]))
+        name = SAME_NAME_SUFFIX.sub("", r["display_name"])
+        scored.append((score, name.lower(), name))
     scored.sort()
-    found = [name for _, _, name in scored[:5]]
+    found = list(dict.fromkeys(name for _, _, name in scored))[:5]
     if not found and len(q.replace(" ", "")) >= 4:
         # A typo ("alex jonson"): offer the close matches "Did you mean" would.
         _row, close = match_name(q, rows)

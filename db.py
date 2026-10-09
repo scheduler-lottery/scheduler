@@ -21,7 +21,7 @@ from sqlalchemy import create_engine, event, text
 import settings
 from util import iso, new_id
 
-SCHEMA_VERSION = "5"
+SCHEMA_VERSION = "6"
 SCHEMA_PATH = os.path.join(settings.BASE_DIR, "schema.sql")
 
 # Every table the app owns. On Postgres each gets row-level security turned
@@ -51,6 +51,9 @@ MIGRATIONS = [
     ("student_signouts", "reason", "TEXT NOT NULL DEFAULT ''"),
     ("student_signouts", "email", "TEXT NOT NULL DEFAULT ''"),
     ("login_codes", "from_instructor", "INTEGER NOT NULL DEFAULT 0"),
+    ("sheet_days", "day_date", "TEXT"),
+    ("sheets", "short_url", "TEXT"),
+    ("sheets", "archived_at", "TEXT"),
 ]
 
 _engine = None

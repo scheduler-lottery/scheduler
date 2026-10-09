@@ -22,7 +22,8 @@ from types import SimpleNamespace
 
 import db
 from matching_engine import ALGORITHMS, DEFAULT_ALGORITHM, EXCLUDED, MANUAL, OVERFLOW, UNRANKED, build_student_prefs
-from util import in_zone, iso, iso_precise, new_id, normalize_name, now, plural, slugify
+from roster import base_key, numbered
+from util import in_zone, iso, iso_precise, new_id, normalize_name, now, plural, read_date, slugify
 
 MAX_DAYS = 30
 MAX_BACKUP_JSON_BYTES = 5 * 1024 * 1024
@@ -62,10 +63,21 @@ def get_sheet(sid):
     )
 
 
+# A class's link ends in its code. 12 characters from 31 (no look-alikes
+# such as 0/o or 1/l) is about 8 x 10^17 codes, so nobody guesses one, and
+# each new code is checked against every sheet there is — or was, while a
+# deleted sheet can still be brought back — so no two classes ever share
+# one. Older sheets keep their 8-character codes.
+SHEET_ID_LENGTH = 12
+SHEET_ID_LENGTHS = (8, 12)
+
+
 def new_sheet_id():
     while True:
-        sid = new_id(8)
-        if not db.scalar("SELECT 1 FROM sheets WHERE id = :sid", sid=sid):
+        sid = new_id(SHEET_ID_LENGTH)
+        if not db.scalar("SELECT 1 FROM sheets WHERE id = :sid", sid=sid) and not db.scalar(
+            "SELECT 1 FROM snapshots WHERE sheet_id = :sid", sid=sid
+        ):
             return sid
 
 
@@ -93,30 +105,31 @@ def file_time(value, zone, seconds=False):
 # ---------------------------------------------------------------------------
 def get_days(sid):
     return db.rows(
-        "SELECT day_key AS key, label FROM sheet_days WHERE sheet_id = :sid ORDER BY sort_order",
+        "SELECT day_key AS key, label, day_date AS date FROM sheet_days WHERE sheet_id = :sid ORDER BY sort_order",
         sid=sid,
     )
 
 
 def save_days(sid, entries):
-    """Make the sheet's days match `entries`, a list of (key, label) in
-    display order. Existing keys are kept, so editing a label doesn't
-    disturb rankings that point at it; unknown keys become new days.
-    Returns the days that were removed, as [{key, label}]."""
+    """Make the sheet's days match `entries`, a list of (key, label, date)
+    in display order (date is YYYY-MM-DD, or None for a day saved before
+    days were picked on a calendar). Existing keys are kept, so rankings
+    that point at a day stay put; unknown keys become new days. Returns the
+    days that were removed, as [{key, label}]."""
     current = {d["key"]: d["label"] for d in get_days(sid)}
     kept = set()
-    for position, (key, label) in enumerate(entries):
+    for position, (key, label, day_date) in enumerate(entries):
         if key not in current or key in kept:
             key = "d" + secrets.token_hex(3)
         kept.add(key)
         db.run(
             """
-            INSERT INTO sheet_days (sheet_id, day_key, label, sort_order)
-            VALUES (:sid, :key, :label, :pos)
+            INSERT INTO sheet_days (sheet_id, day_key, label, sort_order, day_date)
+            VALUES (:sid, :key, :label, :pos, :date)
             ON CONFLICT (sheet_id, day_key) DO UPDATE SET
-                label = excluded.label, sort_order = excluded.sort_order
+                label = excluded.label, sort_order = excluded.sort_order, day_date = excluded.day_date
             """,
-            sid=sid, key=key, label=label, pos=position,
+            sid=sid, key=key, label=label, pos=position, date=day_date,
         )
     removed = [{"key": k, "label": current[k]} for k in current if k not in kept]
     for day in removed:
@@ -257,18 +270,43 @@ def _drop_pins(sid, keys):
         db.run("DELETE FROM name_pins WHERE sheet_id = :sid AND name_key = :key", sid=sid, key=key)
 
 
+def _keep_numbering(current_rows, incoming):
+    """Students who share a name keep the number they had ("Alex Kim (2)"
+    stays the one with that email), so a new upload never hands one
+    student's ranking to the other. Any clash left is renumbered."""
+    by_email = {r["email"]: r for r in current_rows if r["email"] and not r["is_test"]}
+    out = []
+    for s in incoming:
+        old = by_email.get(s["email"]) if s["email"] else None
+        if old and old["name_key"] != s["name_key"] and base_key(old["name_key"]) == base_key(s["name_key"]):
+            s = {**s, "name_key": old["name_key"], "display_name": old["display_name"]}
+        out.append(s)
+    seen = set()
+    for i, s in enumerate(out):
+        if s["name_key"] in seen:
+            later = {o["name_key"] for o in out[i + 1:]}
+            n = 2
+            while normalize_name(numbered(s["display_name"], n)) in seen | later:
+                n += 1
+            name = numbered(s["display_name"], n)
+            out[i] = s = {**s, "name_key": normalize_name(name), "display_name": name}
+        seen.add(s["name_key"])
+    return out
+
+
 def replace_roster(sid, students):
     """Swap in a new class list. Test students stay put, and a student the
     new list has no email for keeps the one already on file. Returns the
     name keys whose way of signing in changed, so their sign-ins can be
     ended."""
-    before = {r["name_key"]: r["email"] for r in get_roster(sid) if not r["is_test"]}
+    current = get_roster(sid)
+    before = {r["name_key"]: r["email"] for r in current if not r["is_test"]}
     pinned = _pinned(sid)
     taken = test_keys(sid)
-    incoming = [
+    incoming = _keep_numbering(current, [
         {**s, "email": s["email"] or before.get(s["name_key"], "")}
         for s in students if s["name_key"] not in taken
-    ]
+    ])
     db.run("DELETE FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid)
     db.run_many(
         "INSERT INTO roster (sheet_id, name_key, display_name, email, is_test) "
@@ -291,14 +329,25 @@ def add_to_roster(sid, students):
     emails = {r["email"] for r in current.values() if r["email"]}
     added, filled, changed = 0, 0, []
     for s in students:
+        if s["email"] and any(r["email"] == s["email"] and base_key(r["name_key"]) == base_key(s["name_key"])
+                              for r in current.values()):
+            continue  # already on the list
         here = current.get(s["name_key"])
         email = s["email"] if s["email"] not in emails else ""
+        if here is not None and not here["is_test"] and here["email"] and email and here["email"] != email:
+            # A different student with the same name: add them too, numbered.
+            n = 2
+            while normalize_name(numbered(s["display_name"], n)) in current:
+                n += 1
+            name = numbered(s["display_name"], n)
+            s, here = {**s, "name_key": normalize_name(name), "display_name": name}, None
         if here is None:
             db.run(
                 "INSERT INTO roster (sheet_id, name_key, display_name, email, is_test) "
                 "VALUES (:sid, :key, :name, :email, 0)",
                 sid=sid, key=s["name_key"], name=s["display_name"], email=email,
             )
+            current[s["name_key"]] = {**s, "email": email, "is_test": 0}
             added += 1
         elif not here["is_test"] and email and not here["email"]:
             db.run(
@@ -806,7 +855,8 @@ def _valid_export(export):
             return False
         day_keys = {d.get("key") for d in days if isinstance(d, dict)}
         return (
-            all(strings(d, ("key", "label"), 100) for d in days)
+            all(strings(d, ("key", "label"), 100) and (d.get("date") is None or text(d.get("date"), 10))
+                for d in days)
             and len(day_keys) == len(days)
             and all(strings(r, ("name_key", "display_name", "email"), 320) for r in roster)
             and all(
@@ -1031,8 +1081,10 @@ def restore(sheet_id, owner_id, data, keep_newer=True, parts=None):
     if "days" in parts:
         db.run("DELETE FROM sheet_days WHERE sheet_id = :sid", sid=sheet_id)
         db.run_many(
-            "INSERT INTO sheet_days (sheet_id, day_key, label, sort_order) VALUES (:sid, :key, :label, :pos)",
-            [{"sid": sheet_id, "key": d["key"], "label": d["label"], "pos": i} for i, d in enumerate(data["days"])],
+            "INSERT INTO sheet_days (sheet_id, day_key, label, sort_order, day_date) "
+            "VALUES (:sid, :key, :label, :pos, :date)",
+            [{"sid": sheet_id, "key": d["key"], "label": d["label"], "pos": i,
+              "date": d["date"] if read_date(d.get("date")) else None} for i, d in enumerate(data["days"])],
         )
     changed = []
     if "roster" in parts:
@@ -1132,7 +1184,7 @@ def copy_sheet(sheet, owner_id):
         unlisted=sheet["allow_unlisted"], preview=sheet["show_preview"],
         unranked=sheet["include_unranked"], seed=new_lottery_seed(), at=at,
     )
-    save_days(sid, [("", d["label"]) for d in get_days(sheet["id"])])
+    save_days(sid, [("", d["label"], d["date"]) for d in get_days(sheet["id"])])
     return sid
 
 
