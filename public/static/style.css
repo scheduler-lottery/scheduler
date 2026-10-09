@@ -10,9 +10,12 @@
 /* The site's fonts: the reader's installed copy if they have one, otherwise
    the file the site's owner uploaded on /owner (served at /fonts/...).
    Until it's uploaded, the next font in each stack stands in. */
+/* Roslindale Display Condensed as one variable font: every weight from 200
+   to 900, italics (its "ital" axis) and optical sizes (finer when big,
+   sturdier when small). The static Regular stands in until it's uploaded. */
+@font-face { font-family: "Roslindale"; src: url("/fonts/roslindale-variable.woff2") format("woff2"); font-weight: 200 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Roslindale"; src: url("/fonts/roslindale-variable.woff2") format("woff2"); font-weight: 200 900; font-style: italic; font-display: swap; }
 @font-face { font-family: "Roslindale Display Condensed"; src: local("Roslindale Display Condensed Regular"), local("Roslindale-DisplayCondensedRegular"), url("/fonts/roslindale-display-condensed-regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
-@font-face { font-family: "Roslindale Display Condensed"; src: local("Roslindale Display Condensed Bold"), local("Roslindale-DisplayCondensedBold"), url("/fonts/roslindale-display-condensed-bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
-@font-face { font-family: "Roslindale Display Condensed"; src: local("Roslindale Display Condensed Black"), local("Roslindale-DisplayCondensedBlack"), url("/fonts/roslindale-display-condensed-black.woff2") format("woff2"); font-weight: 800; font-style: normal; font-display: swap; }
 @font-face { font-family: "YaleNew"; src: local("YaleNew Regular"), local("YaleNew-Roman"), url("/fonts/yalenew-roman.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
 @font-face { font-family: "YaleNew"; src: local("YaleNew Italic"), local("YaleNew-Italic"), url("/fonts/yalenew-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
 @font-face { font-family: "YaleNew"; src: local("YaleNew Bold"), local("YaleNew-Bold"), url("/fonts/yalenew-bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
@@ -27,11 +30,11 @@
 @font-face { font-family: "Scheduler Text"; src: local("YaleNew Bold Italic"), local("YaleNew-BoldItalic"), url("/fonts/yalenew-bolditalic.woff2") format("woff2"); font-weight: 700; font-style: italic; font-display: swap; }
 
 :root {
-  /* Fonts: Roslindale Display Condensed, bold and big, for every heading
-     and large figure; YaleNew for all text. Old Style 7 is used only when a
+  /* Fonts: Roslindale for every heading and large figure, light, slim and
+     tightly set, big; YaleNew for all text. Old Style 7 is used only when a
      reader picks it in the Appearance window (data-font, below). Free
      look-alikes stand in until the owner uploads the files on /owner. */
-  --font-display: "Roslindale Display Condensed", "Instrument Serif", "Fraunces", Georgia, serif;
+  --font-display: "Roslindale", "Roslindale Display Condensed", "Fraunces", "Instrument Serif", Georgia, serif;
   --font-text: "YaleNew", "Crimson Pro", Georgia, "Times New Roman", serif;
   --font-small: var(--font-text);
   --font-oldstyle: "Scheduler Text", "Old Style 7", "Old Style 7 Std", "Crimson Pro", Georgia, serif;
@@ -40,6 +43,12 @@
   --font-accent: var(--font-text);
   --font-body: var(--font-text);
   --display-weight: 700;
+  /* Display weights (Roslindale's 200-900) and tracking, per level. Dark
+     themes add a little weight (thin strokes look thinner on dark), and the
+     high-contrast themes a lot. */
+  --w-hero: 230; --w-h1: 270; --w-h2: 320; --w-h3: 400; --w-h4: 460; --w-num: 260; --w-brand: 480;
+  --track-hero: -0.045em; --track-h1: -0.035em; --track-h2: -0.025em; --track-h3: -0.015em;
+  --display-boost: 0;
   --on-accent: #fff;
 
   --bg: #ffffff;
@@ -1817,21 +1826,50 @@ details.guide:not([open]) { padding-bottom: 20px; }
 /* =============================================================
    Type: display headlines, Inter for the rest (see the tokens)
    ============================================================= */
-/* Headings and big figures: Roslindale, bold and big. */
+/* Headings and big figures: Roslindale, light, slim and tight, big. */
 h1, h2, h3, h4, .card-heading, .modal-title, .brand-name, .next-step-title, .count-number,
 .stat-value, .day-card-day {
-  font-family: var(--font-display); font-weight: var(--display-weight); letter-spacing: 0;
+  font-family: var(--font-display); font-optical-sizing: auto; font-kerning: normal;
 }
-h1 { font-size: clamp(2.3rem, 5.2vw, 3.1rem); line-height: 1.02; font-weight: 800; margin-bottom: 12px; }
-h2, .card-heading { font-size: clamp(1.6rem, 3.3vw, 2rem); line-height: 1.06; }
-h3 { font-size: 1.4rem; line-height: 1.1; }
-h4 { font-size: 1.2rem; line-height: 1.15; }
-.next-step-title { font-size: clamp(1.5rem, 3vw, 1.85rem); }
-.modal-title { font-size: 1.8rem; line-height: 1.08; }
-.brand-name { font-size: 1.5rem; font-weight: 800; }
-.count-number, .stat-value { font-weight: 800; }
-.day-card-day { font-size: clamp(2.2rem, 6vw, 3rem); font-weight: 800; line-height: 1.05; }
-.hero-card h1 { font-size: clamp(3.2rem, 10vw, 5.2rem); line-height: 0.95; }
+h1 {
+  font-size: clamp(2.6rem, 6.2vw, 4rem); line-height: 0.98; margin-bottom: 14px;
+  font-weight: calc(var(--w-h1) + var(--display-boost)); letter-spacing: var(--track-h1);
+}
+h2, .card-heading {
+  font-size: clamp(1.85rem, 3.9vw, 2.55rem); line-height: 1.02;
+  font-weight: calc(var(--w-h2) + var(--display-boost)); letter-spacing: var(--track-h2);
+}
+h3 { font-size: 1.55rem; line-height: 1.08; font-weight: calc(var(--w-h3) + var(--display-boost)); letter-spacing: var(--track-h3); }
+h4 { font-size: 1.25rem; line-height: 1.12; font-weight: calc(var(--w-h4) + var(--display-boost)); letter-spacing: -0.01em; }
+.next-step-title {
+  font-size: clamp(1.75rem, 3.6vw, 2.3rem);
+  font-weight: calc(var(--w-h2) + var(--display-boost)); letter-spacing: var(--track-h2);
+}
+.modal-title {
+  font-size: 2.1rem; line-height: 1.02;
+  font-weight: calc(var(--w-h2) + var(--display-boost)); letter-spacing: var(--track-h2);
+}
+.brand-name {
+  font-size: 1.6rem; letter-spacing: -0.02em;
+  font-weight: calc(var(--w-brand) + var(--display-boost));
+  transition: font-weight 0.35s ease;
+}
+.brand:hover .brand-name { font-weight: calc(var(--w-brand) + 260 + var(--display-boost)); }
+.count-number, .stat-value { font-weight: calc(var(--w-num) + var(--display-boost)); letter-spacing: -0.03em; }
+.day-card-day {
+  font-size: clamp(2.8rem, 7.5vw, 3.8rem); line-height: 0.95;
+  font-weight: calc(var(--w-num) + var(--display-boost)); letter-spacing: var(--track-h1);
+}
+.hero-card h1 {
+  font-size: clamp(4rem, 14vw, 7.6rem); line-height: 0.88;
+  font-weight: calc(var(--w-hero) + var(--display-boost)); letter-spacing: var(--track-hero);
+}
+/* An italic turn inside a heading: <em> is Roslindale's light italic. */
+:is(h1, h2, h3, .card-heading, .modal-title, .next-step-title, .privacy-title) em {
+  font-style: italic; font-variation-settings: "ital" 1; color: var(--accent);
+}
+[data-mode="dark"] { --display-boost: 30; }
+[data-theme^="contrast"] { --display-boost: 200; }
 .btn, input, select, textarea, button, .flash { font-family: var(--font-text); }
 /* Small text: YaleNew. */
 .mini-hint, .hint, .field-help, .check-hint, .eyebrow, .tag, .chip, .status-pill, .muted, small,
@@ -1848,6 +1886,12 @@ h4 { font-size: 1.2rem; line-height: 1.15; }
   --font-display: var(--font-text);
   --display-weight: 700;
 }
+[data-font="sans"], [data-font="readable"] {
+  --w-hero: 700; --w-h1: 700; --w-h2: 650; --w-h3: 650; --w-h4: 650; --w-num: 700; --w-brand: 700;
+  --track-hero: -0.02em; --track-h1: -0.015em; --track-h2: -0.01em; --track-h3: 0;
+  --display-boost: 0;
+}
+[data-font="readable"] { --track-hero: 0; --track-h1: 0; --track-h2: 0; }
 [data-font="sans"] h1, [data-font="readable"] h1 { font-size: 1.9rem; }
 [data-font="sans"] .hero-card h1, [data-font="readable"] .hero-card h1 { font-size: 2.6rem; }
 [data-font="sans"] h2, [data-font="sans"] .card-heading,
@@ -2243,3 +2287,134 @@ details[open] > :not(summary) { animation: fade-in 0.25s ease-out backwards; }
 .handoff-more { font-size: 0.9em; }
 .ask-instructor { margin: 14px 0 4px; }
 .ask-instructor .mail-picker { margin-top: 12px; }
+
+/* =============================================================
+   More Roslindale: small labels above headings ("eyebrows") are
+   its italic; the other font choices keep them plain.
+   ============================================================= */
+.eyebrow {
+  font-family: var(--font-display); font-style: italic; font-variation-settings: "ital" 1;
+  font-weight: calc(360 + var(--display-boost)); font-size: 1.08rem; letter-spacing: 0;
+  text-transform: none; color: var(--accent);
+}
+.eyebrow a { font-weight: inherit; }
+[data-font="sans"] .eyebrow, [data-font="readable"] .eyebrow {
+  font-style: normal; font-variation-settings: normal; font-weight: 600; font-size: 0.85rem;
+}
+
+/* =============================================================
+   Privacy: an editorial page. Big light headline, three facts up
+   front, then numbered sections with their headings in a margin
+   column that stays in view while you read the section.
+   ============================================================= */
+.editorial { counter-reset: part; }
+.editorial-head h1 { max-width: 19ch; font-size: clamp(2.8rem, 7vw, 4.6rem); text-wrap: balance; }
+.editorial-head .lead { font-size: 1.15rem; color: var(--muted); max-width: 46ch; margin: 0 0 8px; }
+.policy-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 30px 0 14px; }
+.policy-fact {
+  padding: 20px 18px 16px; border-radius: var(--radius-md);
+  background: var(--surface-soft); border: 1px solid var(--border);
+}
+.policy-fact-big {
+  margin: 0 0 10px; font-family: var(--font-display); font-optical-sizing: auto;
+  font-size: 2.2rem; line-height: 0.95; letter-spacing: var(--track-h1);
+  font-weight: calc(var(--w-h1) + var(--display-boost));
+}
+.policy-fact p:last-child { margin-bottom: 0; }
+.policy-section {
+  display: grid; grid-template-columns: minmax(170px, 230px) minmax(0, 1fr); gap: 10px 36px;
+  padding: 30px 0 8px; border-top: 1px solid var(--border);
+}
+.policy-section:first-of-type { margin-top: 14px; }
+.policy-section h2 { margin: 0; align-self: start; position: sticky; top: 92px; }
+.policy-section h2::before {
+  counter-increment: part; content: counter(part, decimal-leading-zero);
+  display: block; margin-bottom: 8px;
+  font-style: italic; font-variation-settings: "ital" 1; font-size: 1rem; letter-spacing: 0.04em;
+  font-weight: calc(300 + var(--display-boost)); color: var(--accent);
+}
+.policy-body > :first-child { margin-top: 0; }
+.policy-body ul { margin-top: 0; }
+@media (max-width: 760px) {
+  .policy-facts { grid-template-columns: 1fr; }
+  .policy-section { grid-template-columns: 1fr; padding-top: 24px; }
+  .policy-section h2 { position: static; }
+}
+
+/* The class list's privacy panel on a sheet: a headline and four tiles. */
+.privacy-panel { border-left-width: 1px; padding: 20px 20px 14px; }
+.privacy-title {
+  margin: 0 0 14px; font-family: var(--font-display); font-optical-sizing: auto; color: var(--text);
+  font-size: clamp(1.7rem, 3.4vw, 2.2rem); line-height: 1.02; letter-spacing: var(--track-h2);
+  font-weight: calc(var(--w-h2) + var(--display-boost));
+}
+.privacy-panel .privacy-tiles {
+  list-style: none; padding: 0; margin: 0 0 10px;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+}
+.privacy-tiles li { margin: 0; padding: 14px 14px 12px; border-radius: var(--radius-sm); background: var(--surface-soft); }
+.privacy-tiles strong {
+  display: block; margin-bottom: 4px; font-family: var(--font-display); font-optical-sizing: auto;
+  font-size: 1.3rem; line-height: 1.05; letter-spacing: var(--track-h3); color: var(--success);
+  font-weight: calc(var(--w-h3) + var(--display-boost));
+}
+@media (max-width: 640px) { .privacy-panel .privacy-tiles { grid-template-columns: 1fr; } }
+
+/* =============================================================
+   Reacting to you (app.js adds the classes): sections below the
+   fold rise in as you scroll to them; a soft light follows the
+   pointer across cards; primary buttons catch a sheen; the top bar
+   lifts once the page scrolls under it; the front page's title
+   thickens wherever the pointer is. All of it is skipped for
+   readers who ask for reduced motion (see the top).
+   ============================================================= */
+.reveal { opacity: 0; transform: translateY(18px); }
+.reveal.is-in {
+  opacity: 1; transform: none;
+  transition: opacity 0.75s cubic-bezier(0.2, 0.7, 0.2, 1), transform 0.75s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@media print { .reveal { opacity: 1 !important; transform: none !important; } }
+
+@property --spot { syntax: "<percentage>"; inherits: false; initial-value: 0%; }
+@media (hover: hover) and (pointer: fine) {
+  .card {
+    background-image: radial-gradient(560px circle at var(--mx, 50%) var(--my, 0%),
+      color-mix(in srgb, var(--accent) var(--spot), transparent), transparent 70%);
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease,
+      --spot 0.5s ease;
+  }
+  .card.is-lit { --spot: 7%; }
+  [data-mode="dark"] .card.is-lit { --spot: 11%; }
+
+  .btn-primary { position: relative; overflow: hidden; }
+  .btn-primary::after {
+    content: ""; position: absolute; top: 0; bottom: 0; left: -70%; width: 45%; pointer-events: none;
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transform: skewX(-18deg); opacity: 0;
+  }
+  .btn-primary:hover::after { animation: sheen 0.85s ease; }
+}
+@keyframes sheen {
+  from { opacity: 1; transform: translateX(0) skewX(-18deg); }
+  to { opacity: 1; transform: translateX(480%) skewX(-18deg); }
+}
+[data-theme^="contrast"] .card { background-image: none; }
+
+.topbar { transition: box-shadow 0.3s ease, background-color 0.3s ease, border-color 0.3s ease; }
+.topbar.is-scrolled { box-shadow: 0 10px 28px -18px rgba(30, 22, 10, 0.45); }
+[data-mode="dark"] .topbar.is-scrolled { box-shadow: 0 10px 28px -14px rgba(0, 0, 0, 0.8); }
+
+a { text-underline-offset: 0.16em; transition: text-underline-offset 0.2s ease, color 0.2s ease; }
+a:hover { text-underline-offset: 0.28em; }
+
+.weight-play span { transition: font-weight 0.35s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.weight-play.is-waving span { animation: weight-wave 1.3s ease-in-out backwards; }
+.weight-play .hero-dot, .hero-dot { color: var(--accent); }
+@keyframes weight-wave { 45% { font-weight: 700; } }
+
+/* Big light headings: even line breaks (no lone last word), and a size
+   that fits narrow cards. */
+h1, h2, h3, .card-heading, .modal-title, .next-step-title, .privacy-title { text-wrap: balance; }
+.center-card h1 { font-size: clamp(2.3rem, 5.4vw, 3rem); }
+.modal-dialog .modal-title { font-size: clamp(1.7rem, 4vw, 2.1rem); }
+summary.card-heading::marker, summary.card-heading::-webkit-details-marker { font-size: 0.55em; color: var(--muted); }
