@@ -9,11 +9,12 @@ no route anywhere that lets the owner open someone else's sheet.
 
 import base64
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, flash, g, redirect, render_template, request, url_for
 
 import db
 import settings
 import signin
+import sitesecrets
 import usage
 from auth import owner_required
 from util import iso, valid_email
@@ -64,11 +65,46 @@ def index():
     uploaded = {r["name"]: r["updated_at"] for r in db.rows("SELECT name, updated_at FROM site_assets")}
     return render_template(
         "owner.html", stats=stats, checks=checks, errors=errors,
-        email_limit=settings.EMAIL_DAILY_LIMIT, domains=settings.INSTRUCTOR_EMAIL_DOMAINS,
+        email_limit=signin.email_daily_limit(), domains=settings.INSTRUCTOR_EMAIL_DOMAINS,
         fonts=[(name, uploaded.get(name)) for name in SITE_FONTS],
         meters=usage.meters(), measured_since=usage.first_day(), daily_job=usage.last_daily_job(),
         alert_at=int(usage.ALERT_AT * 100),
+        workos={
+            "active": signin.email_mode() == "workos",
+            "from_setting": bool(settings.WORKOS_API_KEY),
+            "saved": bool(sitesecrets.load("workos_api_key")),
+            "test": signin.workos_key().startswith("sk_test_"),
+            "sender": settings.WORKOS_SENDER,
+        },
+        smtp_from=settings.SMTP_FROM if settings.SMTP_HOST else "",
     )
+
+
+@bp.route("/workos", methods=["POST"])
+@owner_required
+def save_workos_key():
+    """Save (or remove) the WorkOS API key that sends the sign-in codes. It's
+    checked with WorkOS before it's saved, and stored encrypted
+    (sitesecrets.py). A WORKOS_API_KEY setting in Vercel takes precedence."""
+    back = url_for("owner.index") + "#signin-email"
+    if request.form.get("action") == "remove":
+        sitesecrets.remove("workos_api_key")
+        flash("Removed the WorkOS key. " + (f"Sign-in codes come from {settings.SMTP_FROM} again."
+                                           if settings.SMTP_HOST else "Nothing can send sign-in codes now."),
+              "success")
+        return redirect(back)
+    key = "".join((request.form.get("key") or "").split())  # pasted keys often carry a space or line break
+    ok, why = signin.workos_check_key(key)
+    if not ok:
+        flash(why, "error")
+        return redirect(back)
+    sitesecrets.save("workos_api_key", key)
+    g.pop("workos_key", None)
+    flash(f"Connected: WorkOS now sends the sign-in codes, from {settings.WORKOS_SENDER}."
+          + (" That's a test (Staging) key, though: its emails come from workos.dev and are meant for testing. "
+             "For students, save the live key (it starts “sk_live_”)." if key.startswith("sk_test_") else ""),
+          "success")
+    return redirect(back)
 
 
 @bp.route("/fonts", methods=["POST"])

@@ -2148,13 +2148,18 @@ class FakeWorkOS:
     def __init__(self):
         self.sent, self.deleted, self.fail = [], [], False
 
-    def __call__(self, method, path, body=None, timeout=10):
+    def __call__(self, method, path, body=None, timeout=10, key=None):
         from datetime import timedelta
+        from urllib.error import HTTPError
         from urllib.parse import unquote
 
         from util import iso, now
         if self.fail:
             raise OSError("WorkOS is down")
+        if method == "GET" and path.startswith("/user_management/users"):  # checking a key
+            if key != "sk_live_good":
+                raise HTTPError(path, 401, "Unauthorized", None, io.BytesIO(b'{"message":"Unauthorized"}'))
+            return {"data": []}
         if method == "POST" and path == "/user_management/magic_auth":
             code = f"{271828 + len(self.sent):06d}"
             self.sent.append((body["email"], code))
@@ -2239,3 +2244,33 @@ def test_the_daily_job_deletes_workos_records_within_a_day(prof, browser, monkey
         db.commit()
     assert prof.get("/cron/daily", headers=cron).get_json()["workos_records_deleted"] == 1
     assert workos.deleted == ["user_alex@school.edu"] and q(prof.app, "SELECT COUNT(*) FROM remote_users") == 0
+
+
+def test_the_owner_switches_to_workos_by_pasting_its_key(prof, browser, monkeypatch):
+    import signin
+    workos = FakeWorkOS()
+    monkeypatch.setattr(signin, "_workos", workos)
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    owner = browser().sign_in_instructor("owner@gmail.com")
+    assert "Sign-in codes come from codes@test.example" in text(owner.get("/owner/"))
+    page = text(follow(owner, owner.post("/owner/workos", {"key": "sk_live_wrong"})))
+    assert "WorkOS didn't accept that key" in page and "Sign-in codes come from codes@test.example" in page
+    page = text(follow(owner, owner.post("/owner/workos", {"key": "  sk_live_good \n"})))  # pasted with spaces
+    assert "Connected: WorkOS now sends the sign-in codes" in page and "WorkOS sends the sign-in codes" in page
+    assert "emailed by WorkOS" in text(browser().get("/privacy"))
+    with prof.app.app_context():
+        stored = db.scalar("SELECT value FROM app_state WHERE key = 'secret:workos_api_key'")
+    assert stored and "sk_live_good" not in stored  # encrypted at rest
+    sam = browser()
+    sam.post(f"/c/{sid}/login", {"name": "Sam Lee"})
+    assert workos.sent[-1][0] == "sam@school.edu"
+    assert sam.post(f"/c/{sid}/verify", {"code": workos.sent[-1][1]}).headers["Location"].endswith("/home")
+    # Only the owner can change it.
+    assert prof.post("/owner/workos", {"action": "remove"}).status_code == 404
+    page = text(follow(owner, owner.post("/owner/workos", {"action": "remove"})))
+    assert "Removed the WorkOS key" in page and "Sign-in codes come from codes@test.example" in page
+    # A WORKOS_API_KEY setting wins, and the page says where the key lives.
+    monkeypatch.setattr(settings, "WORKOS_API_KEY", "sk_live_from_vercel")
+    page = text(owner.get("/owner/"))
+    assert "The key is the WORKOS_API_KEY setting in Vercel" in page and "Save and switch to WorkOS" not in page

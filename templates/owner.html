@@ -48,6 +48,35 @@
     <li class="plain-row"><span><strong>Who can make an account</strong> <span class="muted">— {{ 'anyone' if '*' in domains else 'emails ending in ' ~ domains | join(', ') }}</span></span></li>
   </ul>
 
+  <h2 id="signin-email">Sign-in email</h2>
+  {% if workos.active %}
+  <p><strong>WorkOS sends the sign-in codes</strong>, from {{ workos.sender }}.{% if workos.test %}
+    <strong>This is a test (Staging) key:</strong> its emails come from workos.dev and are meant for testing. For
+    students, save the live key (it starts “sk_live_”).{% endif %}{% if workos.from_setting %} The key is the
+    WORKOS_API_KEY setting in Vercel.{% endif %}</p>
+  {% else %}
+  <p><strong>Sign-in codes {% if smtp_from %}come from {{ smtp_from }}{% else %}have nothing to send them{% endif %}.</strong>
+    To have WorkOS send them instead, paste its secret key here.</p>
+  {% endif %}
+  {% if not workos.from_setting %}
+  <form method="post" action="{{ url_for('owner.save_workos_key') }}" class="inline-form" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="workos-key" class="visually-hidden">WorkOS secret key</label>
+    <input type="password" id="workos-key" name="key" placeholder="sk_live_…" autocomplete="off" spellcheck="false" required>
+    <button class="btn btn-primary btn-small" type="submit">{{ 'Replace the key' if workos.saved else 'Save and switch to WorkOS' }}</button>
+  </form>
+  <p class="mini-hint">In the WorkOS dashboard, switch to <strong>Production</strong>, open <strong>API Keys</strong>, and copy the
+    secret key. It's checked with WorkOS before it's saved, takes effect at once (no redeploy), and is stored
+    encrypted.</p>
+  {% if workos.saved %}
+  <form method="post" action="{{ url_for('owner.save_workos_key') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="remove">
+    <button class="btn btn-ghost btn-small" type="submit" data-confirm-click="Stop using WorkOS for sign-in codes?">Remove the WorkOS key</button>
+  </form>
+  {% endif %}
+  {% endif %}
+
   <h2>Switch an account off or on</h2>
   <p class="mini-hint">
     For abuse only. A switched-off instructor can't sign in and their students' links stop working; nothing

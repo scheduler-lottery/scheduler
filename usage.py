@@ -124,7 +124,7 @@ def meters():
         Meter("Data sent, last 30 days", totals.get("bytes", 0) / 1_000_000_000, VERCEL_TRANSFER_GB, "GB",
               "Vercel's free plan allows 100 GB a month. This counts pages; styles, scripts, and fonts add a "
               "little, and browsers keep them."),
-        Meter("Sign-in emails, last 24 hours", signin.emails_sent_today(), settings.EMAIL_DAILY_LIMIT, "",
+        Meter("Sign-in emails, last 24 hours", signin.emails_sent_today(), signin.email_daily_limit(), "",
               "This site's own daily cap on sign-in emails (EMAIL_DAILY_LIMIT). Past it, new codes wait until "
               "tomorrow."),
     ]

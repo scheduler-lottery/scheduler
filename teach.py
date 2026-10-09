@@ -1777,7 +1777,7 @@ def email_backup(sheet, reason):
     """Email the instructor a backup of their sheet. Returns (sent, message)."""
     if not signin.smtp_ready():
         return False, "Email isn't set up here, so use “Download a backup” instead."
-    if signin.emails_sent_today() >= settings.EMAIL_DAILY_LIMIT:
+    if signin.emails_sent_today() >= signin.email_daily_limit():
         return False, "The site has used up today's emails, so no backup was emailed — use “Download a backup”."
     zone = _zone()
     data = sheets.export_sheet(sheet)

@@ -37,11 +37,12 @@ from dataclasses import dataclass
 from datetime import timedelta
 from email.utils import formataddr
 
-from flask import current_app, request
+from flask import current_app, g, has_app_context, request
 from flask_mailman import EmailMessage
 
 import db
 import settings
+import sitesecrets
 from util import iso, minutes_until, new_id, now, parse_iso, plural
 
 CODE_LENGTH = 6
@@ -110,12 +111,27 @@ class Check:
     until: object = None  # for locked and paused: when it lifts, if known
 
 
+def workos_key():
+    """The WorkOS API key: the WORKOS_API_KEY setting if there is one, else
+    the key the owner saved on /owner. "" when neither is set."""
+    if settings.WORKOS_API_KEY:
+        return settings.WORKOS_API_KEY
+    if not has_app_context():
+        return ""
+    if "workos_key" not in g:
+        try:
+            g.workos_key = sitesecrets.load("workos_api_key")
+        except Exception:  # noqa: BLE001 - no database yet: no saved key
+            g.workos_key = ""
+    return g.workos_key
+
+
 def email_mode():
     """'workos' when WorkOS emails the codes; 'smtp' when an ordinary mailbox
     (Gmail) does; 'dev' locally without either, where codes are shown on
     screen; 'missing' on a deployment that forgot both, where sign-in has to
     fail loudly instead."""
-    if settings.WORKOS_API_KEY:
+    if workos_key():
         return "workos"
     if settings.SMTP_HOST:
         return "smtp"
@@ -137,6 +153,13 @@ def code_sender():
     """The address sign-in codes come from, so people know what to look for."""
     mode = email_mode()
     return settings.WORKOS_SENDER if mode == "workos" else settings.SMTP_FROM if mode == "smtp" else ""
+
+
+def email_daily_limit():
+    """Sign-in emails allowed per rolling day across the site: the
+    EMAIL_DAILY_LIMIT setting if it's set, otherwise 1000 with WorkOS and 90
+    with Gmail alone (which refuses somewhere past 100-500 a day)."""
+    return settings.EMAIL_DAILY_LIMIT or (1000 if email_mode() == "workos" else 90)
 
 
 def codes_have_links():
@@ -195,7 +218,7 @@ def emails_sent_today():
 def daily_room(kind):
     """How many more emails of this kind may go out today. Everything but
     instructor sign-in codes stops short of the reserve."""
-    limit = settings.EMAIL_DAILY_LIMIT
+    limit = email_daily_limit()
     if kind != "teach":
         limit -= min(INSTRUCTOR_RESERVE, limit // 5)
     return limit - emails_sent_today()
@@ -285,13 +308,13 @@ def send_email(to, subject, body, reply_to=None, attachments=()):
 # ---------------------------------------------------------------------------
 # WorkOS
 # ---------------------------------------------------------------------------
-def _workos(method, path, body=None, timeout=10):
+def _workos(method, path, body=None, timeout=10, key=None):
     """One call to the WorkOS API; its JSON answer. Raises on any failure
     (urllib's HTTPError for a 4xx or 5xx answer)."""
     ask = urllib.request.Request(
         settings.WORKOS_API_URL.rstrip("/") + path, method=method,
         data=None if body is None else json.dumps(body).encode(),
-        headers={"Authorization": f"Bearer {settings.WORKOS_API_KEY}", "Content-Type": "application/json",
+        headers={"Authorization": f"Bearer {key or workos_key()}", "Content-Type": "application/json",
                  "Accept": "application/json"},
     )
     with urllib.request.urlopen(ask, timeout=timeout) as answer:
@@ -307,6 +330,22 @@ def _why(exc):
         except Exception:  # noqa: BLE001
             return f"HTTP {exc.code}"
     return repr(exc)
+
+
+def workos_check_key(key):
+    """Does WorkOS accept this API key? (ok, what to tell the owner). Only
+    reads: lists at most one user."""
+    if not key.startswith("sk_"):
+        return False, "That isn't a WorkOS secret key: those start with “sk_live_” (or “sk_test_”)."
+    try:
+        _workos("GET", "/user_management/users?limit=1", timeout=8, key=key)
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            return False, "WorkOS didn't accept that key. Copy the secret key again from API Keys in its dashboard."
+        return False, f"WorkOS answered with an error ({_why(exc)[:120]}). Try again in a minute."
+    except Exception as exc:  # noqa: BLE001
+        return False, f"Couldn't reach WorkOS just now ({exc!r:.80}). Try again in a minute."
+    return True, ""
 
 
 def workos_send_code(email):
@@ -347,7 +386,7 @@ def forget_remote(email):
     """Someone signed in: delete the record WorkOS kept for their address
     when it emailed them a code. Best effort; the daily job catches any left
     over. Commits."""
-    if not settings.WORKOS_API_KEY or not email:
+    if not workos_key() or not email:
         return
     for row in db.rows("SELECT user_id FROM remote_users WHERE email_hash = :hash", hash=keyed_hash(email.lower())):
         _forget_one(row["user_id"])
@@ -358,7 +397,7 @@ def forget_remote_users(budget_seconds=20):
     """Daily: delete WorkOS's records of every address it emailed a code to
     more than an hour ago, whether or not anyone signed in. Stops after
     budget_seconds (the rest wait for tomorrow). Commits. Returns how many."""
-    if not settings.WORKOS_API_KEY:
+    if not workos_key():
         return 0
     started, done = time.monotonic(), 0
     for row in db.rows("SELECT user_id FROM remote_users WHERE created_at < :cutoff ORDER BY created_at",
@@ -384,7 +423,7 @@ def code_works(record):
 
 def student_budget():
     """Emails a day for everything but instructors' sign-in codes."""
-    limit = settings.EMAIL_DAILY_LIMIT
+    limit = email_daily_limit()
     return limit - min(INSTRUCTOR_RESERVE, limit // 5)
 
 

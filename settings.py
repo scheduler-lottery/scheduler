@@ -44,8 +44,10 @@ DATABASE_URL = _env("DATABASE_URL")
 SQLITE_PATH = os.path.join(BASE_DIR, "local.db")
 
 # Sign-in codes are emailed by WorkOS (its free "Magic Auth" service) when
-# WORKOS_API_KEY is set: the production API key from the WorkOS dashboard
-# (it starts "sk_live_"). Its emails come from WORKOS_SENDER.
+# it has an API key: WORKOS_API_KEY here, or the key the owner saves on
+# /owner (stored encrypted; see sitesecrets.py). Use the production key from
+# the WorkOS dashboard (it starts "sk_live_"). Its emails come from
+# WORKOS_SENDER.
 WORKOS_API_KEY = _env("WORKOS_API_KEY")
 WORKOS_API_URL = _env("WORKOS_API_URL", "https://api.workos.com")
 WORKOS_SENDER = _env("WORKOS_SENDER", "access@workos-mail.com")
@@ -73,10 +75,10 @@ INSTRUCTOR_EMAIL_DOMAINS = [
     d.strip().lower() for d in _env("INSTRUCTOR_EMAIL_DOMAINS", ".edu").split(",") if d.strip()
 ]
 
-# Sign-in emails allowed per rolling 24 hours across the whole site. Gmail
-# starts refusing somewhere between 100 and 500 a day, so with Gmail stay
-# under that; WorkOS has no such low ceiling.
-EMAIL_DAILY_LIMIT = _int("EMAIL_DAILY_LIMIT", 1000 if WORKOS_API_KEY else 90)
+# Sign-in emails allowed per rolling 24 hours across the whole site. Unset
+# (0), it's 1000 with WorkOS and 90 with Gmail alone, which starts refusing
+# somewhere between 100 and 500 a day (signin.email_daily_limit).
+EMAIL_DAILY_LIMIT = _int("EMAIL_DAILY_LIMIT", 0)
 
 # Vercel sends "Authorization: Bearer <CRON_SECRET>" with its cron requests.
 CRON_SECRET = _env("CRON_SECRET")

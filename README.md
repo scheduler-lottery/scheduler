@@ -83,7 +83,10 @@ to; the site deletes it once that person signs in, or within a day.
    **Production** environment (Staging sends from `workos.dev` and is only for testing).
 2. Under **Authentication**, make sure **Magic Auth** (email codes) is turned on.
 3. Under **Branding**, set the display name to `Scheduler`: it's how the emails are signed.
-4. Under **API Keys**, copy the secret key (it starts `sk_live_`). This is `WORKOS_API_KEY`.
+4. Under **API Keys**, copy the secret key (it starts `sk_live_`). Either paste it on the
+   site's `/owner` page under **Sign-in email** once the site is running (it's checked with
+   WorkOS, stored encrypted, and takes effect at once), or set it as `WORKOS_API_KEY` in
+   Vercel (which then takes precedence; Vercel settings need a redeploy).
 
 Optional, a mailbox of the site's own (Gmail). It emails professors a backup when they
 close sign-ups, sends you `/owner`'s usage alerts, and sends the codes itself whenever
@@ -106,7 +109,7 @@ WorkOS can't. Without it, professors download backups instead.
    |---|---|
    | `SECRET_KEY` | a long random string — run `python3 -c "import secrets; print(secrets.token_hex(32))"` |
    | `DATABASE_URL` | the Supabase connection string from step 2 |
-   | `WORKOS_API_KEY` | the WorkOS secret key from step 3 |
+   | `WORKOS_API_KEY` | the WorkOS secret key from step 3 (or leave it out and paste the key on `/owner`) |
    | `SMTP_HOST` | `smtp.gmail.com` (only with the optional Gmail account) |
    | `SMTP_PORT` | `587` (likewise) |
    | `SMTP_USER` | the Gmail address (likewise) |
