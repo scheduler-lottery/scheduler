@@ -33,7 +33,7 @@
   }
 
   function applyTheme(theme) {
-    if (!THEMES[theme]) theme = "light";
+    if (!THEMES[theme]) theme = "paper";
     root.setAttribute("data-theme", theme);
     root.setAttribute("data-mode", THEMES[theme]);
     check("appearance-theme", theme);
@@ -107,7 +107,7 @@
       remember("theme", null);
       remember("font", null);
       remember("text-scale", null);
-      applyTheme(root.getAttribute("data-course-theme") || "light");
+      applyTheme(root.getAttribute("data-course-theme") || "paper");
       applyFont(root.getAttribute("data-course-font") || "mixed");
       applyScale(100);
       saveForClass();

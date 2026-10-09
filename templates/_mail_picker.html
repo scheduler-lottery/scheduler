@@ -1,0 +1,16 @@
+{# "Emails open in": where the page's [data-compose] links open a message
+   (public/static/compose.js). It shows once the script runs; without it the
+   links open the device's own email app. Needs picker_id, mail_default and
+   mail_why; mail_account (for Gmail's account choice) is optional. #}
+<div class="mail-picker" data-mail-picker data-default="{{ mail_default or 'app' }}" data-why="{{ mail_why }}"{% if mail_account %} data-account="{{ mail_account }}"{% endif %} hidden>
+  <label class="mail-picker-label" for="mail-service-{{ picker_id }}">Emails open in</label>
+  <select id="mail-service-{{ picker_id }}" data-mail-service>
+    <option value="outlook">Outlook on the web (Microsoft 365, Exchange)</option>
+    <option value="gmail">Gmail (and Google Workspace)</option>
+    <option value="app">The email app on this computer</option>
+    <option value="outlookcom">Outlook.com (personal)</option>
+    <option value="yahoo">Yahoo Mail</option>
+    <option value="copy">Something else: copy and paste</option>
+  </select>
+  <p class="mini-hint" data-mail-note></p>
+</div>

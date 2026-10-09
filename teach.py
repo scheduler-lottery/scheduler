@@ -22,6 +22,7 @@ from flask import (
 )
 
 import auth
+import compose
 import db
 import settings
 import sheets
@@ -33,7 +34,7 @@ from matching_engine import (
 )
 from roster import describe, find_email, flip_last_first, parse_roster, _is_last_first
 from util import (
-    clean_name, clean_text, date_label, fold, friendly_time, iso, mask_email, new_id, normalize_name, now, parse_iso,
+    clean_name, clean_text, date_label, fold, iso, mask_email, new_id, normalize_name, now, parse_iso,
     plural, read_date, slugify, valid_email,
 )
 
@@ -816,9 +817,11 @@ def _stuck(sid, roster_rows, locked):
     haven't signed in since, for the sheet page — or None."""
     refusals = signin.refusals_today(sid) if signin.email_mode() == "smtp" else {}
     listed = {r["name_key"]: r for r in roster_rows}
+    links = signin.instructor_links(sid) if refusals else {}
     people = [
         {"key": key, "name": listed[key]["display_name"], "email": listed[key]["email"], "kind": kind, "at": at,
-         "reason": STUCK_REASONS.get(kind, "the email couldn't go out"), "paused": key in locked}
+         "reason": STUCK_REASONS.get(kind, "the email couldn't go out"), "paused": key in locked,
+         "link_at": links.get(key) if links.get(key, "") >= at else None}
         for key, (kind, at) in sorted(refusals.items(), key=lambda item: item[1][1])
         if key in listed
     ]
@@ -834,7 +837,8 @@ def _stuck(sid, roster_rows, locked):
     else:
         why = "Some limits on sign-in emails got in the way."
     return {"people": people,
-            "summary": why + " Help each one under Sign-ups: “Sign-in code” gives them a code to type"
+            "summary": why + " Help each one under Sign-ups: “Sign-in link” starts an email from your own "
+                       "account with a link that signs them in"
                        + (", and “Unlock” lifts a pause." if "paused" in kinds else ".")}
 
 
@@ -925,6 +929,9 @@ def sheet(sid):
     if undo and undo.get("sid") != sid:
         undo = None
     handoff = _pop_form("handoff", sid)
+    if handoff:
+        handoff["account"] = current_instructor()["email"]
+        handoff["service"] = compose.service_for(handoff["account"])
     stuck = _stuck(sid, roster_rows, locked) if sheet["bidding_open"] or published else None
     if undo and undo.get("tell"):
         undo["emails"] = _changed_emails(sheet, undo["snap"], roster_rows)
@@ -999,6 +1006,7 @@ def sheet(sid):
         typo_domains=_domain_typos(roster_rows),
         manual_moves=manual_moves,
         email_room=signin.daily_room("student") if signin.email_mode() == "smtp" else None,
+        email_trouble=signin.sending_trouble() if sheet["bidding_open"] or published else "",
         edit_form=_pop_form("edit_form", sid),
         steps=steps,
         next_step=_next_step(sheet, counts, has_schedule, stale, published, without_day, stuck,
@@ -1012,7 +1020,7 @@ def sheet(sid):
         stuck=stuck,
         list_next=list_next,
         course_look={"url": url_for("teach.set_look", sid=sid), "title": sheet["title"],
-                     "theme": sheet["theme"] or "light", "font": sheet["font"] or "mixed"},
+                     "theme": sheet["theme"] or settings.DEFAULT_THEME, "font": sheet["font"] or "mixed"},
         add_form=add_form,
         download_url=download_url,
         email_on=signin.email_mode() == "smtp",
@@ -1642,24 +1650,89 @@ def unlock_pin(sid):
 @bp.route("/s/<sid>/signin-code", methods=["POST"])
 @instructor_required
 def signin_code(sid):
-    """For a student whose emailed code isn't arriving (a typo in the
-    address, a slow inbox, a limit): a code to read out or message to them."""
+    """The backup when the site's email can't reach a student (its emails
+    ran out or failed, a typo in the address, a slow inbox): a sign-in link
+    the instructor sends from their own email, and a code to read out."""
     sheet = owned_sheet(sid)
     key = request.form.get("name_key", "")
     row = db.row("SELECT * FROM roster WHERE sheet_id = :sid AND name_key = :key", sid=sheet["id"], key=key)
     if not row or not row["email"]:
         flash("That student signs in with a PIN, not a code — use Reset PIN if they're stuck.", "error")
         return _back(sheet, "class-list")
-    code, until = signin.issue_code_for_instructor_handoff(sheet["id"], row)
-    link = url_for("student.signin", sid=sheet["id"], _external=True)
+    code, until, token = signin.issue_code_for_instructor_handoff(sheet["id"], row)
+    subject, body = _link_email(sheet, row["display_name"], token)
     session["handoff"] = {
         "sid": sheet["id"], "name": row["display_name"], "email": row["email"], "code": code, "until": until,
-        "subject": f"Your sign-in code for {sheet['title']}",
-        "body": (f"Hi {row['display_name']},\n\nHere's your sign-in code for “{sheet['title']}”: {code}\n\n"
-                 f"Open {link} , type your name, press Continue, then type the code. It works until "
-                 f"{friendly_time(until, _zone())}.\n"),
+        "subject": subject, "body": body,
     }
     return _back(sheet, request.form.get("back") or "class-list")
+
+
+def _link_email(sheet, name, token):
+    """The email an instructor sends a student from their own account:
+    (subject, body), with a link that signs in that one student."""
+    link = url_for("student.link_sign_in", sid=sheet["id"], token=token, _external=True)
+    return (
+        f"Your sign-in link for {sheet['title']}",
+        f"Hi {name},\n\n"
+        f"Here's your link to sign in to “{sheet['title']}”. It works once, any time in the next "
+        f"{signin.LINK_EXPIRY_HOURS} hours, on whatever phone or computer you open it on:\n\n"
+        f"{link}\n\n"
+        "It signs in as you, so please don't forward it. If it doesn't work, just reply to this email.\n",
+    )
+
+
+@bp.route("/s/<sid>/email-links", methods=["GET", "POST"])
+@instructor_required
+def email_links(sid):
+    """The backup for the site's own email: everyone on the class list with
+    an email address, each with a message already addressed and written,
+    with a link that signs in that one student, opening in the
+    instructor's own email. (One email per student: a link in a group
+    email would let anyone in it sign in as anyone.) Pressing the button
+    (POST) makes the links; the page only lists the class until then."""
+    sheet = owned_sheet(sid)
+    me = current_instructor()["email"]
+    mail_default = compose.service_for(me)  # before any writes: it may save on its own connection
+    roster_rows = [r for r in sheets.get_roster(sheet["id"]) if not r["is_test"]]
+    stuck = signin.refusals_today(sheet["id"]) if signin.email_mode() == "smtp" else {}
+    ranked = {s["name_key"] for s in sheets.get_submissions(sheet["id"])}
+    ready = request.method == "POST"
+    people = []
+    for r in roster_rows:
+        if not r["email"]:
+            continue
+        person = {"name": r["display_name"], "email": r["email"], "stuck": r["name_key"] in stuck,
+                  "ranked": r["name_key"] in ranked}
+        if ready:
+            token = signin.new_link(sheet["id"], r["name_key"], r["email"], from_instructor=True)
+            person["subject"], person["body"] = _link_email(sheet, r["display_name"], token)
+        people.append(person)
+    if ready:
+        db.commit()
+    # Who needs it most first; the class list's own order within each group.
+    people.sort(key=lambda p: (not p["stuck"], p["ranked"]))
+    share_url = url_for("student.signin", sid=sheet["id"], _external=True)
+    return render_template(
+        "email_links.html",
+        sheet=sheet,
+        people=people,
+        ready=ready,
+        no_email=[r["display_name"] for r in roster_rows if not r["email"]],
+        me=me,
+        mail_default=mail_default,
+        link_hours=signin.LINK_EXPIRY_HOURS,
+        heads_up={
+            "subject": f"Your sign-in link for {sheet['title']} is coming from me",
+            "body": (
+                "Hi everyone,\n\n"
+                "The sign-up site's own emails may not reach you right now, so I'm sending each of you your own "
+                f"sign-in link from my email. Look for “Your sign-in link for {sheet['title']}”; it works once, "
+                f"any time in the next {signin.LINK_EXPIRY_HOURS} hours.\n\n"
+                f"The sign-up page is {share_url}\n"
+            ),
+        },
+    )
 
 
 @bp.route("/s/<sid>/link", methods=["POST"])
@@ -2381,7 +2454,8 @@ def set_look(sid):
     if theme not in settings.THEMES or font not in settings.FONTS:
         return jsonify(ok=False), 400
     db.run("UPDATE sheets SET theme = :theme, font = :font WHERE id = :sid",
-           theme=None if theme == "light" else theme, font=None if font == "mixed" else font, sid=sheet["id"])
+           theme=None if theme == settings.DEFAULT_THEME else theme, font=None if font == "mixed" else font,
+           sid=sheet["id"])
     db.commit()
     return jsonify(ok=True)
 
@@ -2459,7 +2533,7 @@ def delete_sheet(sid):
     db.commit()
     flash(
         f"Deleted “{sheet['title']}”. A backup is downloading, and you can bring the sheet back from "
-        "“Recently deleted” at the top of this page for 30 days.",
+        "“Recently deleted”, below your sheets, for 30 days.",
         "success",
     )
     return redirect(url_for("teach.dashboard", download=snap_id))

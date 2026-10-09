@@ -356,15 +356,16 @@ def _link_hash(token):
     return keyed_hash("link|" + token)
 
 
-def new_link(scope, subject, email):
-    """A fresh link token for one email. Not committed here."""
+def new_link(scope, subject, email, from_instructor=False):
+    """A fresh link token for one email — the site's, or (`from_instructor`)
+    one the instructor sends from their own account. Not committed here."""
     token = secrets.token_urlsafe(24)
     at = now()
     db.run(
-        "INSERT INTO login_links (token_hash, scope, subject, email, created_at, expires_at) "
-        "VALUES (:hash, :scope, :subject, :email, :at, :expires)",
+        "INSERT INTO login_links (token_hash, scope, subject, email, created_at, expires_at, from_instructor) "
+        "VALUES (:hash, :scope, :subject, :email, :at, :expires, :mine)",
         hash=_link_hash(token), scope=scope, subject=subject, email=email, at=iso(at),
-        expires=iso(at + timedelta(hours=LINK_EXPIRY_HOURS)),
+        expires=iso(at + timedelta(hours=LINK_EXPIRY_HOURS)), mine=1 if from_instructor else 0,
     )
     return token
 
@@ -386,13 +387,41 @@ def use_link(found):
 
 
 def newest_link(scope, subject, email):
-    """When the newest unexpired link emailed to this person was sent, or None."""
-    found = db.row(
-        "SELECT created_at FROM login_links WHERE scope = :scope AND subject = :subject AND email = :email "
-        "AND expires_at > :now ORDER BY created_at DESC LIMIT 1",
+    """The newest unexpired link emailed to this person (its created_at and
+    from_instructor), or None."""
+    return db.row(
+        "SELECT created_at, from_instructor FROM login_links WHERE scope = :scope AND subject = :subject "
+        "AND email = :email AND expires_at > :now ORDER BY created_at DESC LIMIT 1",
         scope=scope, subject=subject, email=email, now=iso(),
     )
-    return found["created_at"] if found else None
+
+
+def instructor_links(scope):
+    """{subject: when}: the newest unused sign-in link the instructor made
+    for each student, for the list of students who couldn't get an email."""
+    return {r["subject"]: r["made"] for r in db.rows(
+        "SELECT subject, MAX(created_at) AS made FROM login_links WHERE scope = :scope AND from_instructor = 1 "
+        "AND expires_at > :now GROUP BY subject",
+        scope=scope, now=iso(),
+    )}
+
+
+def sending_trouble():
+    """Why student sign-in emails can't go out right now: "used-up" (the
+    site's emails for today are gone) or "failing" (the last try failed,
+    and nothing has gone out since) — or "" when they can."""
+    if email_mode() != "smtp":
+        return ""
+    if daily_room("student") <= 0:
+        return "used-up"
+    failed = db.scalar(
+        "SELECT MAX(created_at) FROM error_log WHERE method = 'EMAIL' AND error LIKE 'Sending a sign-in code%' "
+        "AND created_at > :since",
+        since=iso(now() - timedelta(hours=1)),
+    )
+    if failed and failed > (db.scalar("SELECT MAX(sent_at) FROM email_log") or ""):
+        return "failing"
+    return ""
 
 
 def issue_code(*, scope, subject, display_name, email, email_subject, email_body, kind, reply_to=None,
@@ -446,7 +475,8 @@ def issue_code(*, scope, subject, display_name, email, email_subject, email_body
         if not working and not linked:
             raise
         if working and working["from_instructor"]:
-            return Issued("recent", note=f"No email was sent: {refused} Type the code your instructor gave you.")
+            return Issued("recent", note=f"No email was sent: {refused} Type the code your instructor gave you, or "
+                                         "click the sign-in link in their email.")
         if locked and not linked:
             raise SendRefused(
                 f"No new code can be sent right now: {refused} This browser had too many wrong tries, so it can try "
@@ -455,10 +485,11 @@ def issue_code(*, scope, subject, display_name, email, email_subject, email_body
                 reason=refused.reason,
             ) from refused
         if linked:
+            sender = "your instructor" if linked["from_instructor"] else settings.SMTP_FROM or "us"
+            until = iso(parse_iso(linked["created_at"]) + timedelta(hours=LINK_EXPIRY_HOURS))
             return Issued("recent", note=(
-                f"No new email was sent: {refused} But the sign-in link in your newest email from "
-                f"{settings.SMTP_FROM or 'us'} still works (until [[at:{iso(parse_iso(linked) + timedelta(hours=LINK_EXPIRY_HOURS))}]]) "
-                "— click it to sign in."
+                f"No new email was sent: {refused} But the sign-in link in your newest email from {sender} "
+                f"still works (until [[at:{until}]]) — click it to sign in."
             ))
         return Issued("recent", note=(
             f"No new code was sent: {refused} The code we already sent still works until "
@@ -556,11 +587,13 @@ def _browser_locked_until(scope, subject):
 
 
 def issue_code_for_instructor_handoff(sheet_id, row):
-    """A code the instructor reads out (or emails from their own account) to
-    a student who can't get one by email — a typo in the address, a slow
-    inbox, a limit. It works like an emailed one; until it expires, signing
-    in as that student asks for it instead of sending an email. Returns
-    (code, expires_at). Commits."""
+    """The backup for a student the site's email can't reach — its emails
+    ran out or failed, a typo in the address, a slow inbox: a one-click
+    sign-in link the instructor emails from their own account (it works
+    once, for LINK_EXPIRY_HOURS), and a code they can read out instead. The
+    code works like an emailed one; until it expires, signing in as that
+    student asks for it instead of sending an email. Returns (code,
+    expires_at, link token). Commits."""
     code = "".join(secrets.choice("0123456789") for _ in range(CODE_LENGTH))
     existing = pending_code(sheet_id, row["name_key"])
     at = now()
@@ -570,8 +603,9 @@ def issue_code_for_instructor_handoff(sheet_id, row):
         "DELETE FROM auth_failures WHERE scope IN (:code, :pin) AND subject = :key",
         code=f"code:{sheet_id}", pin=f"pin:{sheet_id}", key=row["name_key"],
     )
+    token = new_link(sheet_id, row["name_key"], row["email"] or "", from_instructor=True)
     db.commit()
-    return code, iso(at + timedelta(minutes=CODE_EXPIRY_MINUTES))
+    return code, iso(at + timedelta(minutes=CODE_EXPIRY_MINUTES)), token
 
 
 def code_for_other_class(scope, email, entered):

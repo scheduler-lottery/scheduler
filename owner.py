@@ -14,6 +14,7 @@ from flask import Blueprint, flash, redirect, render_template, request, url_for
 import db
 import settings
 import signin
+import usage
 from auth import owner_required
 from util import iso, valid_email
 
@@ -23,6 +24,8 @@ bp = Blueprint("owner", __name__, url_prefix="/owner")
 # free look-alike until it's uploaded here.
 SITE_FONTS = (
     "roslindale-display-condensed-regular.woff2",  # headings
+    "roslindale-display-condensed-bold.woff2",
+    "roslindale-display-condensed-black.woff2",
     "yalenew-roman.woff2",  # text
     "yalenew-italic.woff2",
     "yalenew-bold.woff2",
@@ -57,6 +60,8 @@ def index():
         "owner.html", stats=stats, checks=checks, errors=errors,
         email_limit=settings.EMAIL_DAILY_LIMIT, domains=settings.INSTRUCTOR_EMAIL_DOMAINS,
         fonts=[(name, uploaded.get(name)) for name in SITE_FONTS],
+        meters=usage.meters(), measured_since=usage.first_day(), daily_job=usage.last_daily_job(),
+        alert_at=int(usage.ALERT_AT * 100),
     )
 
 

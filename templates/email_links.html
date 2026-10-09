@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Send sign-in links from your email — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="card">
+  <p class="eyebrow"><a href="{{ url_for('teach.sheet', sid=sheet.id) }}">{{ sheet.title }}</a></p>
+  <h1>Send sign-in links from your own email</h1>
+  <p class="subtitle">When the site's emails can't reach your students, yours can. Every student on your class list gets their own message, already addressed and written, with a link that signs them in. You just press Send.</p>
+
+  {% with picker_id="links", mail_why="It's picked to match your address, " ~ me ~ ". Change it if you send email from somewhere else.", mail_account=me %}{% include "_mail_picker.html" %}{% endwith %}
+
+  {% if not people %}
+  <p>No one on your class list has an email address yet. <a href="{{ url_for('teach.sheet', sid=sheet.id) }}#class-list">Add your class list</a> first.</p>
+  {% elif not ready %}
+  <form method="post" class="mail-ready">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-primary btn-large">Get the {{ people | length }} emails ready</button>
+    <p class="mini-hint">This makes a fresh sign-in link for each student. Each works once, any time in the next {{ link_hours }} hours, and links you sent earlier keep working.</p>
+  </form>
+  <h2>Your class ({{ people | length }})</h2>
+  <ol class="mail-list">
+    {% for p in people %}
+    <li class="mail-row">
+      <span class="mail-who"><strong><bdi>{{ p.name }}</bdi></strong> <span class="muted">{{ p.email }}</span>
+        {% if p.stuck %}<span class="mail-tag mail-tag-warn">couldn't get the site's email</span>{% elif p.ranked %}<span class="mail-tag">ranked already</span>{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <section class="mail-step">
+    <h2>1. Tell the whole class <span class="muted">(optional)</span></h2>
+    <p>One email to all {{ people | length }} students, with their addresses hidden from each other, saying their links are coming from you. It goes to you, with the class as Bcc.</p>
+    {% set everyone = people | map(attribute='email') | join(', ') %}
+    <div class="mail-actions">
+      <a class="btn btn-secondary" data-compose data-to="{{ me }}" data-bcc="{{ everyone }}" data-subject="{{ heads_up.subject }}" data-body="{{ heads_up.body }}"
+         href="mailto:{{ me }}?bcc={{ everyone | replace(' ', '') }}&amp;subject={{ heads_up.subject | urlencode }}&amp;body={{ heads_up.body | urlencode }}">Email the whole class</a>
+      <textarea id="all-addresses" class="visually-hidden" readonly aria-hidden="true" tabindex="-1">{{ everyone }}</textarea>
+      <button type="button" class="btn btn-ghost" data-copy="#all-addresses">Copy all the addresses</button>
+    </div>
+  </section>
+
+  <section class="mail-step">
+    <h2>2. Send each student their link</h2>
+    <p>Press a name, then Send in the email that opens, and come back for the next one. Each link signs in one particular student, so each gets an email of their own.</p>
+    <ol class="mail-list">
+      {% for p in people %}
+      <li class="mail-row" data-mail-row>
+        <span class="mail-who"><strong><bdi>{{ p.name }}</bdi></strong> <span class="muted">{{ p.email }}</span>
+          {% if p.stuck %}<span class="mail-tag mail-tag-warn">couldn't get the site's email</span>{% elif p.ranked %}<span class="mail-tag">ranked already</span>{% endif %}
+          <span class="mail-tag mail-tag-done">opened</span></span>
+        <a class="btn btn-primary btn-small" data-compose data-to="{{ p.email }}" data-subject="{{ p.subject }}" data-body="{{ p.body }}"
+           href="mailto:{{ p.email }}?subject={{ p.subject | urlencode }}&amp;body={{ p.body | urlencode }}">Email <bdi>{{ p.name }}</bdi></a>
+      </li>
+      {% endfor %}
+    </ol>
+    <p class="mini-hint">Opened one by mistake? Close it without sending: nothing happens until a student uses their link. If you come back to this page later, press “Get the emails ready” again; the links you've already sent keep working.</p>
+  </section>
+  {% endif %}
+
+  {% if no_email %}
+  <p class="mini-hint">Not listed: {{ no_email | join(', ') }}. They have no email address on your class list, so they sign in with a PIN instead.</p>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='compose.js') }}"></script>{% endblock %}

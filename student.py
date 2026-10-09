@@ -13,6 +13,7 @@ from datetime import timedelta
 from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, session, url_for
 
 import auth
+import compose
 import db
 import settings
 import sheets
@@ -170,6 +171,26 @@ def _send_code(row, force_email=False):
         db.rollback()
         signin.record_refusal(sid, key, refused.reason)
         raise
+
+
+def _ask_for_link(name, email):
+    """A ready-made email from a student to their instructor asking for a
+    sign-in link: the backup when the site's own email can't reach them.
+    Whoever typed the name sees this page, so it carries no more of the
+    student's address than the domain (to pick where it opens)."""
+    title = g.sheet["title"]
+    return {
+        "to": g.sheet["owner_email"],
+        "subject": f"Sign-in link for {title}",
+        "body": (
+            f"Hi,\n\nI couldn't get a sign-in email from {settings.APP_NAME} for “{title}”. Could you send me a "
+            "sign-in link from your email?\n\n"
+            f"On the class's page ({url_for('teach.sheet', sid=g.sheet['id'], _external=True)}), press "
+            "“Sign-in link” next to my name, then “Open the email”, and send it.\n\n"
+            f"My name on the class list: {name}\n\nThank you!\n"
+        ),
+        "service": compose.service_for(email),
+    }
 
 
 def _signed_in(key):
@@ -395,6 +416,8 @@ def verify(sid):
     if not pending:
         return redirect(_here("student.signin"))
     record = signin.pending_code(g.sheet["id"], pending["key"])
+    # Before anything below writes: it may save a lookup on its own connection.
+    ask = _ask_for_link(pending["name"], (record or _roster_row(pending["key"]) or {}).get("email") or "")
     if request.method == "POST":
         check = signin.check_code(g.sheet["id"], pending["key"], request.form.get("code"))
         if check.status == "ok":
@@ -404,8 +427,8 @@ def verify(sid):
             flash("You're signed in.", "success")
             return redirect(_here("student.home"))
         if check.status == "missing":
-            flash("That code isn't right. Ask your instructor for a sign-in code — they get one by pressing "
-                  "“Sign-in code” next to your name.", "error")
+            flash("That code isn't right. Your instructor can send you a sign-in link from their own email, or "
+                  "give you a code to type here — ask them with the button below.", "error")
         else:
             other = (signin.code_for_other_class(g.sheet["id"], record["email"], request.form.get("code"))
                      if check.status == "wrong" and record else None)
@@ -442,6 +465,7 @@ def verify(sid):
         code_length=signin.CODE_LENGTH,
         dev_code=session.get("dev_code"),
         sender=settings.SMTP_FROM,
+        ask=ask,
     )
 
 

@@ -54,13 +54,16 @@
 {% if undo or handoff %}
 <div class="toast-dock">
   {% if handoff %}
-  <div class="undo-banner" role="status" id="handoff">
-    <span>Sign-in code for <bdi>{{ handoff.name }}</bdi>: <strong class="handoff-code">{{ handoff.code }}</strong> — it works until
-      <time datetime="{{ handoff.until }}" data-local="time">{{ handoff.until[11:16] }}</time>.
-      Tell them: open the class link, type “{{ handoff.name }}”, press Continue, then type {{ handoff.code }}.</span>
-    {% if handoff.email %}
-    <a class="btn btn-primary btn-small" href="mailto:{{ handoff.email }}?subject={{ handoff.subject | urlencode }}&amp;body={{ handoff.body | urlencode }}">Email it to them from your own email</a>
-    {% endif %}
+  <div class="undo-banner handoff" role="status" id="handoff">
+    <div class="handoff-text">
+      <p><strong>A sign-in link for <bdi>{{ handoff.name }}</bdi> is ready to send from your own email.</strong>
+      “Open the email” starts a message to {{ handoff.email }} with the link in it; just press Send. The link signs them in once, any time in the next 24 hours.</p>
+      {% with picker_id="handoff", mail_default=handoff.service, mail_why="It's picked to match your email address.", mail_account=handoff.account %}{% include "_mail_picker.html" %}{% endwith %}
+      <p class="handoff-more">With them in person or on the phone? Read them this code instead: <strong class="handoff-code">{{ handoff.code }}</strong>, which works until
+        <time datetime="{{ handoff.until }}" data-local="time">{{ handoff.until[11:16] }}</time>. They open the class link, type “{{ handoff.name }}”, press Continue, then type the code.</p>
+    </div>
+    <a class="btn btn-primary btn-small" data-compose data-to="{{ handoff.email }}" data-subject="{{ handoff.subject }}" data-body="{{ handoff.body }}"
+       href="mailto:{{ handoff.email }}?subject={{ handoff.subject | urlencode }}&amp;body={{ handoff.body | urlencode }}">Open the email</a>
     <button type="button" class="toast-close" data-dismiss-toast aria-label="Close">×</button>
   </div>
   {% endif %}
@@ -91,10 +94,12 @@
   {% if seat_warning %}
   <p class="warn-line">{{ seat_warning.people }} {{ 'students' if seat_warning.counting_unranked else 'people have ranked' }} but only {{ seat_warning.seats }} seats — see <a href="#schedule">Schedule</a>.</p>
   {% endif %}
-  {% if email_room is not none and email_room <= 0 %}
-  <p class="warn-line">The site has used up today's sign-in emails, so no new code emails go out until tomorrow. Students already signed in aren't affected, a sign-in link from an earlier email still works, and you can give anyone else a sign-in code under <a href="#signups">Sign-ups</a>.</p>
+  {% if email_trouble == "failing" %}
+  <p class="warn-line">The site's sign-in emails aren't going out right now. Students already signed in aren't affected, and you can <a href="{{ url_for('teach.email_links', sid=sheet.id) }}">send sign-in links from your own email</a> to anyone who needs one.</p>
+  {% elif email_room is not none and email_room <= 0 %}
+  <p class="warn-line">The site has used up today's sign-in emails, so no new code emails go out until tomorrow. Students already signed in aren't affected, a sign-in link from an earlier email still works, and you can <a href="{{ url_for('teach.email_links', sid=sheet.id) }}">send sign-in links from your own email</a> to anyone else.</p>
   {% elif email_room is not none and email_room < 15 %}
-  <p class="warn-line">Only {{ email_room | plural('sign-in email') }} left on this site today. If a student can't get one, give them a sign-in code under <a href="#signups">Sign-ups</a>.</p>
+  <p class="warn-line">Only {{ email_room | plural('sign-in email') }} left on this site today. If a student can't get one, <a href="{{ url_for('teach.email_links', sid=sheet.id) }}">send them a sign-in link from your own email</a>.</p>
   {% endif %}
 </section>
 
@@ -231,7 +236,7 @@
     {% endif %}
   </div>
     {% if roster %}
-    {% if counts.roster_with_email %}<p class="mini-hint">Student not getting their email? Press “Sign-in code” next to their name and read them the code.</p>{% endif %}
+    {% if counts.roster_with_email %}<p class="mini-hint">Student not getting the site's email? Press “Sign-in link” next to their name to send them one from your own email (or read them a code). For the whole class at once: <a href="{{ url_for('teach.email_links', sid=sheet.id) }}">send sign-in links from your own email</a>.</p>{% endif %}
     <div class="table-wrap">
       <table class="admin-table compact">
         <thead><tr><th>Name</th><th>Email</th><th><span class="visually-hidden">Change</span></th></tr></thead>
@@ -276,10 +281,10 @@
                 </form>
                 {% endif %}
                 {% if r.email %}
-                <form method="post" action="{{ url_for('teach.signin_code', sid=sheet.id) }}" data-confirm="Make a sign-in code for {{ r.display_name }} that you can read out or message to them?">
+                <form method="post" action="{{ url_for('teach.signin_code', sid=sheet.id) }}" data-confirm="Make a sign-in link for {{ r.display_name }} to send from your own email (and a code you can read out)?">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <input type="hidden" name="name_key" value="{{ r.name_key }}">
-                  <button type="submit" class="btn btn-ghost btn-small" aria-label="Sign-in code for {{ r.display_name }}">Sign-in code</button>
+                  <button type="submit" class="btn btn-ghost btn-small" aria-label="Sign-in link for {{ r.display_name }}">Sign-in link</button>
                 </form>
                 {% endif %}
                 {% if r.name_key in pins %}
@@ -378,11 +383,11 @@
 
   {% if stuck %}
   <div class="callout" id="stuck">
-    <p><strong>Couldn't get a sign-in email today ({{ stuck.people | length }}):</strong> give each one a sign-in code to type in{% if stuck.people | selectattr('paused') | list %}, or unlock a paused name{% endif %}.</p>
+    <p><strong>Couldn't get a sign-in email today ({{ stuck.people | length }}):</strong> send each one a sign-in link from your own email{% if stuck.people | selectattr('paused') | list %}, or unlock a paused name{% endif %}. <a href="{{ url_for('teach.email_links', sid=sheet.id) }}">Do them all at once</a></p>
     <ul class="plain-rows">
       {% for p in stuck.people %}
       <li class="plain-row">
-        <span><bdi>{{ p.name }}</bdi> <span class="mini-hint">— {{ p.reason }} (<time datetime="{{ p.at }}" data-local="time">{{ p.at[11:16] }}</time>)</span></span>
+        <span><bdi>{{ p.name }}</bdi> <span class="mini-hint">— {{ p.reason }} (<time datetime="{{ p.at }}" data-local="time">{{ p.at[11:16] }}</time>){% if p.link_at %}; you made them a sign-in link at <time datetime="{{ p.link_at }}" data-local="time">{{ p.link_at[11:16] }}</time>{% endif %}</span></span>
         <span class="row-actions">
           {% if p.paused %}
           <form method="post" action="{{ url_for('teach.unlock_pin', sid=sheet.id) }}">
@@ -397,7 +402,7 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="name_key" value="{{ p.key }}">
             <input type="hidden" name="back" value="stuck">
-            <button type="submit" class="btn btn-secondary btn-small" aria-label="Sign-in code for {{ p.name }}">Sign-in code</button>
+            <button type="submit" class="btn btn-secondary btn-small" aria-label="Sign-in link for {{ p.name }}">{{ 'New sign-in link' if p.link_at else 'Sign-in link' }}</button>
           </form>
           {% endif %}
         </span>
@@ -425,12 +430,12 @@
   <form method="post" action="{{ url_for('teach.signin_code', sid=sheet.id) }}" class="inline-form code-helper">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="back" value="signups">
-    <label for="code-for">Student not getting their sign-in email?</label>
+    <label for="code-for">Student not getting the site's email?</label>
     <select id="code-for" name="name_key" required>
       <option value="">— pick their name —</option>
       {% for r in with_email %}<option value="{{ r.name_key }}">{{ r.display_name }}</option>{% endfor %}
     </select>
-    <button type="submit" class="btn btn-secondary btn-small">Get a sign-in code for them</button>
+    <button type="submit" class="btn btn-secondary btn-small">Make a sign-in link to send them</button>
   </form>
   {% endif %}
 
@@ -949,3 +954,4 @@
 
 {% if download_url %}<a href="{{ download_url }}" data-auto-download hidden>Download the backup</a>{% endif %}
 {% endblock %}
+{% block scripts %}{% if handoff %}<script src="{{ url_for('static', filename='compose.js') }}"></script>{% endif %}{% endblock %}

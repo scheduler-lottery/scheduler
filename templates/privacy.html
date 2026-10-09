@@ -57,6 +57,9 @@
   <h2>Email</h2>
   <p>
     Sign-in codes{% if code_sender %} come from {{ code_sender }}{% else %} are sent from a Gmail account{% endif %}.
+    When those can't reach a student, their instructor can send them a sign-in link from the instructor's own
+    email instead: the site writes the message, and it goes out through the instructor's own email account,
+    not through this site.
     Instructors can also get a backup of a sheet by email (for example, when they close sign-ups); a backup holds
     the class list, rankings and notes, and goes only to that instructor's own address.
   </p>

@@ -156,8 +156,14 @@ Supabase's free plan from pausing the database after a week of no activity.
   down to its last third of the day's emails, so one busy class can't use up everyone's.
   Students with no email on the class list choose a PIN (also stored as a keyed hash); wrong
   guesses pause the guessing browser, not the real student. If a student can't get an email,
-  the professor's page lists them with the reason and a "Sign-in code" button (with an
-  "Email it to them from your own email" shortcut). Resetting a PIN, taking a student off the
+  the professor's page lists them with the reason, and the backup is the professor's own
+  email: "Sign-in link" opens a ready-to-send message (with a one-click link for that
+  student) in the professor's own Outlook, Gmail or mail app, and "Send sign-in links from
+  your own email" does the same for the whole class, one message per student (a link in a
+  group email would let anyone in it sign in as anyone). Which service opens is guessed from
+  the professor's address (well-known providers by name, others from the domain's MX/SPF
+  records over DNS-over-HTTPS, remembered per domain) and can be changed. The student's page
+  offers a ready-made "Ask your instructor for a sign-in link" email. Resetting a PIN, taking a student off the
   list, or deleting their ranking while sign-ups are open signs that student out on every
   device.
 - **Only the class list, by default.** New sheets let in only names on the class list, and

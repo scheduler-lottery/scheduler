@@ -1,27 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Your sign-up sheets — {{ app_name }}{% endblock %}
 {% block content %}
-{% if deleted %}
-<section class="card">
-  <h2 class="card-heading">Recently deleted</h2>
-  <p class="mini-hint">You can bring these back, exactly as they were, for 30 days after deleting.</p>
-  <ul class="plain-rows">
-    {% for d in deleted %}
-    <li class="plain-row">
-      <span><strong>{{ d.title }}</strong> <span class="muted">— deleted <time datetime="{{ d.created_at }}" data-local>{{ d.created_at[:16] }}</time>{% if d.summary %} · {{ d.summary }}{% endif %}</span></span>
-      <span class="row-actions">
-        <form method="post" action="{{ url_for('teach.restore_deleted', snap_id=d.id) }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="btn btn-primary btn-small" type="submit">Bring it back</button>
-        </form>
-        <a class="btn btn-ghost btn-small" href="{{ url_for('teach.snapshot_zip', snap_id=d.id) }}">Download a copy</a>
-      </span>
-    </li>
-    {% endfor %}
-  </ul>
-</section>
-{% endif %}
-
 <div class="card">
   <div class="admin-header">
     <h1>Your sign-up sheets</h1>
@@ -66,7 +45,7 @@
   </ul>
   {% elif deleted %}
   <div class="empty-state">
-    <p>You have no sheets right now — your deleted ones are above, and you can bring them back.</p>
+    <p>You have no sheets right now — your deleted ones are below, and you can bring them back.</p>
     <a class="btn btn-primary" href="{{ url_for('teach.new_sheet') }}">＋ New sign-up sheet</a>
   </div>
   {% else %}
@@ -117,6 +96,27 @@
   </details>
 </div>
 
+{% if deleted %}
+<section class="card">
+  <h2 class="card-heading">Recently deleted</h2>
+  <p class="mini-hint">You can bring these back, exactly as they were, for 30 days after deleting.</p>
+  <ul class="plain-rows">
+    {% for d in deleted %}
+    <li class="plain-row">
+      <span><strong>{{ d.title }}</strong> <span class="muted">— deleted <time datetime="{{ d.created_at }}" data-local>{{ d.created_at[:16] }}</time>{% if d.summary %} · {{ d.summary }}{% endif %}</span></span>
+      <span class="row-actions">
+        <form method="post" action="{{ url_for('teach.restore_deleted', snap_id=d.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-primary btn-small" type="submit">Bring it back</button>
+        </form>
+        <a class="btn btn-ghost btn-small" href="{{ url_for('teach.snapshot_zip', snap_id=d.id) }}">Download a copy</a>
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
 {% for s in sheets + archived %}
 <div id="delete-{{ s.id }}" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="delete-title-{{ s.id }}">
   <div class="modal-dialog">
@@ -124,7 +124,7 @@
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
     </button>
     <h2 id="delete-title-{{ s.id }}" class="modal-title">Delete “{{ s.title }}”?</h2>
-    <p class="modal-body">Students' link stops working, and the sheet, its class list and its rankings leave your list. A backup downloads first, and for 30 days you can bring the sheet back from the top of this page.</p>
+    <p class="modal-body">Students' link stops working, and the sheet, its class list and its rankings leave your list. A backup downloads first, and for 30 days you can bring the sheet back from the recently deleted list on this page.</p>
     {% if not s.archived_at %}
     <p class="modal-body"><strong>Just want it out of the way?</strong> Archive it instead: it moves to Archived sheets, everything keeps working, and you can unarchive it any time.</p>
     <form method="post" action="{{ url_for('teach.archive_sheet', sid=s.id) }}" class="choice-stack">

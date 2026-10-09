@@ -8,10 +8,10 @@
     light: "light", paper: "light", "solarized-light": "light", "contrast-light": "light",
     dark: "dark", black: "dark", "solarized-dark": "dark", "contrast-dark": "dark",
   };
-  var FONTS = { mixed: 1, sans: 1, serif: 1, readable: 1 };
+  var FONTS = { mixed: 1, oldstyle: 1, sans: 1, readable: 1 };
   // A class's pages carry the look its instructor chose; a reader's own
   // choice, if they've made one, wins (text size is always their own).
-  var theme = root.getAttribute("data-course-theme") || "light";
+  var theme = root.getAttribute("data-course-theme") || "paper";
   var font = root.getAttribute("data-course-font") || "mixed";
   var scale = 100;
   try {
@@ -21,7 +21,7 @@
   } catch (e) {
     /* storage blocked (private browsing): the class's or standard look */
   }
-  if (!THEMES[theme]) theme = "light";
+  if (!THEMES[theme]) theme = "paper";
   if (!FONTS[font]) font = "mixed";
   if (!(scale >= 50 && scale <= 200)) scale = 100;
   root.setAttribute("data-theme", theme);

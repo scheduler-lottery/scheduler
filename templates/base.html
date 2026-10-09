@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="light"{% if nav_sheet and (nav_sheet.theme or nav_sheet.font) %} data-course-theme="{{ nav_sheet.theme or '' }}" data-course-font="{{ nav_sheet.font or '' }}"{% endif %}>
+<html lang="en" data-theme="paper" data-mode="light"{% if nav_sheet and (nav_sheet.theme or nav_sheet.font) %} data-course-theme="{{ nav_sheet.theme or '' }}" data-course-font="{{ nav_sheet.font or '' }}"{% endif %}>
 <head>
 <meta charset="utf-8">
 <script src="{{ url_for('static', filename='theme-init.js') }}"></script>
@@ -137,7 +137,7 @@
 </footer>
 
 
-{% set theme_choices = [("light", "Light", "light"), ("paper", "Paper", "light"), ("solarized-light", "Solarized", "light"), ("dark", "Dark", "dark"), ("black", "Darkest", "dark"), ("solarized-dark", "Solarized dark", "dark"), ("contrast-light", "High contrast", "contrast"), ("contrast-dark", "High contrast dark", "contrast")] %}
+{% set theme_choices = [("paper", "Paper", "light"), ("light", "White", "light"), ("solarized-light", "Solarized", "light"), ("dark", "Dark", "dark"), ("black", "Darkest", "dark"), ("solarized-dark", "Solarized dark", "dark"), ("contrast-light", "High contrast", "contrast"), ("contrast-dark", "High contrast dark", "contrast")] %}
 <div id="appearance" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="appearance-title"{% if course_look %} data-course-look="{{ course_look.url }}"{% endif %}{% if nav_sheet and not course_look %} data-in-class="1"{% endif %}>
   <div class="modal-dialog appearance-dialog">
     <button type="button" class="modal-close" data-popover-close aria-label="Close">
@@ -184,7 +184,7 @@
     <fieldset class="appearance-group">
       <legend>Font</legend>
       <div class="font-cards">
-        {% for value, label in [("mixed", "Standard"), ("serif", "YaleNew only"), ("sans", "Sans-serif"), ("readable", "Easy to read")] %}
+        {% for value, label in [("mixed", "Standard"), ("oldstyle", "Old Style"), ("sans", "Sans-serif"), ("readable", "Easy to read")] %}
         <label class="font-card">
           <input type="radio" name="appearance-font" value="{{ value }}" class="choice-input">
           <span class="font-sample font-sample-{{ value }}" aria-hidden="true">Aa</span>

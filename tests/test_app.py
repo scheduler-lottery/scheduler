@@ -9,6 +9,7 @@ import zipfile
 
 import pytest
 
+import compose
 import db
 import settings
 from conftest import CANVAS_ROSTER, day_dates, day_keys
@@ -1389,8 +1390,8 @@ def test_professor_can_give_a_student_a_sign_in_code(prof, browser):
     sid = prof.create_sheet()
     prof.upload(sid)
     page = follow(prof, prof.post(f"/teach/s/{sid}/signin-code", {"name_key": "sam lee"}))
-    code = re.search(r"Sign-in code for Sam Lee ?: (\d{6})", text(page)).group(1)
-    assert "mailto:sam@school.edu?subject=" in page  # "Email it to them from your own email"
+    code = re.search(r"Read them this code instead: (\d{6})", text(page)).group(1)
+    assert "mailto:sam@school.edu?subject=" in page  # "Open the email", in their own email
     s = browser()
     sent = len(s.outbox)
     s.post(f"/c/{sid}/login", {"name": "Sam Lee"})
@@ -1651,7 +1652,7 @@ def test_the_professor_sees_who_couldnt_get_an_email_and_why(prof, browser, monk
     for name in ("Sam Lee", "Sam Lee", "Riya Patel"):
         b = browser()
         page = text(follow(b, b.post(f"/c/{sid}/login", {"name": name})))
-        assert "We couldn't email you a code" in page and "Ask your instructor for a sign-in code" in page
+        assert "We couldn't email you a code" in page and "Ask your instructor for a sign-in link" in page
     page = text(prof.get(f"/teach/s/{sid}"))
     assert "2 students couldn't get a sign-in email today" in page  # people, not attempts
     assert "This site's sign-in emails ran out for today" in page
@@ -1660,7 +1661,8 @@ def test_the_professor_sees_who_couldnt_get_an_email_and_why(prof, browser, monk
     sam = browser()
     sam.post(f"/c/{sid}/login", {"name": "Sam Lee"})
     page = follow(prof, prof.post(f"/teach/s/{sid}/signin-code", {"name_key": "sam lee", "back": "stuck"}))
-    code = re.search(r"Sign-in code for Sam Lee ?: (\d{6})", text(page)).group(1)
+    code = re.search(r"Read them this code instead: (\d{6})", text(page)).group(1)
+    assert "you made them a sign-in link at" in text(page)
     assert sam.post(f"/c/{sid}/verify", {"code": code}).headers["Location"].endswith("/home")
     page = text(prof.get(f"/teach/s/{sid}"))
     assert "1 student couldn't get a sign-in email today" in page and "Sam Lee — the site" not in page
@@ -1994,3 +1996,145 @@ def test_uploaded_fonts_persist_through_the_daily_cleanup(browser):
         db.commit()
         maintenance.run_daily()
     assert browser().get("/fonts/oldstyle7-roman.woff2").status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# The backup for the site's own email: sign-in links the professor sends from
+# their own email account, and students asking for one from theirs.
+# ---------------------------------------------------------------------------
+def _compose(page, to):
+    """(subject, body) of the message a [data-compose] link to `to` opens."""
+    found = re.search(rf'data-compose data-to="{re.escape(to)}"(?: data-bcc="[^"]*")? '
+                      r'data-subject="([^"]*)" data-body="([^"]*)"', page)
+    assert found, f"no email to {to} on the page"
+    return found.group(1), found.group(2)
+
+
+def test_a_sign_in_link_sent_from_the_professors_own_email_signs_the_student_in(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    page = follow(prof, prof.post(f"/teach/s/{sid}/signin-code", {"name_key": "sam lee"}))
+    subject, body = _compose(page, "sam@school.edu")
+    assert subject.startswith("Your sign-in link for") and body.startswith("Hi Sam Lee,")
+    assert 'data-mail-picker data-default="app"' in page  # no mail records for school.edu in tests
+    link = re.search(rf"(/c/{sid}/link/[\w-]+)", body).group(1)
+    sam = browser()
+    assert re.search(r"Sign in as Sam Lee ?\?", text(sam.get(link)))
+    assert sam.post(link).headers["Location"].endswith("/home")
+    other = browser()
+    assert "expired or was already used" in follow(other, other.post(link))
+
+
+def test_the_whole_class_can_get_sign_in_links_from_the_professors_own_email(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid, CANVAS_ROSTER + "Bo Brown,\"Brown, Bo\",105,,,,,,,,,9005\n")
+    everyone = ("alex@school.edu", "sam@school.edu", "riya@school.edu")
+    page = html(prof.get(f"/teach/s/{sid}/email-links"))
+    assert "Get the 3 emails ready" in page and all(who in page for who in everyone)
+    assert "/link/" not in page  # no links until they're asked for
+    assert "Not listed: Bo Brown." in text(page)  # no address: signs in with a PIN
+    assert "Test Student" not in text(page)  # Canvas's test student is the professor's own
+    page = html(prof.post(f"/teach/s/{sid}/email-links"))
+    links = {}
+    for who in everyone:
+        _subject, body = _compose(page, who)
+        links[who] = re.search(rf"(/c/{sid}/link/[\w-]+)", body).group(1)
+    assert len(set(links.values())) == 3  # each student gets their own
+    # One email to the whole class, the professor's own address in To and the class in Bcc.
+    bcc = re.search(r'data-to="prof@school.edu" data-bcc="([^"]+)"', page).group(1)
+    assert sorted(bcc.split(", ")) == sorted(everyone)
+    assert "/link/" not in _compose(page, "prof@school.edu")[1]  # no sign-in link in a group email
+    riya = browser()
+    assert riya.post(links["riya@school.edu"]).headers["Location"].endswith("/home")
+    assert "Hi Riya Patel" in text(riya.get(f"/c/{sid}/home"))
+    # Someone else's sheet: not found.
+    other = browser().sign_in_instructor("other@school.edu")
+    assert other.get(f"/teach/s/{sid}/email-links").status_code == 404
+
+
+def test_a_student_the_site_cant_email_can_ask_their_instructor_for_a_link(prof, browser, monkeypatch):
+    monkeypatch.setattr(settings, "EMAIL_DAILY_LIMIT", 12)  # 2 held back for instructors: 10 for students
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    with prof.app.app_context():
+        for i in range(10):
+            db.run("INSERT INTO email_log (id, sent_at, recipient, client_ip, kind) VALUES (:id, :at, 'x', '', 'student')",
+                   id=f"fill{i}", at=__import__("util").iso())
+        db.commit()
+    s = browser()
+    page = follow(s, s.post(f"/c/{sid}/login", {"name": "Sam Lee"}))
+    subject, body = _compose(page, "prof@school.edu")
+    assert subject.startswith("Sign-in link for") and "My name on the class list: Sam Lee" in body
+    assert f"/teach/s/{sid}" in body  # straight to the class's page
+    assert "sam@school.edu" not in page  # whoever typed the name never sees the address
+    # The professor's link reaches Sam even though the site still can't send.
+    prof.post(f"/teach/s/{sid}/signin-code", {"name_key": "sam lee"})
+    with prof.app.app_context():
+        db.run("UPDATE login_codes SET expires_at = '2000-01-01T00:00:00+00:00'")  # the code to read out ran out
+        db.commit()
+    s2 = browser()
+    page = text(follow(s2, s2.post(f"/c/{sid}/login", {"name": "Sam Lee"})))
+    assert "the sign-in link in your newest email from your instructor still works" in page
+
+
+def test_emails_open_where_the_senders_address_lives(prof, monkeypatch):
+    asked = []
+    records = {
+        ("school.edu", "MX"): ["0 school-edu.mail.protection.outlook.com."],
+        ("college.edu", "MX"): ["1 aspmx.l.google.com."],
+        ("gated.edu", "MX"): ["10 mx0a-001.pphosted.com."],
+        ("gated.edu", "TXT"): ['"v=spf1 include:spf.protection.outlook.com -all"'],
+        ("own.edu", "MX"): ["10 mail.own.edu."],
+    }
+
+    def fake(name, kind):
+        asked.append(name)
+        return records.get((name, kind), [])
+    monkeypatch.setattr(compose, "lookup", fake)
+    with prof.app.app_context():
+        assert compose.service_for("pat@gmail.com") == "gmail" and not asked  # well known: no lookup
+        assert compose.service_for("pat@hotmail.com") == "outlookcom"
+        assert compose.service_for("pat@law.school.edu") == "outlook"  # no mail records of its own: the school's
+        assert compose.service_for("pat@college.edu") == "gmail"
+        assert compose.service_for("pat@gated.edu") == "outlook"  # a mail filter in front: SPF names Microsoft
+        assert compose.service_for("pat@own.edu") == "app"  # its own mail server
+        before = len(asked)
+        assert compose.service_for("lee@law.school.edu") == "outlook" and len(asked) == before  # remembered
+        monkeypatch.setattr(compose, "lookup", lambda name, kind: None)  # DNS can't be asked
+        assert compose.service_for("pat@offline.edu") == "app"
+        assert compose.service_for("not an address") == "app"
+
+
+def test_the_professor_hears_when_the_sites_emails_are_down(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    with prof.app.app_context():
+        db.run("UPDATE email_log SET sent_at = '2000-01-01T00:00:00+00:00'")  # the last email out came before
+        db.commit()
+        db.record_error("EMAIL", "Sending a sign-in code failed: SMTPAuthenticationError(535)")
+    page = text(prof.get(f"/teach/s/{sid}"))
+    assert "The site's sign-in emails aren't going out right now" in page
+    assert "send sign-in links from your own email" in page
+    browser().post(f"/c/{sid}/login", {"name": "Riya Patel"})  # one goes out again
+    assert "aren't going out" not in text(prof.get(f"/teach/s/{sid}"))
+
+
+# ---------------------------------------------------------------------------
+# Free-plan usage, for the site's owner.
+# ---------------------------------------------------------------------------
+def test_the_owner_sees_free_plan_usage_and_hears_when_it_runs_high(prof, browser, monkeypatch):
+    import usage
+    prof.get("/teach/")
+    with prof.app.app_context():
+        assert (db.scalar("SELECT amount FROM usage_daily WHERE kind = 'requests'") or 0) >= 1
+    owner = browser().sign_in_instructor("owner@gmail.com")
+    page = text(owner.get("/owner/"))
+    assert "Free plan usage" in page and "Database size" in page and "Requests answered, last 30 days" in page
+    monkeypatch.setattr(usage, "SUPABASE_DATABASE_MB", 0.000001)  # any database is "full"
+    cron = {"Authorization": "Bearer cron-secret"}
+    sent = len(owner.outbox)
+    assert "Database size" in owner.get("/cron/daily", headers=cron).get_json()["near_limits"]
+    alerts = [m for m in owner.outbox[sent:] if m.to == ["owner@gmail.com"]]
+    assert len(alerts) == 1 and "free-plan limit" in alerts[0].subject
+    owner.get("/cron/daily", headers=cron)
+    assert len([m for m in owner.outbox[sent:] if m.to == ["owner@gmail.com"]]) == 1  # once a day

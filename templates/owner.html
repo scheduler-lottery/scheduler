@@ -19,6 +19,27 @@
     </div>
   </div>
 
+  <h2>Free plan usage</h2>
+  <p class="mini-hint">How close the site is to the limits of its free plans. You'll get an email if anything passes {{ alert_at }}%.{% if measured_since %} Counted since {{ measured_since }}.{% endif %}</p>
+  <div class="meters">
+    {% for m in meters %}
+    <div class="meter meter-{{ m.level }}">
+      <div class="meter-top">
+        <span class="meter-name">{{ m.name }}</span>
+        <span class="meter-figure">{{ m.shown(m.used) }} of {{ m.shown(m.limit) }} · {{ '%.0f' % (m.share * 100) }}%</span>
+      </div>
+      <div class="meter-track" aria-hidden="true"><span class="meter-fill meter-fill-{{ [((m.share * 100) | round(0, 'ceil') | int), 100] | min }}"></span></div>
+      <p class="mini-hint">{{ m.note }}</p>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="mini-hint">
+    {% if daily_job %}The daily job last ran <time datetime="{{ daily_job }}" data-local>{{ daily_job[:16] }}</time>. It also keeps Supabase's free database awake; Supabase pauses one that sits unused for a week.{% else %}The daily job hasn't run yet. It runs once a day and keeps Supabase's free database awake.{% endif %}
+    Not counted here: Supabase's 5 GB of monthly data transfer and Vercel's 1,000,000 monthly CDN requests. At this site's size they track the numbers above. For exact figures, see the
+    <a href="https://vercel.com/dashboard" target="_blank" rel="noopener">Vercel</a> and
+    <a href="https://supabase.com/dashboard" target="_blank" rel="noopener">Supabase</a> dashboards.
+  </p>
+
   <h2>Setup</h2>
   <ul class="plain-rows">
     {% for name, detail, ok in checks %}

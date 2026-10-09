@@ -33,6 +33,7 @@ import settings
 import sheets
 import student
 import teach
+import usage
 from matching_engine import ALGORITHMS
 from util import ID_ALPHABET, in_zone, initials, iso, parse_iso, plural
 
@@ -104,7 +105,12 @@ app.add_template_filter(initials, "initials")
 app.add_template_filter(local_times, "local_times")
 app.add_template_filter(autolink, "autolink")
 app.add_template_filter(lambda n, word, many=None: plural(n, word, many), "plural")
+# Usage totals for the owner's page. Teardown functions run last-registered
+# first, so this one runs after the request's own connection is closed.
+app.teardown_appcontext(usage.save)
 app.teardown_appcontext(db.close_conn)
+app.before_request(usage.start)
+app.after_request(usage.measure)
 
 app.register_blueprint(teach.bp)
 app.register_blueprint(student.bp)

@@ -156,15 +156,18 @@ CREATE TABLE IF NOT EXISTS login_codes (
     from_instructor INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (scope, subject)
 );
--- One-click sign-in links from code emails. Each email has its own; they
--- last a day and work once. Only a keyed hash of the token is stored.
+-- One-click sign-in links from code emails (and from_instructor: from an
+-- email the instructor sent from their own account). Each email has its
+-- own; they last a day and work once. Only a keyed hash of the token is
+-- stored.
 CREATE TABLE IF NOT EXISTS login_links (
-    token_hash TEXT PRIMARY KEY,
-    scope      TEXT NOT NULL,
-    subject    TEXT NOT NULL,
-    email      TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    expires_at TEXT NOT NULL
+    token_hash      TEXT PRIMARY KEY,
+    scope           TEXT NOT NULL,
+    subject         TEXT NOT NULL,
+    email           TEXT NOT NULL,
+    created_at      TEXT NOT NULL,
+    expires_at      TEXT NOT NULL,
+    from_instructor INTEGER NOT NULL DEFAULT 0
 );
 
 -- One row per email sent, for rate limiting. Addresses and IPs are stored as
@@ -226,4 +229,13 @@ CREATE TABLE IF NOT EXISTS site_assets (
     content_type TEXT NOT NULL,
     data         TEXT NOT NULL,
     updated_at   TEXT NOT NULL
+);
+
+-- Daily totals the site keeps about itself (requests answered, bytes sent,
+-- milliseconds spent), so the owner hears before a free plan's limits.
+CREATE TABLE IF NOT EXISTS usage_daily (
+    day    TEXT NOT NULL,
+    kind   TEXT NOT NULL,
+    amount BIGINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, kind)
 );

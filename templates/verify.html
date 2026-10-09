@@ -20,10 +20,18 @@
 
   {% if no_email %}
   <div class="disclaimer disclaimer-yellow">{{ no_email | local_times }}</div>
-  <p class="hint">Ask your instructor for a sign-in code — they get one by pressing “Sign-in code” next to your name. When you have it, type it below.</p>
+  {% if ask %}
+  <p class="hint">Your instructor can send you a sign-in link from their own email instead. The button starts an email to them from yours, already written:</p>
+  <div class="ask-instructor">
+    <a class="btn btn-primary btn-block" data-compose data-to="{{ ask.to }}" data-subject="{{ ask.subject }}" data-body="{{ ask.body }}"
+       href="mailto:{{ ask.to }}?subject={{ ask.subject | urlencode }}&amp;body={{ ask.body | urlencode }}">Ask your instructor for a sign-in link</a>
+    {% with picker_id="ask", mail_default=ask.service, mail_why="It's picked to match your email address.", mail_account="" %}{% include "_mail_picker.html" %}{% endwith %}
+  </div>
+  <p class="hint">If they give you a code instead, type it below.</p>
+  {% endif %}
   {% elif from_instructor %}
   <p class="hint">Type the code your instructor gave you. It works until
-    <time datetime="{{ expires_at }}" data-local="time">{{ expires_at[11:16] }}</time>.</p>
+    <time datetime="{{ expires_at }}" data-local="time">{{ expires_at[11:16] }}</time>. Or click the sign-in link in their email.</p>
   {% elif locked %}
   <div class="disclaimer disclaimer-yellow">That code was cancelled after too many wrong tries. Press “Send a new code” below.</div>
   {% elif expired %}
@@ -60,7 +68,7 @@
     <li>Asked more than once? Use the code in the <strong>newest</strong> email.</li>
     {% if for_student %}
     <li>Is that email address wrong, or not yours? <a href="mailto:{{ sheet.owner_email }}?subject={{ ('My email for ' ~ sheet.title) | urlencode }}">Email your instructor</a> to fix it.</li>
-    <li>Still stuck? Your instructor can give you a sign-in code from their page.</li>
+    {% if ask %}<li>Still nothing? <a data-compose data-to="{{ ask.to }}" data-subject="{{ ask.subject }}" data-body="{{ ask.body }}" href="mailto:{{ ask.to }}?subject={{ ask.subject | urlencode }}&amp;body={{ ask.body | urlencode }}">Ask your instructor</a> to send you a sign-in link from their own email.</li>{% endif %}
     {% endif %}
   </ul>
   {% endif %}
@@ -77,3 +85,4 @@
   </div>
 </div>
 {% endblock %}
+{% block scripts %}{% if ask %}<script src="{{ url_for('static', filename='compose.js') }}"></script>{% endif %}{% endblock %}

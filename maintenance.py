@@ -16,6 +16,7 @@ from datetime import timedelta
 
 import db
 import sheets
+import usage
 from util import iso, now
 
 
@@ -58,4 +59,5 @@ def run_daily():
     return {
         "sheets": db.scalar("SELECT COUNT(*) FROM sheets") or 0,
         "snapshots_taken": len(changed),
+        "near_limits": usage.daily_check(),
     }

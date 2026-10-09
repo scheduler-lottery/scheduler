@@ -86,8 +86,9 @@ BUILT_BY_EMAIL = _env("BUILT_BY_EMAIL", "nathan.reitinger@law.northwestern.edu")
 BUILT_BY_URL = _env("BUILT_BY_URL", "https://www.law.northwestern.edu/faculty/profiles/nathanreitinger/")
 
 # The looks a reader (or, for a whole class, its instructor) can choose.
-THEMES = ("light", "paper", "solarized-light", "contrast-light", "dark", "black", "solarized-dark", "contrast-dark")
-FONTS = ("mixed", "sans", "serif", "readable")
+THEMES = ("paper", "light", "solarized-light", "contrast-light", "dark", "black", "solarized-dark", "contrast-dark")
+FONTS = ("mixed", "oldstyle", "sans", "readable")
+DEFAULT_THEME = "paper"
 
 # Times in downloads and emails use the instructor's own time zone, which
 # their browser reports when they sign in. This is the fallback until then.
