@@ -80,7 +80,13 @@
     <h2>Email</h2>
     <div class="policy-body">
       <p>
+        {% if codes_by_workos %}
+        Sign-in codes are emailed by WorkOS, a sign-in service, from {{ code_sender }}, on this site's behalf.
+        WorkOS keeps a record of each address it sends a code to only until that person signs in (the site then
+        deletes it), and for a day at most.
+        {% else %}
         Sign-in codes{% if code_sender %} come from {{ code_sender }}{% else %} are sent from a Gmail account{% endif %}.
+        {% endif %}
         When those can't reach a student, their instructor can send them a sign-in link from the instructor's own
         email instead: the site writes the message, and it goes out through the instructor's own email account,
         not through this site.
@@ -110,8 +116,9 @@
     <h2>Where it lives</h2>
     <div class="policy-body">
       <p>
-        The site runs on Vercel, the data is stored in a Supabase (Postgres) database, and email is sent
-        through Gmail. Everything travels encrypted (HTTPS).
+        The site runs on Vercel, the data is stored in a Supabase (Postgres) database, and
+        {% if codes_by_workos %}sign-in codes are emailed by WorkOS{% if mail_by_gmail %} (backups go through Gmail){% endif %}{% else %}email is sent through Gmail{% endif %}.
+        Everything travels encrypted (HTTPS).
       </p>
     </div>
   </section>

@@ -125,7 +125,7 @@ def meters():
               "Vercel's free plan allows 100 GB a month. This counts pages; styles, scripts, and fonts add a "
               "little, and browsers keep them."),
         Meter("Sign-in emails, last 24 hours", signin.emails_sent_today(), settings.EMAIL_DAILY_LIMIT, "",
-              "This site's own daily cap (EMAIL_DAILY_LIMIT), set under Gmail's. Past it, new codes wait until "
+              "This site's own daily cap on sign-in emails (EMAIL_DAILY_LIMIT). Past it, new codes wait until "
               "tomorrow."),
     ]
 
@@ -166,7 +166,7 @@ def daily_check():
     today = now().date().isoformat()
     if not high or _state("usage_alert_day") == today:
         return [m.name for m in high]
-    if signin.email_mode() == "smtp" and settings.OWNER_EMAIL and signin.daily_room("alert") > 0:
+    if signin.smtp_ready() and settings.OWNER_EMAIL and signin.daily_room("alert") > 0:
         lines = [f"- {m.name}: {m.shown(m.used)} of {m.shown(m.limit)} ({m.share:.0%}). {m.note}" for m in current]
         body = (
             f"{settings.APP_NAME} is getting close to a free-plan limit:\n\n"

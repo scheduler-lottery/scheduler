@@ -30,7 +30,9 @@ never overwrite a newer ranking.
 ## Setting it up (one time, about 30 minutes)
 
 You'll make four free accounts: **GitHub** (holds the code), **Supabase** (the database),
-**a Gmail account** (sends sign-in codes), and **Vercel** (runs the site). Nothing costs money.
+**WorkOS** (emails the sign-in codes), and **Vercel** (runs the site), plus, optionally, a
+**Gmail account** (emails professors their backups, and stands in if WorkOS is down).
+Nothing costs money.
 
 ### 1. Put the code on GitHub
 
@@ -70,10 +72,24 @@ repository. Nothing secret lives in the code — every password goes in Vercel's
 Supabase will say the tables have "RLS enabled, no policies." That's on purpose: it shuts
 Supabase's automatic public API out of the data. The app connects directly, as the owner.
 
-### 3. Create the email account that sends codes (Gmail)
+### 3. Set up WorkOS, which emails the sign-in codes
 
-1. Create a new Gmail account just for this, e.g. `scheduler.signin@gmail.com`. Students
-   see it as the sender, so pick something that looks official.
+WorkOS's "Magic Auth" emails a 6-digit code from `access@workos-mail.com`; the site checks
+the code itself. It's free for the first million users a month, needs no domain of your
+own, and has no low daily ceiling. WorkOS keeps a record of each address it emails a code
+to; the site deletes it once that person signs in, or within a day.
+
+1. Sign up at [workos.com](https://workos.com) and switch the dashboard to the
+   **Production** environment (Staging sends from `workos.dev` and is only for testing).
+2. Under **Authentication**, make sure **Magic Auth** (email codes) is turned on.
+3. Under **Branding**, set the display name to `Scheduler`: it's how the emails are signed.
+4. Under **API Keys**, copy the secret key (it starts `sk_live_`). This is `WORKOS_API_KEY`.
+
+Optional, a mailbox of the site's own (Gmail). It emails professors a backup when they
+close sign-ups, sends you `/owner`'s usage alerts, and sends the codes itself whenever
+WorkOS can't. Without it, professors download backups instead.
+
+1. Create a new Gmail account just for this, e.g. `scheduler.signin@gmail.com`.
 2. Turn on **2-Step Verification**: Google Account → Security.
 3. Make an **app password** at <https://myaccount.google.com/apppasswords> (name it
    "Scheduler") and copy the 16 characters. This is `SMTP_PASSWORD`.
@@ -90,15 +106,17 @@ Supabase's automatic public API out of the data. The app connects directly, as t
    |---|---|
    | `SECRET_KEY` | a long random string — run `python3 -c "import secrets; print(secrets.token_hex(32))"` |
    | `DATABASE_URL` | the Supabase connection string from step 2 |
-   | `SMTP_HOST` | `smtp.gmail.com` |
-   | `SMTP_PORT` | `587` |
-   | `SMTP_USER` | the Gmail address from step 3 |
-   | `SMTP_PASSWORD` | the app password from step 3 |
+   | `WORKOS_API_KEY` | the WorkOS secret key from step 3 |
+   | `SMTP_HOST` | `smtp.gmail.com` (only with the optional Gmail account) |
+   | `SMTP_PORT` | `587` (likewise) |
+   | `SMTP_USER` | the Gmail address (likewise) |
+   | `SMTP_PASSWORD` | its app password (likewise) |
    | `OWNER_EMAIL` | your own school email |
    | `CRON_SECRET` | another random string (same command as `SECRET_KEY`) |
 
    Optional: `INSTRUCTOR_EMAIL_DOMAINS` (who can make accounts; default `.edu`),
-   `EMAIL_DAILY_LIMIT` (default `90`), `APP_NAME` (default `Scheduler`), `CONTACT_EMAIL`
+   `EMAIL_DAILY_LIMIT` (default `1000` with WorkOS, `90` with Gmail alone), `APP_NAME`
+   (default `Scheduler`), `CONTACT_EMAIL`
    (an address for questions about the site, shown on the Privacy page), and
    `DEFAULT_TIMEZONE` (default `America/Chicago`; each professor's own time zone is picked up
    from their browser when they sign in), and `BUILT_BY` / `BUILT_BY_EMAIL` (the credit at the
@@ -122,8 +140,8 @@ If a required setting is missing, every page shows an "Almost there" notice nami
 - **Inviting professors:** send them the address. Anyone whose email ends in `.edu` can sign
   in. To let in a school with a different ending, add it to `INSTRUCTOR_EMAIL_DOMAINS`
   (comma-separated, e.g. `.edu,.ac.uk`).
-- **Email budget:** the site sends at most `EMAIL_DAILY_LIMIT` emails a day (Gmail starts
-  refusing somewhere between 100 and 500). Students stay signed in for 90 days, so a class
+- **Email budget:** the site sends at most `EMAIL_DAILY_LIMIT` sign-in emails a day (with
+  Gmail alone keep it under Gmail's 100–500). Students stay signed in for 90 days, so a class
   of 50 uses about 50–60 emails once. `/owner` shows the day's count.
 - **Problems:** Vercel's free plan keeps logs for only an hour, so errors are also saved to
   the database and listed on `/owner` (without any student data).
@@ -183,8 +201,9 @@ Supabase's free plan from pausing the database after a week of no activity.
 - **Supabase free:** 500 MB (enough for thousands of classes); pauses after a week idle (the
   daily job prevents that); no automatic database backups (each sheet's restore points and
   backup downloads cover that).
-- **Gmail:** a few hundred emails a day. With a domain of your own later, switch the `SMTP_*`
-  settings to a service like Resend — nothing else changes.
+- **WorkOS:** free for the first million users a month. (Firebase's free email sign-in
+  allows only 5 emails a day, and services like Resend or Brevo need a domain of your own.)
+- **Gmail** (optional): a few hundred emails a day.
 
 ---
 

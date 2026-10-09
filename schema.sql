@@ -231,6 +231,15 @@ CREATE TABLE IF NOT EXISTS site_assets (
     updated_at   TEXT NOT NULL
 );
 
+-- The record WorkOS keeps for each address it emails a sign-in code to
+-- (its user id, and a keyed hash of the address): deleted at WorkOS once
+-- that person signs in, or by the daily job within a day.
+CREATE TABLE IF NOT EXISTS remote_users (
+    user_id    TEXT PRIMARY KEY,
+    email_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 -- Daily totals the site keeps about itself (requests answered, bytes sent,
 -- milliseconds spent), so the owner hears before a free plan's limits.
 CREATE TABLE IF NOT EXISTS usage_daily (

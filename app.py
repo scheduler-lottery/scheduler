@@ -31,6 +31,7 @@ import maintenance
 import owner
 import settings
 import sheets
+import signin
 import student
 import teach
 import usage
@@ -192,7 +193,9 @@ def template_globals():
         "built_by": "" if settings.BUILT_BY == "-" else settings.BUILT_BY,
         "built_by_email": settings.BUILT_BY_EMAIL,
         "built_by_url": settings.BUILT_BY_URL,
-        "code_sender": settings.SMTP_FROM,
+        "code_sender": signin.code_sender(),
+        "codes_by_workos": signin.email_mode() == "workos",
+        "mail_by_gmail": signin.smtp_ready(),
         # On the general pages a student might wander to (Privacy, How it
         # works), a way back to their class.
         "back_to_class": next(iter(session.get("students") or {}), None)

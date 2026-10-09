@@ -35,13 +35,13 @@
   {% elif locked %}
   <div class="disclaimer disclaimer-yellow">That code was cancelled after too many wrong tries. Press “Send a new code” below.</div>
   {% elif expired %}
-  <div class="disclaimer disclaimer-yellow">That code has expired. Press “Send a new code” below.{% if for_student %} (The one-click sign-in link in the email works for {{ link_hours }} hours — try that.){% endif %}</div>
+  <div class="disclaimer disclaimer-yellow">That code has expired. Press “Send a new code” below.{% if for_student and links %} (The one-click sign-in link in the email works for {{ link_hours }} hours — try that.){% endif %}</div>
   {% else %}
   <p class="hint">
     {% if for_student %}We emailed a {{ code_length }}-digit code to <strong>{{ shown_email }}</strong>. {% endif %}
     {% if sent_at %}Sent at <time datetime="{{ sent_at }}" data-local="time">{{ sent_at[11:16] }}</time>; it works until
     <time datetime="{{ expires_at }}" data-local="time">{{ expires_at[11:16] }}</time>.{% endif %}
-    {% if for_student %}Or just click the sign-in link in that email.{% endif %}
+    {% if for_student and links %}Or just click the sign-in link in that email.{% endif %}
   </p>
   {% endif %}
 

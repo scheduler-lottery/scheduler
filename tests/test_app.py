@@ -2138,3 +2138,104 @@ def test_the_owner_sees_free_plan_usage_and_hears_when_it_runs_high(prof, browse
     assert len(alerts) == 1 and "free-plan limit" in alerts[0].subject
     owner.get("/cron/daily", headers=cron)
     assert len([m for m in owner.outbox[sent:] if m.to == ["owner@gmail.com"]]) == 1  # once a day
+
+
+# ---------------------------------------------------------------------------
+# WorkOS sends the codes (its "Magic Auth"), with the site's own mailbox as
+# the fallback. A stand-in plays the WorkOS API.
+# ---------------------------------------------------------------------------
+class FakeWorkOS:
+    def __init__(self):
+        self.sent, self.deleted, self.fail = [], [], False
+
+    def __call__(self, method, path, body=None, timeout=10):
+        from datetime import timedelta
+        from urllib.parse import unquote
+
+        from util import iso, now
+        if self.fail:
+            raise OSError("WorkOS is down")
+        if method == "POST" and path == "/user_management/magic_auth":
+            code = f"{271828 + len(self.sent):06d}"
+            self.sent.append((body["email"], code))
+            return {"object": "magic_auth", "id": f"magic_auth_{len(self.sent)}", "user_id": "user_" + body["email"],
+                    "email": body["email"], "code": code, "expires_at": iso(now() + timedelta(minutes=10))}
+        if method == "DELETE" and path.startswith("/user_management/users/"):
+            self.deleted.append(unquote(path.rsplit("/", 1)[1]))
+            return {}
+        raise AssertionError(f"unexpected WorkOS call {method} {path}")
+
+
+def _use_workos(monkeypatch):
+    import signin
+    fake = FakeWorkOS()
+    monkeypatch.setattr(settings, "WORKOS_API_KEY", "sk_test_fake")
+    monkeypatch.setattr(signin, "_workos", fake)
+    return fake
+
+
+def test_workos_emails_the_code_and_the_site_checks_it(prof, browser, monkeypatch):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    workos = _use_workos(monkeypatch)
+    sam = browser()
+    emailed = len(sam.outbox)
+    assert sam.post(f"/c/{sid}/login", {"name": "Sam Lee"}).headers["Location"].endswith("/verify")
+    assert workos.sent[-1][0] == "sam@school.edu" and len(sam.outbox) == emailed  # WorkOS sent it, not the mailbox
+    page = text(sam.get(f"/c/{sid}/verify"))
+    assert "access@workos-mail.com" in page and "click the sign-in link" not in page  # WorkOS's email has no link
+    assert "That code isn't right" in text(sam.post(f"/c/{sid}/verify", {"code": "000000"}))
+    assert sam.post(f"/c/{sid}/verify", {"code": workos.sent[-1][1]}).headers["Location"].endswith("/home")
+    assert workos.deleted == ["user_sam@school.edu"]  # WorkOS's record goes once Sam is in
+    assert q(prof.app, "SELECT COUNT(*) FROM remote_users") == 0
+    assert "emailed by WorkOS" in text(browser().get("/privacy"))
+    # Instructors sign in the same way.
+    newcomer = browser()
+    newcomer.post("/teach/login", {"email": "new@school.edu"})
+    assert workos.sent[-1][0] == "new@school.edu"
+    r = newcomer.post("/teach/verify", {"code": workos.sent[-1][1]})
+    assert r.status_code == 302 and "/teach" in r.headers["Location"]
+
+
+def test_when_workos_fails_the_mailbox_sends_the_code(prof, browser, monkeypatch):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    workos = _use_workos(monkeypatch)
+    workos.fail = True
+    riya = browser()
+    riya.post(f"/c/{sid}/login", {"name": "Riya Patel"})
+    assert riya.outbox[-1].to == ["riya@school.edu"]  # the fallback
+    assert riya.post(f"/c/{sid}/verify", {"code": riya.last_code("riya@school.edu")}).headers["Location"].endswith("/home")
+    assert q(prof.app, "SELECT COUNT(*) FROM error_log WHERE error LIKE '%through WorkOS failed%'") == 1
+
+
+def test_when_workos_fails_with_no_mailbox_the_professor_can_step_in(prof, browser, monkeypatch):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    workos = _use_workos(monkeypatch)
+    workos.fail = True
+    monkeypatch.setattr(settings, "SMTP_HOST", "")
+    with prof.app.app_context():
+        db.run("UPDATE email_log SET sent_at = '2000-01-01T00:00:00+00:00'")  # the last email out came before
+        db.commit()
+    sam = browser()
+    page = text(follow(sam, sam.post(f"/c/{sid}/login", {"name": "Sam Lee"})))
+    assert "We couldn't email you a code" in page and "Ask your instructor for a sign-in link" in page
+    page = text(prof.get(f"/teach/s/{sid}"))
+    assert "The site's sign-in emails aren't going out right now" in page
+    assert "Sam Lee — the email couldn't be sent" in page
+    assert "Email me a backup" not in page  # no mailbox: backups are downloaded instead
+
+
+def test_the_daily_job_deletes_workos_records_within_a_day(prof, browser, monkeypatch):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    workos = _use_workos(monkeypatch)
+    browser().post(f"/c/{sid}/login", {"name": "Alex Johnson"})  # a code nobody uses
+    cron = {"Authorization": "Bearer cron-secret"}
+    assert prof.get("/cron/daily", headers=cron).get_json()["workos_records_deleted"] == 0  # too new yet
+    with prof.app.app_context():
+        db.run("UPDATE remote_users SET created_at = '2000-01-01T00:00:00+00:00'")
+        db.commit()
+    assert prof.get("/cron/daily", headers=cron).get_json()["workos_records_deleted"] == 1
+    assert workos.deleted == ["user_alex@school.edu"] and q(prof.app, "SELECT COUNT(*) FROM remote_users") == 0

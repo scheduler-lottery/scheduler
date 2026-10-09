@@ -6,8 +6,12 @@ they type it back, which proves they can read that inbox. There are no
 passwords anywhere. A student with no email address on the class list
 protects their name with a PIN they choose instead.
 
-Each student's email also carries a one-click sign-in link, good for a
-day. Six digits have to expire fast; a long random link doesn't — so any
+The code email is sent by WorkOS (its free "Magic Auth" service) when it's
+set up: WorkOS makes the code and emails it, and the site checks it here
+like any other. WorkOS keeps a record for each address it emails; the site
+deletes it once that person signs in, or within a day. Without WorkOS, an
+ordinary mailbox (Gmail) sends the site's own code emails, and each
+student's also carries a one-click sign-in link, good for a day. Six digits have to expire fast; a long random link doesn't — so any
 code email a student received (even one a classmate triggered by typing
 their name) still gets them in later, and nobody can lock a student out by
 using up the limits below.
@@ -23,7 +27,12 @@ to keep someone out.
 
 import hashlib
 import hmac
+import json
 import secrets
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass
 from datetime import timedelta
 from email.utils import formataddr
@@ -102,12 +111,38 @@ class Check:
 
 
 def email_mode():
-    """'smtp' when real email is configured; 'dev' locally without it, where
-    codes are shown on screen; 'missing' on a deployment that forgot to set
-    it up, where sign-in has to fail loudly instead."""
+    """'workos' when WorkOS emails the codes; 'smtp' when an ordinary mailbox
+    (Gmail) does; 'dev' locally without either, where codes are shown on
+    screen; 'missing' on a deployment that forgot both, where sign-in has to
+    fail loudly instead."""
+    if settings.WORKOS_API_KEY:
+        return "workos"
     if settings.SMTP_HOST:
         return "smtp"
     return "missing" if settings.IS_VERCEL else "dev"
+
+
+def codes_live():
+    """Do sign-in codes really go out by email (so the limits, and the list
+    of students who couldn't get one, apply)?"""
+    return email_mode() in ("workos", "smtp")
+
+
+def smtp_ready():
+    """Can the site send email of its own (backups, the owner's alerts)?"""
+    return bool(settings.SMTP_HOST)
+
+
+def code_sender():
+    """The address sign-in codes come from, so people know what to look for."""
+    mode = email_mode()
+    return settings.WORKOS_SENDER if mode == "workos" else settings.SMTP_FROM if mode == "smtp" else ""
+
+
+def codes_have_links():
+    """Do code emails carry the site's one-click sign-in link? Only the
+    site's own emails do; WorkOS's carry just the code."""
+    return email_mode() == "smtp"
 
 
 def clock(when):
@@ -245,6 +280,94 @@ def send_email(to, subject, body, reply_to=None, attachments=()):
     for filename, content, mimetype in attachments:
         message.attach(filename, content, mimetype)
     message.send()
+
+
+# ---------------------------------------------------------------------------
+# WorkOS
+# ---------------------------------------------------------------------------
+def _workos(method, path, body=None, timeout=10):
+    """One call to the WorkOS API; its JSON answer. Raises on any failure
+    (urllib's HTTPError for a 4xx or 5xx answer)."""
+    ask = urllib.request.Request(
+        settings.WORKOS_API_URL.rstrip("/") + path, method=method,
+        data=None if body is None else json.dumps(body).encode(),
+        headers={"Authorization": f"Bearer {settings.WORKOS_API_KEY}", "Content-Type": "application/json",
+                 "Accept": "application/json"},
+    )
+    with urllib.request.urlopen(ask, timeout=timeout) as answer:
+        raw = answer.read()
+    return json.loads(raw) if raw else {}
+
+
+def _why(exc):
+    """A failed call, for the error log: WorkOS explains errors in the body."""
+    if isinstance(exc, urllib.error.HTTPError):
+        try:
+            return f"HTTP {exc.code}: {exc.read()[:300].decode('utf-8', 'replace')}"
+        except Exception:  # noqa: BLE001
+            return f"HTTP {exc.code}"
+    return repr(exc)
+
+
+def workos_send_code(email):
+    """Have WorkOS email a fresh 6-digit code to this address (Magic Auth).
+    Returns its answer: the code, when it expires, and the id of the record
+    WorkOS keeps for the address. Raises unless a usable code came back."""
+    made = _workos("POST", "/user_management/magic_auth", {"email": email})
+    code = made.get("code")
+    if not (isinstance(code, str) and code.isdigit() and len(code) == CODE_LENGTH and made.get("expires_at")):
+        raise ValueError("WorkOS answered without a usable code")
+    return made
+
+
+def _remember_remote(user_id, email):
+    """Note WorkOS's record for an address, to delete it later. Not committed here."""
+    if user_id:
+        db.run(
+            "INSERT INTO remote_users (user_id, email_hash, created_at) VALUES (:user_id, :hash, :at) "
+            "ON CONFLICT (user_id) DO UPDATE SET email_hash = excluded.email_hash, created_at = excluded.created_at",
+            user_id=user_id, hash=keyed_hash(email.lower()), at=iso(),
+        )
+
+
+def _forget_one(user_id):
+    """Delete WorkOS's record of a user. True when it's gone (or was already)."""
+    try:
+        _workos("DELETE", f"/user_management/users/{urllib.parse.quote(user_id, safe='')}", timeout=6)
+    except urllib.error.HTTPError as exc:
+        if exc.code != 404:
+            return False
+    except Exception:  # noqa: BLE001 - the daily job tries again
+        return False
+    db.run("DELETE FROM remote_users WHERE user_id = :user_id", user_id=user_id)
+    return True
+
+
+def forget_remote(email):
+    """Someone signed in: delete the record WorkOS kept for their address
+    when it emailed them a code. Best effort; the daily job catches any left
+    over. Commits."""
+    if not settings.WORKOS_API_KEY or not email:
+        return
+    for row in db.rows("SELECT user_id FROM remote_users WHERE email_hash = :hash", hash=keyed_hash(email.lower())):
+        _forget_one(row["user_id"])
+    db.commit()
+
+
+def forget_remote_users(budget_seconds=20):
+    """Daily: delete WorkOS's records of every address it emailed a code to
+    more than an hour ago, whether or not anyone signed in. Stops after
+    budget_seconds (the rest wait for tomorrow). Commits. Returns how many."""
+    if not settings.WORKOS_API_KEY:
+        return 0
+    started, done = time.monotonic(), 0
+    for row in db.rows("SELECT user_id FROM remote_users WHERE created_at < :cutoff ORDER BY created_at",
+                       cutoff=iso(now() - timedelta(hours=1))):
+        if time.monotonic() - started > budget_seconds:
+            break
+        done += _forget_one(row["user_id"])
+    db.commit()
+    return done
 
 
 def pending_code(scope, subject):
@@ -410,7 +533,7 @@ def sending_trouble():
     """Why student sign-in emails can't go out right now: "used-up" (the
     site's emails for today are gone) or "failing" (the last try failed,
     and nothing has gone out since) — or "" when they can."""
-    if email_mode() != "smtp":
+    if not codes_live():
         return ""
     if daily_room("student") <= 0:
         return "used-up"
@@ -441,8 +564,8 @@ def issue_code(*, scope, subject, display_name, email, email_subject, email_body
     mode = email_mode()
     if mode == "missing":
         raise SendRefused(
-            "Sign-in emails aren't set up on this site yet. If you run it, add the SMTP settings "
-            "described in the README.",
+            "Sign-in emails aren't set up on this site yet. If you run it, add WORKOS_API_KEY (or the SMTP "
+            "settings) as the README describes.",
             reason="setup",
         )
 
@@ -468,7 +591,7 @@ def issue_code(*, scope, subject, display_name, email, email_subject, email_body
     try:
         if precheck:
             precheck()
-        if mode == "smtp":
+        if mode in ("smtp", "workos"):
             _check_limits(email, kind)
     except SendRefused as refused:
         linked = newest_link(scope, subject, email) if link_url else None
@@ -485,7 +608,7 @@ def issue_code(*, scope, subject, display_name, email, email_subject, email_body
                 reason=refused.reason,
             ) from refused
         if linked:
-            sender = "your instructor" if linked["from_instructor"] else settings.SMTP_FROM or "us"
+            sender = "your instructor" if linked["from_instructor"] else code_sender() or "us"
             until = iso(parse_iso(linked["created_at"]) + timedelta(hours=LINK_EXPIRY_HOURS))
             return Issued("recent", note=(
                 f"No new email was sent: {refused} But the sign-in link in your newest email from {sender} "
@@ -496,9 +619,24 @@ def issue_code(*, scope, subject, display_name, email, email_subject, email_body
             f"[[at:{working['expires_at']}]]."
         ))
 
-    code = "".join(secrets.choice("0123456789") for _ in range(CODE_LENGTH))
     sent_at = now()
-    _store_code(scope, subject, display_name, email, code, sent_at, keep=working, from_instructor=False)
+    expires = None
+    if mode == "workos":
+        try:
+            made = workos_send_code(email)
+            code, expires = made["code"], parse_iso(made["expires_at"])
+        except Exception as exc:
+            db.record_error("EMAIL", f"Sending a sign-in code through WorkOS failed: {_why(exc)}")
+            if not settings.SMTP_HOST:
+                raise SendRefused("We couldn't send the email just now. Please try again in a minute.",
+                                  reason="failed") from exc
+            mode = "smtp"  # this once, the site's own mailbox sends it
+        else:
+            _remember_remote(made.get("user_id"), email)
+    if mode != "workos":
+        code = "".join(secrets.choice("0123456789") for _ in range(CODE_LENGTH))
+    _store_code(scope, subject, display_name, email, code, sent_at, keep=working, from_instructor=False,
+                expires=expires)
 
     # A fresh code gives this browser a fresh set of tries.
     db.run(
@@ -512,17 +650,18 @@ def issue_code(*, scope, subject, display_name, email, email_subject, email_body
         print(f"[dev mode, no email sent] sign-in code for {email}: {code}", flush=True)
         return Issued("sent", dev_code=code)
 
-    link = link_url(new_link(scope, subject, email)) if link_url else ""
-    try:
-        # replace(), not format(): a subject can contain a sheet title, and a
-        # title with braces in it would break str.format.
-        send_email(email, email_subject.replace("{code}", code),
-                   email_body.replace("{code}", code).replace("{link}", link), reply_to=reply_to)
-    except Exception as exc:
-        db.rollback()
-        db.record_error("EMAIL", f"Sending a sign-in code failed: {exc!r}")
-        raise SendRefused("We couldn't send the email just now. Please try again in a minute.",
-                          reason="failed") from exc
+    if mode == "smtp":
+        link = link_url(new_link(scope, subject, email)) if link_url else ""
+        try:
+            # replace(), not format(): a subject can contain a sheet title, and
+            # a title with braces in it would break str.format.
+            send_email(email, email_subject.replace("{code}", code),
+                       email_body.replace("{code}", code).replace("{link}", link), reply_to=reply_to)
+        except Exception as exc:
+            db.rollback()
+            db.record_error("EMAIL", f"Sending a sign-in code failed: {exc!r}")
+            raise SendRefused("We couldn't send the email just now. Please try again in a minute.",
+                              reason="failed") from exc
 
     log_email(email, kind)
     if on_sent:
@@ -531,7 +670,7 @@ def issue_code(*, scope, subject, display_name, email, email_subject, email_body
     return Issued("sent")
 
 
-def _store_code(scope, subject, display_name, email, code, sent_at, keep, from_instructor):
+def _store_code(scope, subject, display_name, email, code, sent_at, keep, from_instructor, expires=None):
     db.run(
         """
         INSERT INTO login_codes (scope, subject, display_name, email, code_hash, expires_at,
@@ -550,7 +689,7 @@ def _store_code(scope, subject, display_name, email, code, sent_at, keep, from_i
         """,
         scope=scope, subject=subject, name=display_name, email=email,
         hash=hash_code(scope, subject, code),
-        expires=iso(sent_at + timedelta(minutes=CODE_EXPIRY_MINUTES)),
+        expires=iso(expires or sent_at + timedelta(minutes=CODE_EXPIRY_MINUTES)),
         # The code before this one keeps working until it expires, so an
         # email that arrives late (or out of order) never makes a right
         # code fail.
@@ -674,6 +813,7 @@ def check_code(scope, subject, entered):
             scope=counter_scope, subject=who, client=browser,
         )
         db.commit()
+        forget_remote(record["email"])
         return Check("ok", record)
     if not current_ok:
         return Check("expired", record)

@@ -231,7 +231,7 @@ def _verify_page(email):
         expiry=signin.CODE_EXPIRY_MINUTES,
         code_length=signin.CODE_LENGTH,
         dev_code=session.get("dev_code"),
-        sender=settings.SMTP_FROM,
+        sender=signin.code_sender(),
     )
 
 
@@ -629,8 +629,9 @@ def duplicate_sheet(sid):
 # ---------------------------------------------------------------------------
 def _sign_in_line(sheet, counts):
     if counts["roster"] and counts["roster_with_email"] == counts["roster"]:
+        sender = signin.code_sender()
         line = (f"Type your name, then enter the 6-digit code emailed to your school address"
-                f"{f' (it comes from {settings.SMTP_FROM})' if settings.SMTP_FROM else ''}.")
+                f"{f' (it comes from {sender})' if sender else ''}.")
         if sheet["allow_unlisted"]:
             line += " If your name isn't on the list, you can still sign up: you'll choose a PIN (a number only you know)."
         return line
@@ -815,7 +816,7 @@ STUCK_REASONS = {
 def _stuck(sid, roster_rows, locked):
     """Students on the list who couldn't get a sign-in email today and
     haven't signed in since, for the sheet page — or None."""
-    refusals = signin.refusals_today(sid) if signin.email_mode() == "smtp" else {}
+    refusals = signin.refusals_today(sid) if signin.codes_live() else {}
     listed = {r["name_key"]: r for r in roster_rows}
     links = signin.instructor_links(sid) if refusals else {}
     people = [
@@ -1005,7 +1006,7 @@ def sheet(sid):
         pin_waiting=pin_waiting,
         typo_domains=_domain_typos(roster_rows),
         manual_moves=manual_moves,
-        email_room=signin.daily_room("student") if signin.email_mode() == "smtp" else None,
+        email_room=signin.daily_room("student") if signin.codes_live() else None,
         email_trouble=signin.sending_trouble() if sheet["bidding_open"] or published else "",
         edit_form=_pop_form("edit_form", sid),
         steps=steps,
@@ -1023,7 +1024,7 @@ def sheet(sid):
                      "theme": sheet["theme"] or settings.DEFAULT_THEME, "font": sheet["font"] or "mixed"},
         add_form=add_form,
         download_url=download_url,
-        email_on=signin.email_mode() == "smtp",
+        email_on=signin.smtp_ready(),
         test_email=current_instructor()["email"],
     )
 
@@ -1695,7 +1696,7 @@ def email_links(sid):
     me = current_instructor()["email"]
     mail_default = compose.service_for(me)  # before any writes: it may save on its own connection
     roster_rows = [r for r in sheets.get_roster(sheet["id"]) if not r["is_test"]]
-    stuck = signin.refusals_today(sheet["id"]) if signin.email_mode() == "smtp" else {}
+    stuck = signin.refusals_today(sheet["id"]) if signin.codes_live() else {}
     ranked = {s["name_key"] for s in sheets.get_submissions(sheet["id"])}
     ready = request.method == "POST"
     people = []
@@ -1774,7 +1775,7 @@ def link_student(sid):
 # ---------------------------------------------------------------------------
 def email_backup(sheet, reason):
     """Email the instructor a backup of their sheet. Returns (sent, message)."""
-    if signin.email_mode() != "smtp":
+    if not signin.smtp_ready():
         return False, "Email isn't set up here, so use “Download a backup” instead."
     if signin.emails_sent_today() >= settings.EMAIL_DAILY_LIMIT:
         return False, "The site has used up today's emails, so no backup was emailed — use “Download a backup”."
@@ -1821,7 +1822,7 @@ def _close(sheet):
 
 
 def _after_close_backup(sheet):
-    if signin.email_mode() != "smtp":
+    if not signin.smtp_ready():
         return
     if _backup_is_current(sheet):
         flash("We didn't email another backup — one went out a few minutes ago with the same rankings.", "info")

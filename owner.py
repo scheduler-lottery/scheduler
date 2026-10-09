@@ -47,7 +47,14 @@ def index():
     }
     checks = [
         ("Database", "Postgres" if db.is_postgres() else "SQLite (local file)", db.is_postgres() or not settings.IS_VERCEL),
-        ("Sign-in email", {"smtp": f"Sending from {settings.SMTP_FROM}", "dev": "Local dev mode (codes shown on screen)", "missing": "Not set up — nobody can sign in"}[signin.email_mode()], signin.email_mode() != "missing"),
+        ("Sign-in email", {
+            "workos": f"WorkOS sends the codes (from {settings.WORKOS_SENDER})"
+                      + (f"; {settings.SMTP_FROM} is its fallback and sends backups" if settings.SMTP_HOST else
+                         "; with no mailbox set up, backups and usage alerts aren't emailed"),
+            "smtp": f"Sending from {settings.SMTP_FROM}",
+            "dev": "Local dev mode (codes shown on screen)",
+            "missing": "Not set up — nobody can sign in",
+        }[signin.email_mode()], signin.email_mode() != "missing"),
         ("Daily job", "Set up — once a day it saves a copy of every changed sheet and keeps the database awake" if settings.CRON_SECRET else "CRON_SECRET isn't set, so daily backups and the keep-awake ping won't run", bool(settings.CRON_SECRET)),
         ("Sign-in key", "Set — it protects everyone's sign-in" if settings.SECRET_KEY else "Not set — fine on your own computer, but required on Vercel (see the README)", bool(settings.SECRET_KEY) or not settings.IS_VERCEL),
     ]

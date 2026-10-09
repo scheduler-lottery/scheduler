@@ -43,9 +43,18 @@ SECRET_KEY = _env("SECRET_KEY")
 DATABASE_URL = _env("DATABASE_URL")
 SQLITE_PATH = os.path.join(BASE_DIR, "local.db")
 
-# Outgoing mail for sign-in codes. With a Gmail account: smtp.gmail.com,
-# port 587, the Gmail address, and an app password. Leave SMTP_HOST unset
-# locally and codes are shown on screen instead of emailed.
+# Sign-in codes are emailed by WorkOS (its free "Magic Auth" service) when
+# WORKOS_API_KEY is set: the production API key from the WorkOS dashboard
+# (it starts "sk_live_"). Its emails come from WORKOS_SENDER.
+WORKOS_API_KEY = _env("WORKOS_API_KEY")
+WORKOS_API_URL = _env("WORKOS_API_URL", "https://api.workos.com")
+WORKOS_SENDER = _env("WORKOS_SENDER", "access@workos-mail.com")
+
+# Outgoing mail through an ordinary mailbox (such as Gmail: smtp.gmail.com,
+# port 587, the address, and an app password). It sends sign-in codes only
+# when WorkOS isn't set up (or as its fallback), plus backups and the
+# owner's usage alerts. With neither set up, locally, codes are shown on
+# screen instead of emailed.
 SMTP_HOST = _env("SMTP_HOST")
 SMTP_PORT = _int("SMTP_PORT", 587)
 SMTP_USER = _env("SMTP_USER")
@@ -65,8 +74,9 @@ INSTRUCTOR_EMAIL_DOMAINS = [
 ]
 
 # Sign-in emails allowed per rolling 24 hours across the whole site. Gmail
-# starts refusing somewhere between 100 and 500 a day, so stay under that.
-EMAIL_DAILY_LIMIT = _int("EMAIL_DAILY_LIMIT", 90)
+# starts refusing somewhere between 100 and 500 a day, so with Gmail stay
+# under that; WorkOS has no such low ceiling.
+EMAIL_DAILY_LIMIT = _int("EMAIL_DAILY_LIMIT", 1000 if WORKOS_API_KEY else 90)
 
 # Vercel sends "Authorization: Bearer <CRON_SECRET>" with its cron requests.
 CRON_SECRET = _env("CRON_SECRET")

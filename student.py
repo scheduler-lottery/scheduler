@@ -464,7 +464,8 @@ def verify(sid):
         link_hours=signin.LINK_EXPIRY_HOURS,
         code_length=signin.CODE_LENGTH,
         dev_code=session.get("dev_code"),
-        sender=settings.SMTP_FROM,
+        sender=signin.code_sender(),
+        links=signin.codes_have_links(),
         ask=ask,
     )
 
