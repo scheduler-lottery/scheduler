@@ -17,16 +17,24 @@
 @font-face { font-family: "YaleNew"; src: local("YaleNew Bold Italic"), local("YaleNew-BoldItalic"), url("/fonts/yalenew-bolditalic.woff2") format("woff2"); font-weight: 700; font-style: italic; font-display: swap; }
 @font-face { font-family: "Old Style 7"; src: local("Old Style 7 Std Roman"), local("OldStyle7Std"), url("/fonts/oldstyle7-roman.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
 
+/* "Scheduler Text" is Old Style 7, which has only a roman, borrowing
+   YaleNew's real italic and bold rather than letting browsers fake them. */
+@font-face { font-family: "Scheduler Text"; src: local("Old Style 7 Std Roman"), local("OldStyle7Std"), url("/fonts/oldstyle7-roman.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Scheduler Text"; src: local("YaleNew Italic"), local("YaleNew-Italic"), url("/fonts/yalenew-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "Scheduler Text"; src: local("YaleNew Bold"), local("YaleNew-Bold"), url("/fonts/yalenew-bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Scheduler Text"; src: local("YaleNew Bold Italic"), local("YaleNew-BoldItalic"), url("/fonts/yalenew-bolditalic.woff2") format("woff2"); font-weight: 700; font-style: italic; font-display: swap; }
+
 :root {
-  /* Fonts: Roslindale Display Condensed for headings, YaleNew for reading
-     text (with its italics), Old Style 7 for subtitles and lead lines, and
-     Inter for controls (buttons, fields, tags). The Appearance window can
-     switch to all sans-serif, all serif, or an easy-to-read face (data-font,
-     below). Free look-alikes stand in until the owner uploads the files. */
-  --font-text: "YaleNew", "Crimson Pro", Georgia, "Times New Roman", serif;
-  --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Fonts: Roslindale (Display Condensed) for big headings, YaleNew for
+     small text, and Old Style 7 for everything else. The Appearance window
+     can switch to one face throughout (data-font, below). Free look-alikes
+     stand in until the owner uploads the files on /owner. */
   --font-display: "Roslindale Display Condensed", "Instrument Serif", "Fraunces", Georgia, serif;
-  --font-accent: "Old Style 7", "Old Style 7 Std", "Crimson Pro", Georgia, serif;
+  --font-text: "Scheduler Text", "Old Style 7", "Old Style 7 Std", "Crimson Pro", Georgia, serif;
+  --font-small: "YaleNew", "Crimson Pro", Georgia, "Times New Roman", serif;
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-ui: var(--font-text);
+  --font-accent: var(--font-text);
   --font-body: var(--font-text);
   --display-weight: 400;
   --on-accent: #fff;
@@ -137,10 +145,9 @@ body {
 .btn, .status-pill, .count-number {
   font-family: var(--font-body);
 }
-h1, h2, h3, .card-heading, .brand-name, .modal-title {
+h1, h2, .card-heading, .brand-name, .modal-title {
   font-family: var(--font-display);
 }
-.subtitle, .lead-line { font-family: var(--font-accent); }
 
 body,
 .card,
@@ -1811,24 +1818,31 @@ h1 { font-size: 2.1rem; line-height: 1.12; }
 h2, .card-heading { font-size: 1.5rem; line-height: 1.2; }
 .modal-title { font-size: 1.45rem; }
 .brand-name { font-size: 1.3rem; }
-.btn, .status-pill, .count-number, input, select, textarea, button, .tag, .chip, .eyebrow,
-.flash, .size-readout, .appearance-group > legend { font-family: var(--font-ui); }
-h3 { font-weight: var(--display-weight); font-size: 1.2rem; }
+.btn, .count-number, input, select, textarea, button, .flash, h3 { font-family: var(--font-text); }
+h3 { font-weight: 700; font-size: 1.15rem; }
+/* Small text: YaleNew. */
+.mini-hint, .hint, .field-help, .check-hint, .eyebrow, .tag, .chip, .status-pill, .muted, small,
+.site-footer, .admin-table, .privacy-line, .dropzone-sub, .count-inline, .day-chip, .cal-head,
+.cal-summary, .size-readout, .appearance-group > legend, .choice-name, .size-preset,
+.btn-small, .link-muted { font-family: var(--font-small); }
 
 [data-font="sans"] {
-  --font-text: var(--font-ui); --font-display: var(--font-ui); --font-accent: var(--font-ui); --display-weight: 650;
+  --font-text: var(--font-sans); --font-small: var(--font-sans); --font-display: var(--font-sans);
+  --display-weight: 650;
 }
-[data-font="serif"] { --font-ui: var(--font-text); --font-accent: var(--font-text); }
+[data-font="serif"] {
+  --font-text: "YaleNew", "Crimson Pro", Georgia, serif; --font-small: var(--font-text);
+  --font-display: var(--font-text); --display-weight: 700;
+}
 [data-font="readable"] {
-  --font-ui: "Atkinson Hyperlegible", Verdana, Tahoma, sans-serif;
-  --font-text: var(--font-ui);
-  --font-display: var(--font-ui);
-  --font-accent: var(--font-ui);
+  --font-text: "Atkinson Hyperlegible", Verdana, Tahoma, sans-serif;
+  --font-small: var(--font-text);
+  --font-display: var(--font-text);
   --display-weight: 700;
 }
-[data-font="sans"] h1, [data-font="readable"] h1 { font-size: 1.75rem; }
-[data-font="sans"] h2, [data-font="sans"] .card-heading,
-[data-font="readable"] h2, [data-font="readable"] .card-heading { font-size: 1.2rem; }
+[data-font="sans"] h1, [data-font="readable"] h1, [data-font="serif"] h1 { font-size: 1.75rem; }
+[data-font="sans"] h2, [data-font="sans"] .card-heading, [data-font="serif"] h2, [data-font="serif"] .card-heading,
+[data-font="readable"] h2, [data-font="readable"] .card-heading { font-size: 1.25rem; }
 
 /* =============================================================
    Themes, chosen in Display settings. Light is the standard; each
