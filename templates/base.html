@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="light"{% if nav_sheet and (nav_sheet.theme or nav_sheet.font) %} data-course-theme="{{ nav_sheet.theme or '' }}" data-course-font="{{ nav_sheet.font or '' }}"{% endif %}>
 <head>
 <meta charset="utf-8">
 <script src="{{ url_for('static', filename='theme-init.js') }}"></script>
@@ -87,36 +87,12 @@
         </svg>
       </a>
 
-      <div class="popover-wrap">
-        <button type="button" class="icon-dock-btn" data-popover-target="display-settings" aria-haspopup="dialog" aria-expanded="false" aria-label="Display settings: theme, text size and font" title="Display settings">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <path d="M4 7h10M18 7h2M4 17h4M12 17h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-            <circle cx="16" cy="7" r="2.2" stroke="currentColor" stroke-width="1.7"/>
-            <circle cx="10" cy="17" r="2.2" stroke="currentColor" stroke-width="1.7"/>
-          </svg>
-        </button>
-        <div id="display-settings" class="popover-dropdown settings-panel" role="dialog" aria-label="Display settings">
-          <p class="settings-label">Theme</p>
-          <div class="theme-grid" role="radiogroup" aria-label="Theme">
-            {% for value, label in [("light", "Light"), ("paper", "Paper"), ("solarized-light", "Solarized light"), ("contrast-light", "High contrast"), ("dark", "Dark"), ("black", "Darkest"), ("solarized-dark", "Solarized dark"), ("contrast-dark", "High contrast dark")] %}
-            <button type="button" class="theme-choice" role="radio" aria-checked="false" data-theme-choice="{{ value }}"><span class="swatch swatch-{{ value }}" aria-hidden="true"></span>{{ label }}</button>
-            {% endfor %}
-          </div>
-          <p class="settings-label">Text size <span class="settings-value" data-scale-value>100%</span></p>
-          <div class="size-row">
-            <button type="button" class="size-step" data-scale-step="-10" aria-label="Smaller text">A−</button>
-            <input type="range" min="50" max="200" step="5" value="100" data-scale-range aria-label="Text size, in percent">
-            <button type="button" class="size-step size-step-big" data-scale-step="10" aria-label="Larger text">A+</button>
-          </div>
-          <p class="settings-label">Font</p>
-          <div class="font-grid" role="radiogroup" aria-label="Font">
-            {% for value, label in [("mixed", "Standard"), ("sans", "All sans-serif"), ("serif", "All serif"), ("readable", "Easy to read")] %}
-            <button type="button" class="font-choice font-choice-{{ value }}" role="radio" aria-checked="false" data-font-choice="{{ value }}">{{ label }}</button>
-            {% endfor %}
-          </div>
-          <button type="button" class="btn-link settings-reset" data-settings-reset>Reset to the standard look</button>
-        </div>
-      </div>
+      <button type="button" class="icon-dock-btn" data-popover-target="appearance" aria-haspopup="dialog" aria-label="Appearance: theme, text size and font" title="Appearance">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <circle cx="12" cy="12" r="8.2" stroke="currentColor" stroke-width="1.7"/>
+          <path d="M12 3.8a8.2 8.2 0 0 1 0 16.4z" fill="currentColor"/>
+        </svg>
+      </button>
     </nav>
   </div>
 </header>
@@ -160,6 +136,71 @@
   {% endif %}
 </footer>
 
+
+{% set theme_choices = [("light", "Light", "light"), ("paper", "Paper", "light"), ("solarized-light", "Solarized", "light"), ("dark", "Dark", "dark"), ("black", "Darkest", "dark"), ("solarized-dark", "Solarized dark", "dark"), ("contrast-light", "High contrast", "contrast"), ("contrast-dark", "High contrast dark", "contrast")] %}
+<div id="appearance" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="appearance-title"{% if course_look %} data-course-look="{{ course_look.url }}"{% endif %}{% if nav_sheet and not course_look %} data-in-class="1"{% endif %}>
+  <div class="modal-dialog appearance-dialog">
+    <button type="button" class="modal-close" data-popover-close aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+    <h2 id="appearance-title" class="modal-title">Appearance</h2>
+    {% if course_look %}
+    <p class="appearance-note">The theme and font you pick here also become the look for everyone in “{{ course_look.title }}”. Text size is always each person's own.</p>
+    {% elif nav_sheet and (nav_sheet.theme or nav_sheet.font) %}
+    <p class="appearance-note">Your instructor picked this class's look. Anything you change here applies just to you.</p>
+    {% endif %}
+
+    <fieldset class="appearance-group">
+      <legend>Theme</legend>
+      <div class="theme-cards">
+        {% for value, label, group in theme_choices %}
+        <label class="theme-card">
+          <input type="radio" name="appearance-theme" value="{{ value }}" class="choice-input">
+          <span class="theme-preview preview-{{ value }}" aria-hidden="true">
+            <span class="tp-bar"></span>
+            <span class="tp-card"><span class="tp-line"></span><span class="tp-line tp-short"></span><span class="tp-pill"></span></span>
+            <span class="tp-check"></span>
+          </span>
+          <span class="choice-name">{{ label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <fieldset class="appearance-group">
+      <legend>Text size <output class="size-readout" data-size-readout>100%</output></legend>
+      <div class="size-control">
+        <button type="button" class="size-btn" data-size-step="-10" aria-label="Smaller text"><span aria-hidden="true" class="size-glyph size-glyph-small">A</span></button>
+        <input type="range" min="50" max="200" step="5" value="100" class="size-range" data-size-range aria-label="Text size, in percent">
+        <button type="button" class="size-btn" data-size-step="10" aria-label="Larger text"><span aria-hidden="true" class="size-glyph size-glyph-big">A</span></button>
+      </div>
+      <div class="size-presets" role="group" aria-label="Quick sizes">
+        {% for pct, name in [(75, "Small"), (100, "Standard"), (125, "Large"), (150, "Larger"), (200, "Largest")] %}
+        <button type="button" class="size-preset" data-size-preset="{{ pct }}" aria-pressed="false">{{ name }}</button>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <fieldset class="appearance-group">
+      <legend>Font</legend>
+      <div class="font-cards">
+        {% for value, label in [("mixed", "Standard"), ("sans", "Sans-serif"), ("serif", "Serif"), ("readable", "Easy to read")] %}
+        <label class="font-card">
+          <input type="radio" name="appearance-font" value="{{ value }}" class="choice-input">
+          <span class="font-sample font-sample-{{ value }}" aria-hidden="true">Aa</span>
+          <span class="choice-name">{{ label }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <div class="appearance-foot">
+      <button type="button" class="btn btn-ghost btn-small" data-appearance-reset>{% if nav_sheet and not course_look and (nav_sheet.theme or nav_sheet.font) %}Use the class's look{% else %}Reset to the standard look{% endif %}</button>
+      <span class="appearance-status" data-appearance-status aria-live="polite"></span>
+      <button type="button" class="btn btn-primary" data-popover-close>Done</button>
+    </div>
+  </div>
+</div>
 <script src="{{ url_for('static', filename='theme.js') }}"></script>
 <script src="{{ url_for('static', filename='popover.js') }}"></script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>

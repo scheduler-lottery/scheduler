@@ -7,15 +7,29 @@ being abused. It never lists instructors, sheets, or students, and there's
 no route anywhere that lets the owner open someone else's sheet.
 """
 
+import base64
+
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 
 import db
 import settings
 import signin
 from auth import owner_required
-from util import valid_email
+from util import iso, valid_email
 
 bp = Blueprint("owner", __name__, url_prefix="/owner")
+
+# The web fonts style.css asks for (as /fonts/<name>). Each falls back to a
+# free look-alike until it's uploaded here.
+SITE_FONTS = (
+    "roslindale-display-condensed-regular.woff2",
+    "roslindale-display-semibold.woff2",
+    "roslindale-text-regular.woff2",
+    "roslindale-text-italic.woff2",
+    "roslindale-text-semibold.woff2",
+    "roslindale-text-bold.woff2",
+)
+MAX_FONT_BYTES = 600 * 1024
 
 
 @bp.route("/")
@@ -38,10 +52,43 @@ def index():
     errors = db.rows(
         "SELECT created_at, method, path, error FROM error_log ORDER BY created_at DESC LIMIT 25"
     )
+    uploaded = {r["name"]: r["updated_at"] for r in db.rows("SELECT name, updated_at FROM site_assets")}
     return render_template(
         "owner.html", stats=stats, checks=checks, errors=errors,
         email_limit=settings.EMAIL_DAILY_LIMIT, domains=settings.INSTRUCTOR_EMAIL_DOMAINS,
+        fonts=[(name, uploaded.get(name)) for name in SITE_FONTS],
     )
+
+
+@bp.route("/fonts", methods=["POST"])
+@owner_required
+def upload_fonts():
+    """Web font files for the site, uploaded here so they never sit in the
+    public code. Only the names style.css asks for are accepted."""
+    saved, refused = [], []
+    for upload in request.files.getlist("fonts"):
+        name = (upload.filename or "").rsplit("/", 1)[-1].strip().lower()
+        data = upload.read(MAX_FONT_BYTES + 1)
+        if name not in SITE_FONTS:
+            refused.append(f"{name or 'a file'} (not one of the expected names)")
+        elif len(data) > MAX_FONT_BYTES or not data.startswith(b"wOF2"):
+            refused.append(f"{name} (not a .woff2 font)")
+        else:
+            db.run(
+                "INSERT INTO site_assets (name, content_type, data, updated_at) VALUES (:n, 'font/woff2', :d, :at) "
+                "ON CONFLICT (name) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at",
+                n=name, d=base64.b64encode(data).decode("ascii"), at=iso(),
+            )
+            saved.append(name)
+    db.commit()
+    if saved:
+        flash(f"Uploaded {len(saved)} font file{'s' if len(saved) != 1 else ''}. Pages use them as soon as they "
+              "reload.", "success")
+    if refused:
+        flash("Skipped " + "; ".join(refused[:6]) + ".", "error")
+    if not saved and not refused:
+        flash("Choose the .woff2 font files to upload.", "error")
+    return redirect(url_for("owner.index") + "#fonts")
 
 
 @bp.route("/account", methods=["POST"])

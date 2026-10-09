@@ -7,6 +7,16 @@
    shift per-theme and are used for links, rings, and tinted text.
    ============================================================= */
 
+/* Roslindale: the reader's installed copy if they have one, otherwise the
+   file the site's owner uploaded on /owner (served at /fonts/...). Until
+   it's uploaded, the next font in each stack stands in. */
+@font-face { font-family: "Roslindale Display Condensed"; src: local("Roslindale Display Condensed Regular"), local("Roslindale-DisplayCondensedRegular"), url("/fonts/roslindale-display-condensed-regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Roslindale Display"; src: local("Roslindale Display SemiBold"), local("Roslindale-DisplaySemiBold"), url("/fonts/roslindale-display-semibold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "Roslindale Text"; src: local("Roslindale Text Regular"), local("Roslindale-TextRegular"), url("/fonts/roslindale-text-regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Roslindale Text"; src: local("Roslindale Text Italic"), local("Roslindale-TextItalic"), url("/fonts/roslindale-text-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "Roslindale Text"; src: local("Roslindale Text SemiBold"), local("Roslindale-TextSemiBold"), url("/fonts/roslindale-text-semibold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "Roslindale Text"; src: local("Roslindale Text Bold"), local("Roslindale-TextBold"), url("/fonts/roslindale-text-bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+
 :root {
   /* Fonts, paired the way whereby.com does: Roslindale Display Condensed for
      headlines, Roslindale Text for a few accents, and Inter for everything
@@ -1907,42 +1917,121 @@ h2, .card-heading { font-size: 1.5rem; line-height: 1.2; }
 [data-theme^="contrast"] .modal-overlay { background: rgba(0, 0, 0, 0.6); backdrop-filter: none; }
 
 /* =============================================================
-   The Display settings menu
+   The Appearance window: theme cards, a size slider, font cards
    ============================================================= */
-.settings-panel { width: min(330px, calc(100vw - 32px)); padding: 14px; }
-.settings-label {
-  margin: 4px 2px 8px; font-size: 0.78rem; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.06em; color: var(--muted); display: flex; justify-content: space-between;
+.appearance-dialog { max-width: 640px; max-height: 90vh; overflow-y: auto; padding: 28px; }
+.appearance-note {
+  margin: -2px 0 14px; padding: 10px 12px; border-radius: var(--radius-sm);
+  background: var(--accent-soft); color: var(--accent-strong); font-size: 0.9rem; line-height: 1.45;
 }
-.settings-value { text-transform: none; letter-spacing: 0; color: var(--text); }
-.theme-grid, .font-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 14px; }
-.theme-choice, .font-choice {
-  display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px;
-  border: 1px solid var(--border); background: var(--card-bg); color: var(--text);
-  font: inherit; font-size: 0.85rem; text-align: left; cursor: pointer;
+.appearance-group { border: 0; margin: 0 0 22px; padding: 0; min-width: 0; }
+.appearance-group > legend {
+  display: flex; width: 100%; justify-content: space-between; align-items: baseline;
+  padding: 0; margin-bottom: 10px; font-size: 0.78rem; font-weight: 600;
+  letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted);
 }
-.theme-choice:hover, .font-choice:hover { border-color: var(--accent); }
-.theme-choice[aria-checked="true"], .font-choice[aria-checked="true"] {
-  border: 2px solid var(--accent); padding: 7px 9px; font-weight: 600;
+.choice-input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.choice-name { display: block; margin-top: 7px; font-size: 0.84rem; color: var(--text); text-align: center; }
+.choice-input:checked ~ .choice-name { font-weight: 600; }
+
+/* Theme cards: each a little picture of that theme. */
+.theme-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.theme-card { cursor: pointer; display: block; }
+.theme-preview {
+  position: relative; display: block; height: 76px; padding: 18px 10px 10px; border-radius: 12px;
+  background: var(--p-bg); border: 1px solid var(--p-border); overflow: hidden;
+  box-shadow: 0 1px 2px rgba(17, 17, 26, 0.06);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, outline-color 0.18s ease;
+  outline: 2px solid transparent; outline-offset: 3px;
 }
-.swatch { width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0, 0, 0, 0.18); }
-.swatch-light { background: linear-gradient(135deg, #ffffff 50%, #4638d1 50%); }
-.swatch-paper { background: linear-gradient(135deg, #faf8f3 50%, #8a4b16 50%); }
-.swatch-solarized-light { background: linear-gradient(135deg, #fdf6e3 50%, #268bd2 50%); }
-.swatch-contrast-light { background: linear-gradient(135deg, #ffffff 50%, #000000 50%); }
-.swatch-dark { background: linear-gradient(135deg, #0d0f1e 50%, #9aa3fb 50%); }
-.swatch-black { background: linear-gradient(135deg, #000000 50%, #9fb0ff 50%); }
-.swatch-solarized-dark { background: linear-gradient(135deg, #002b36 50%, #268bd2 50%); }
-.swatch-contrast-dark { background: linear-gradient(135deg, #000000 50%, #ffe600 50%); }
-.font-choice-mixed { font-family: "Roslindale Display Condensed", "Instrument Serif", Georgia, serif; font-size: 1rem; }
-.font-choice-sans { font-family: "Inter", system-ui, sans-serif; }
-.font-choice-serif { font-family: "Roslindale Text", "Fraunces", Georgia, serif; }
-.font-choice-readable { font-family: "Atkinson Hyperlegible", Verdana, sans-serif; }
-.size-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
-.size-row input[type="range"] { flex: 1; accent-color: var(--accent); }
-.size-step {
-  min-width: 38px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border);
-  background: var(--card-bg); color: var(--text); font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+.theme-card:hover .theme-preview { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(17, 17, 26, 0.12); }
+.choice-input:checked + .theme-preview { outline-color: var(--accent); }
+.choice-input:focus-visible + .theme-preview,
+.choice-input:focus-visible + .font-sample { outline: 3px solid var(--accent); outline-offset: 3px; }
+.tp-bar { position: absolute; inset: 0 0 auto 0; height: 10px; background: var(--p-card); border-bottom: 1px solid var(--p-border); }
+.tp-card {
+  display: block; height: 100%; padding: 7px 8px; border-radius: 7px;
+  background: var(--p-card); border: 1px solid var(--p-border);
 }
-.size-step-big { font-size: 1rem; }
-.settings-reset { font-size: 0.85rem; }
+.tp-line { display: block; height: 5px; width: 72%; margin-bottom: 5px; border-radius: 3px; background: var(--p-text); opacity: 0.85; }
+.tp-line.tp-short { width: 46%; opacity: 0.4; }
+.tp-pill { display: block; height: 9px; width: 34px; border-radius: 5px; background: var(--p-accent); }
+.tp-check {
+  position: absolute; top: 6px; right: 6px; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--accent); opacity: 0; transform: scale(0.6); transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.tp-check::after {
+  content: ""; position: absolute; left: 6px; top: 3px; width: 4px; height: 8px;
+  border: solid var(--on-accent); border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.choice-input:checked + .theme-preview .tp-check { opacity: 1; transform: scale(1); }
+.preview-light { --p-bg: #ffffff; --p-card: #ffffff; --p-border: #e3e3ea; --p-text: #16161a; --p-accent: #4f46e5; }
+.preview-paper { --p-bg: #f6f2e9; --p-card: #fffdf8; --p-border: #e3dbc9; --p-text: #2b2924; --p-accent: #9a5520; }
+.preview-solarized-light { --p-bg: #eee8d5; --p-card: #fdf6e3; --p-border: #ddd5bd; --p-text: #586e75; --p-accent: #268bd2; }
+.preview-dark { --p-bg: #0d0f1e; --p-card: #161930; --p-border: #2a2e56; --p-text: #edeffb; --p-accent: #9aa3fb; }
+.preview-black { --p-bg: #000000; --p-card: #0b0b0c; --p-border: #26262b; --p-text: #ececec; --p-accent: #9fb0ff; }
+.preview-solarized-dark { --p-bg: #002b36; --p-card: #073642; --p-border: #0f4a58; --p-text: #93a1a1; --p-accent: #268bd2; }
+.preview-contrast-light { --p-bg: #ffffff; --p-card: #ffffff; --p-border: #000000; --p-text: #000000; --p-accent: #0000c8; }
+.preview-contrast-dark { --p-bg: #000000; --p-card: #000000; --p-border: #ffffff; --p-text: #ffffff; --p-accent: #ffe600; }
+
+/* Text size: a slider that fills as it moves, plus one-tap sizes. */
+.size-readout { font-size: 0.95rem; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--text); }
+.size-control { display: flex; align-items: center; gap: 12px; }
+.size-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex-shrink: 0;
+  border-radius: 50%; border: 1px solid var(--border); background: var(--card-bg); color: var(--text);
+  cursor: pointer; transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+.size-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
+.size-btn:active { transform: scale(0.94); }
+.size-glyph { font-family: var(--font-ui); font-weight: 600; line-height: 1; }
+.size-glyph-small { font-size: 13px; }
+.size-glyph-big { font-size: 20px; }
+.size-range {
+  -webkit-appearance: none; appearance: none; flex: 1; height: 8px; margin: 0; border-radius: 999px; cursor: pointer;
+  background: linear-gradient(to right, var(--accent) 0, var(--accent) var(--fill, 33%), var(--surface-strong) var(--fill, 33%));
+}
+.size-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 24px; height: 24px; border-radius: 50%;
+  background: #ffffff; border: 2px solid var(--accent); box-shadow: 0 2px 8px rgba(17, 17, 26, 0.22);
+  transition: transform 0.15s ease;
+}
+.size-range:hover::-webkit-slider-thumb, .size-range:active::-webkit-slider-thumb { transform: scale(1.12); }
+.size-range::-moz-range-thumb {
+  width: 22px; height: 22px; border-radius: 50%; background: #ffffff; border: 2px solid var(--accent);
+  box-shadow: 0 2px 8px rgba(17, 17, 26, 0.22);
+}
+.size-range::-moz-range-track { background: transparent; }
+.size-range:focus-visible { outline: 3px solid var(--accent); outline-offset: 6px; }
+.size-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.size-preset {
+  padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--card-bg);
+  color: var(--text); font: inherit; font-size: 0.82rem; cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.size-preset:hover { border-color: var(--accent); }
+.size-preset[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+/* Font cards: "Aa" in each face. */
+.font-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.font-card { cursor: pointer; display: block; }
+.font-sample {
+  display: flex; align-items: center; justify-content: center; height: 64px; border-radius: 12px;
+  border: 1px solid var(--border); background: var(--card-bg); color: var(--text); font-size: 1.7rem;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, outline-color 0.18s ease;
+  outline: 2px solid transparent; outline-offset: 3px;
+}
+.font-card:hover .font-sample { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(17, 17, 26, 0.1); }
+.choice-input:checked + .font-sample { outline-color: var(--accent); }
+.font-sample-mixed { font-family: "Roslindale Display Condensed", "Instrument Serif", Georgia, serif; font-size: 2rem; }
+.font-sample-sans { font-family: "Inter", system-ui, sans-serif; font-weight: 600; }
+.font-sample-serif { font-family: "Roslindale Text", "Fraunces", Georgia, serif; }
+.font-sample-readable { font-family: "Atkinson Hyperlegible", Verdana, sans-serif; font-weight: 700; }
+
+.appearance-foot { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--border); padding-top: 16px; }
+.appearance-status { flex: 1; font-size: 0.85rem; color: var(--muted); }
+
+@media (max-width: 560px) {
+  .appearance-dialog { padding: 20px; }
+  .theme-cards, .font-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

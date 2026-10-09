@@ -1175,14 +1175,14 @@ def copy_sheet(sheet, owner_id):
     db.run(
         """
         INSERT INTO sheets (id, owner_id, title, note, capacity_per_day, algorithm, bidding_open,
-            allow_unlisted, show_preview, include_unranked, lottery_seed, created_at, updated_at)
+            allow_unlisted, show_preview, include_unranked, lottery_seed, theme, font, created_at, updated_at)
         VALUES (:sid, :owner, :title, :note, :capacity, :algorithm, 1, :unlisted, :preview, :unranked,
-            :seed, :at, :at)
+            :seed, :theme, :font, :at, :at)
         """,
         sid=sid, owner=owner_id, title=(sheet["title"] + " (copy)")[:100], note=sheet["note"],
         capacity=sheet["capacity_per_day"], algorithm=sheet["algorithm"],
         unlisted=sheet["allow_unlisted"], preview=sheet["show_preview"],
-        unranked=sheet["include_unranked"], seed=new_lottery_seed(), at=at,
+        unranked=sheet["include_unranked"], seed=new_lottery_seed(), theme=sheet["theme"], font=sheet["font"], at=at,
     )
     save_days(sid, [("", d["label"], d["date"]) for d in get_days(sheet["id"])])
     return sid

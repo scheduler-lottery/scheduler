@@ -19,3 +19,9 @@ __pycache__/
 
 # Editor/assistant settings
 .claude/
+
+# Licensed web fonts are uploaded on /owner, never committed
+roslindale-web-fonts/
+*.woff2
+*.ttf
+*.otf

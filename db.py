@@ -21,7 +21,7 @@ from sqlalchemy import create_engine, event, text
 import settings
 from util import iso, new_id
 
-SCHEMA_VERSION = "6"
+SCHEMA_VERSION = "8"
 SCHEMA_PATH = os.path.join(settings.BASE_DIR, "schema.sql")
 
 # Every table the app owns. On Postgres each gets row-level security turned
@@ -30,7 +30,7 @@ SCHEMA_PATH = os.path.join(settings.BASE_DIR, "schema.sql")
 TABLES = [
     "app_state", "instructors", "sheets", "sheet_days", "roster", "submissions",
     "assignments", "name_pins", "student_signouts", "auth_failures", "login_codes",
-    "login_links", "email_log", "snapshots", "pending_uploads", "error_log",
+    "login_links", "email_log", "snapshots", "pending_uploads", "error_log", "site_assets",
 ]
 
 # Columns added after a table first existed. CREATE TABLE IF NOT EXISTS
@@ -54,6 +54,8 @@ MIGRATIONS = [
     ("sheet_days", "day_date", "TEXT"),
     ("sheets", "short_url", "TEXT"),
     ("sheets", "archived_at", "TEXT"),
+    ("sheets", "theme", "TEXT"),
+    ("sheets", "font", "TEXT"),
 ]
 
 _engine = None

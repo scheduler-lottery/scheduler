@@ -1,7 +1,7 @@
 // Loaded in <head>, before the page paints, so there's no flash of the wrong
 // theme or text size. (A separate file rather than an inline script, so the
 // site's Content-Security-Policy can forbid inline scripts entirely.)
-// The choices are made in the Display settings menu (theme.js).
+// The choices are made in the Appearance window (theme.js).
 (function () {
   var root = document.documentElement;
   var THEMES = {
@@ -9,13 +9,17 @@
     dark: "dark", black: "dark", "solarized-dark": "dark", "contrast-dark": "dark",
   };
   var FONTS = { mixed: 1, sans: 1, serif: 1, readable: 1 };
-  var theme = "light", font = "mixed", scale = 100;
+  // A class's pages carry the look its instructor chose; a reader's own
+  // choice, if they've made one, wins (text size is always their own).
+  var theme = root.getAttribute("data-course-theme") || "light";
+  var font = root.getAttribute("data-course-font") || "mixed";
+  var scale = 100;
   try {
-    theme = localStorage.getItem("theme") || "light";
-    font = localStorage.getItem("font") || "mixed";
+    theme = localStorage.getItem("theme") || theme;
+    font = localStorage.getItem("font") || font;
     scale = parseInt(localStorage.getItem("text-scale") || "100", 10);
   } catch (e) {
-    /* storage blocked (private browsing): the standard look */
+    /* storage blocked (private browsing): the class's or standard look */
   }
   if (!THEMES[theme]) theme = "light";
   if (!FONTS[font]) font = "mixed";

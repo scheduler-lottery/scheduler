@@ -1011,6 +1011,8 @@ def sheet(sid):
         handoff=handoff,
         stuck=stuck,
         list_next=list_next,
+        course_look={"url": url_for("teach.set_look", sid=sid), "title": sheet["title"],
+                     "theme": sheet["theme"] or "light", "font": sheet["font"] or "mixed"},
         add_form=add_form,
         download_url=download_url,
         email_on=signin.email_mode() == "smtp",
@@ -2366,6 +2368,22 @@ def delete_all(sid):
                    "students should rank again."),
                 ["submissions", "assignments"])
     return redirect(url_for("teach.sheet", sid=sheet["id"], download=snap_id) + "#signups")
+
+
+@bp.route("/s/<sid>/look", methods=["POST"])
+@instructor_required
+def set_look(sid):
+    """The class's look: the theme and font its students see (each student
+    can still pick their own; text size is always their own)."""
+    sheet = owned_sheet(sid)
+    data = request.get_json(silent=True) or {}
+    theme, font = data.get("theme"), data.get("font")
+    if theme not in settings.THEMES or font not in settings.FONTS:
+        return jsonify(ok=False), 400
+    db.run("UPDATE sheets SET theme = :theme, font = :font WHERE id = :sid",
+           theme=None if theme == "light" else theme, font=None if font == "mixed" else font, sid=sheet["id"])
+    db.commit()
+    return jsonify(ok=True)
 
 
 @bp.route("/s/<sid>/archive", methods=["POST"])

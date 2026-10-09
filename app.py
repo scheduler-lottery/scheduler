@@ -14,6 +14,7 @@ The pieces:
   matching_engine.py  the assignment algorithms
 """
 
+import base64
 import hmac
 import re
 from datetime import timedelta
@@ -142,7 +143,7 @@ CONTENT_SECURITY_POLICY = "; ".join([
     "default-src 'self'",
     "script-src 'self'",
     "style-src 'self' https://fonts.googleapis.com",
-    "font-src https://fonts.gstatic.com",
+    "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data:",
     "connect-src 'self'",
     "frame-ancestors 'none'",
@@ -161,7 +162,7 @@ def security_headers(response):
     # Share links are the keys to a sign-up sheet; don't leak them in Referer.
     response.headers.setdefault("Referrer-Policy", "same-origin")
     response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-    if request.endpoint != "static":
+    if request.endpoint not in ("static", "site_font"):
         # Pages hold names and rankings: never store them in any cache.
         response.headers.setdefault("Cache-Control", "no-store")
     return response
@@ -311,6 +312,21 @@ def _was_deleted(sid):
     """A sheet taken offline but not gone for good: its link should say so
     rather than claim the code is wrong."""
     return bool(db.scalar("SELECT 1 FROM snapshots WHERE sheet_id = :sid AND kind = 'deleted'", sid=sid))
+
+
+@app.route("/fonts/<name>")
+def site_font(name):
+    """A web font the site's owner uploaded on /owner (licensed fonts stay
+    out of the public code). Cached at the edge, so it's served from the
+    database about once per deployment."""
+    if name not in owner.SITE_FONTS:
+        abort(404)
+    found = db.row("SELECT content_type, data FROM site_assets WHERE name = :name", name=name)
+    if not found:
+        abort(404)
+    response = app.response_class(base64.b64decode(found["data"]), mimetype=found["content_type"])
+    response.headers["Cache-Control"] = "public, max-age=604800, s-maxage=31536000"
+    return response
 
 
 @app.route("/how-it-works")

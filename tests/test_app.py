@@ -1921,3 +1921,53 @@ def test_no_emoji_on_the_site():
     files += [p for p in root.glob("*.py")]
     found = [f"{p.name}: {line.strip()[:60]}" for p in files for line in p.read_text().splitlines() if emoji.search(line)]
     assert not found, found
+
+
+def test_the_owner_uploads_site_fonts_and_the_site_serves_them(browser):
+    owner = browser().sign_in_instructor("owner@gmail.com")
+    font = b"wOF2" + b"\x00" * 64
+    page = follow(owner, owner.post("/owner/fonts", {"fonts": [
+        (io.BytesIO(font), "roslindale-text-regular.woff2"),
+        (io.BytesIO(b"<html>"), "roslindale-text-bold.woff2"),
+        (io.BytesIO(font), "something-else.woff2"),
+    ]}, content_type="multipart/form-data"))
+    assert "Uploaded 1 font file" in page and "roslindale-text-bold.woff2 (not a .woff2 font)" in page
+    assert "something-else.woff2 (not one of the expected names)" in page
+    served = browser().get("/fonts/roslindale-text-regular.woff2")
+    assert served.status_code == 200 and served.data == font and served.mimetype == "font/woff2"
+    assert "public" in served.headers["Cache-Control"] and "s-maxage" in served.headers["Cache-Control"]
+    assert browser().get("/fonts/roslindale-text-bold.woff2").status_code == 404  # not uploaded yet
+    assert browser().get("/fonts/anything.woff2").status_code == 404
+    assert "font-src 'self'" in served.headers["Content-Security-Policy"]
+
+
+def test_only_the_owner_can_upload_fonts(prof):
+    r = prof.post("/owner/fonts", {"fonts": [(io.BytesIO(b"wOF2"), "roslindale-text-regular.woff2")]},
+                  content_type="multipart/form-data")
+    assert r.status_code in (302, 403, 404)
+    assert q(prof.app, "SELECT COUNT(*) FROM site_assets") == 0
+
+
+def test_a_professor_sets_the_look_for_the_whole_class(prof, browser):
+    sid = prof.create_sheet()
+    student_page = raw(browser().get(f"/c/{sid}"))
+    assert "data-course-theme" not in student_page  # the standard look until one is chosen
+    page = raw(prof.get(f"/teach/s/{sid}"))
+    assert f'data-course-look="/teach/s/{sid}/look"' in page and "become the look for everyone" in page
+    r = prof.client.post(f"/teach/s/{sid}/look", json={"theme": "solarized-dark", "font": "readable"},
+                         headers={"X-CSRF-Token": prof.csrf()})
+    assert r.status_code == 200 and r.get_json() == {"ok": True}
+    student_page = raw(browser().get(f"/c/{sid}"))
+    assert 'data-course-theme="solarized-dark" data-course-font="readable"' in student_page
+    assert "Your instructor picked this class's look" in student_page
+    bad = prof.client.post(f"/teach/s/{sid}/look", json={"theme": "neon", "font": "mixed"},
+                           headers={"X-CSRF-Token": prof.csrf()})
+    assert bad.status_code == 400
+    other = browser().sign_in_instructor("other@school.edu")
+    stranger = other.client.post(f"/teach/s/{sid}/look", json={"theme": "light", "font": "mixed"},
+                                 headers={"X-CSRF-Token": other.csrf()})
+    assert stranger.status_code != 200
+    assert q(prof.app, "SELECT theme FROM sheets WHERE id = :sid", sid=sid) == "solarized-dark"
+    # Copying for next term keeps the look.
+    new_sid = prof.post(f"/teach/s/{sid}/duplicate").headers["Location"].split("/")[-2]
+    assert q(prof.app, "SELECT font FROM sheets WHERE id = :sid", sid=new_sid) == "readable"

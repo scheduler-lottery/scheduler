@@ -1,72 +1,121 @@
-// The Display settings menu: theme, text size (50%-200%), and font. Each
-// choice applies at once and is remembered on this device; theme-init.js
-// puts it back before the next page paints.
+// The Appearance window: theme, text size (50%-200%), and font. Choices
+// apply at once and are remembered on this device; theme-init.js puts them
+// back before the next page paints. On an instructor's own sheet, the theme
+// and font are also saved as the class's look, which every student in that
+// class then sees (unless they've picked their own).
 (function () {
   var root = document.documentElement;
-  var panel = document.getElementById("display-settings");
-  if (!panel) return;
+  var dialog = document.getElementById("appearance");
+  if (!dialog) return;
 
   var THEMES = {
     light: "light", paper: "light", "solarized-light": "light", "contrast-light": "light",
     dark: "dark", black: "dark", "solarized-dark": "dark", "contrast-dark": "dark",
   };
-  var range = panel.querySelector("[data-scale-range]");
-  var shown = panel.querySelector("[data-scale-value]");
+  var range = dialog.querySelector("[data-size-range]");
+  var readout = dialog.querySelector("[data-size-readout]");
+  var status = dialog.querySelector("[data-appearance-status]");
+  var courseUrl = dialog.getAttribute("data-course-look");
+  var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || "";
 
-  function remember(key, value, standard) {
+  function remember(key, value) {
     try {
-      if (value === standard) localStorage.removeItem(key);
+      if (value === null) localStorage.removeItem(key);
       else localStorage.setItem(key, value);
     } catch (err) {
       /* storage blocked: the choice lasts for this page only */
     }
   }
 
-  function mark(selector, attribute, value) {
-    Array.prototype.forEach.call(panel.querySelectorAll(selector), function (el) {
-      el.setAttribute("aria-checked", el.getAttribute(attribute) === value ? "true" : "false");
-    });
+  function check(name, value) {
+    var input = dialog.querySelector('input[name="' + name + '"][value="' + value + '"]');
+    if (input) input.checked = true;
   }
 
-  function setTheme(theme) {
+  function applyTheme(theme) {
     if (!THEMES[theme]) theme = "light";
     root.setAttribute("data-theme", theme);
     root.setAttribute("data-mode", THEMES[theme]);
-    remember("theme", theme, "light");
-    mark("[data-theme-choice]", "data-theme-choice", theme);
+    check("appearance-theme", theme);
   }
 
-  function setScale(percent) {
+  function applyFont(font) {
+    root.setAttribute("data-font", font);
+    check("appearance-font", font);
+  }
+
+  function applyScale(percent) {
     percent = Math.max(50, Math.min(200, Math.round(percent / 5) * 5));
     root.style.setProperty("--text-scale", String(percent / 100));
-    remember("text-scale", String(percent), "100");
     range.value = percent;
-    shown.textContent = percent + "%";
+    range.style.setProperty("--fill", ((percent - 50) / 150) * 100 + "%");
+    readout.textContent = percent + "%";
+    Array.prototype.forEach.call(dialog.querySelectorAll("[data-size-preset]"), function (b) {
+      b.setAttribute("aria-pressed", String(+b.getAttribute("data-size-preset") === percent));
+    });
+    return percent;
   }
 
-  function setFont(font) {
-    root.setAttribute("data-font", font);
-    remember("font", font, "mixed");
-    mark("[data-font-choice]", "data-font-choice", font);
+  // On an instructor's own sheet: save the class's look (quietly, a moment
+  // after the last change).
+  var saveTimer = null;
+  function saveForClass() {
+    if (!courseUrl) return;
+    clearTimeout(saveTimer);
+    status.textContent = "Saving for your class…";
+    saveTimer = setTimeout(function () {
+      fetch(courseUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+        body: JSON.stringify({ theme: root.getAttribute("data-theme"), font: root.getAttribute("data-font") }),
+        credentials: "same-origin",
+      }).then(function (r) {
+        status.textContent = r.ok ? "Saved: your class sees this look." : "Couldn't save it for your class. Try again.";
+      }).catch(function () {
+        status.textContent = "Couldn't save it for your class. Check your connection.";
+      });
+    }, 350);
   }
 
-  panel.addEventListener("click", function (e) {
-    var theme = e.target.closest("[data-theme-choice]");
-    var font = e.target.closest("[data-font-choice]");
-    var step = e.target.closest("[data-scale-step]");
-    if (theme) setTheme(theme.getAttribute("data-theme-choice"));
-    if (font) setFont(font.getAttribute("data-font-choice"));
-    if (step) setScale(parseInt(range.value, 10) + parseInt(step.getAttribute("data-scale-step"), 10));
-    if (e.target.closest("[data-settings-reset]")) {
-      setTheme("light");
-      setFont("mixed");
-      setScale(100);
+  dialog.addEventListener("change", function (e) {
+    if (e.target.name === "appearance-theme") {
+      applyTheme(e.target.value);
+      remember("theme", e.target.value);
+      saveForClass();
+    } else if (e.target.name === "appearance-font") {
+      applyFont(e.target.value);
+      remember("font", e.target.value);
+      saveForClass();
     }
   });
-  range.addEventListener("input", function () { setScale(parseInt(range.value, 10)); });
+
+  range.addEventListener("input", function () {
+    var percent = applyScale(parseInt(range.value, 10));
+    remember("text-scale", percent === 100 ? null : String(percent));
+  });
+
+  dialog.addEventListener("click", function (e) {
+    var step = e.target.closest("[data-size-step]");
+    var preset = e.target.closest("[data-size-preset]");
+    if (step || preset) {
+      var percent = applyScale(preset ? +preset.getAttribute("data-size-preset")
+                                      : parseInt(range.value, 10) + +step.getAttribute("data-size-step"));
+      remember("text-scale", percent === 100 ? null : String(percent));
+    }
+    if (e.target.closest("[data-appearance-reset]")) {
+      // Back to the class's look on a class page, or the standard one.
+      remember("theme", null);
+      remember("font", null);
+      remember("text-scale", null);
+      applyTheme(root.getAttribute("data-course-theme") || "light");
+      applyFont(root.getAttribute("data-course-font") || "mixed");
+      applyScale(100);
+      saveForClass();
+    }
+  });
 
   // Show what's in effect now (theme-init.js already applied it).
-  setTheme(root.getAttribute("data-theme"));
-  setFont(root.getAttribute("data-font") || "mixed");
-  setScale(Math.round(parseFloat(root.style.getPropertyValue("--text-scale") || "1") * 100));
+  applyTheme(root.getAttribute("data-theme"));
+  applyFont(root.getAttribute("data-font") || "mixed");
+  applyScale(Math.round(parseFloat(root.style.getPropertyValue("--text-scale") || "1") * 100));
 })();

@@ -51,6 +51,8 @@ CREATE TABLE IF NOT EXISTS sheets (
     backup_emailed_at  TEXT,
     short_url          TEXT,  -- a short link made on request (is.gd or TinyURL)
     archived_at        TEXT,  -- tucked away on the dashboard (still works for students)
+    theme              TEXT,  -- the class's look, set by its instructor (NULL = the standard look)
+    font               TEXT,
     created_at         TEXT NOT NULL,
     updated_at         TEXT NOT NULL
 );
@@ -216,3 +218,12 @@ CREATE TABLE IF NOT EXISTS error_log (
     detail     TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS error_log_by_time ON error_log (created_at);
+
+-- Files the site serves that don't belong in its public code: the web fonts
+-- the site's owner uploads on /owner. Stored base64-encoded.
+CREATE TABLE IF NOT EXISTS site_assets (
+    name         TEXT PRIMARY KEY,
+    content_type TEXT NOT NULL,
+    data         TEXT NOT NULL,
+    updated_at   TEXT NOT NULL
+);

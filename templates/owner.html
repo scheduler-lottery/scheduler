@@ -40,6 +40,21 @@
     <button class="btn btn-secondary btn-small" type="submit" name="action" value="enable">Switch on</button>
   </form>
 
+  <h2 id="fonts">Site fonts</h2>
+  <p class="mini-hint">Licensed web fonts live here rather than in the site's public code. Until a file is uploaded, pages use a free look-alike.</p>
+  <ul class="plain-rows">
+    {% for name, at in fonts %}
+    <li class="plain-row"><span><code>{{ name }}</code></span>
+      <span class="muted">{% if at %}uploaded <time datetime="{{ at }}" data-local="date">{{ at[:10] }}</time>{% else %}not uploaded{% endif %}</span></li>
+    {% endfor %}
+  </ul>
+  <form method="post" action="{{ url_for('owner.upload_fonts') }}" enctype="multipart/form-data" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="font-files" class="visually-hidden">Font files</label>
+    <input type="file" id="font-files" name="fonts" accept=".woff2,font/woff2" multiple required>
+    <button class="btn btn-secondary btn-small" type="submit">Upload</button>
+  </form>
+
   <h2>Recent errors</h2>
   {% if errors %}
   <div class="table-wrap">
