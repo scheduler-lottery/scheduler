@@ -150,9 +150,12 @@ def smtp_ready():
 
 
 def code_sender():
-    """The address sign-in codes come from, so people know what to look for."""
+    """Where sign-in codes come from, so people know what to look for.
+    WorkOS's test (Staging) environment sends from workos.dev."""
     mode = email_mode()
-    return settings.WORKOS_SENDER if mode == "workos" else settings.SMTP_FROM if mode == "smtp" else ""
+    if mode == "workos":
+        return "workos.dev" if workos_key().startswith("sk_test_") else settings.WORKOS_SENDER
+    return settings.SMTP_FROM if mode == "smtp" else ""
 
 
 def email_daily_limit():

@@ -2174,7 +2174,7 @@ class FakeWorkOS:
 def _use_workos(monkeypatch):
     import signin
     fake = FakeWorkOS()
-    monkeypatch.setattr(settings, "WORKOS_API_KEY", "sk_test_fake")
+    monkeypatch.setattr(settings, "WORKOS_API_KEY", "sk_live_fake")
     monkeypatch.setattr(signin, "_workos", fake)
     return fake
 
@@ -2274,3 +2274,8 @@ def test_the_owner_switches_to_workos_by_pasting_its_key(prof, browser, monkeypa
     monkeypatch.setattr(settings, "WORKOS_API_KEY", "sk_live_from_vercel")
     page = text(owner.get("/owner/"))
     assert "The key is the WORKOS_API_KEY setting in Vercel" in page and "Save and switch to WorkOS" not in page
+    # A test key sends from workos.dev, and every page says so.
+    monkeypatch.setattr(settings, "WORKOS_API_KEY", "sk_test_from_vercel")
+    page = text(owner.get("/owner/"))
+    assert "from workos.dev" in page and "This is a test (Staging) key" in page
+    assert "codes are emailed by WorkOS, a sign-in service, from workos.dev" in text(browser().get("/privacy"))

@@ -74,7 +74,7 @@ def index():
             "from_setting": bool(settings.WORKOS_API_KEY),
             "saved": bool(sitesecrets.load("workos_api_key")),
             "test": signin.workos_key().startswith("sk_test_"),
-            "sender": settings.WORKOS_SENDER,
+            "sender": signin.code_sender(),
         },
         smtp_from=settings.SMTP_FROM if settings.SMTP_HOST else "",
     )
@@ -100,7 +100,7 @@ def save_workos_key():
         return redirect(back)
     sitesecrets.save("workos_api_key", key)
     g.pop("workos_key", None)
-    flash(f"Connected: WorkOS now sends the sign-in codes, from {settings.WORKOS_SENDER}."
+    flash(f"Connected: WorkOS now sends the sign-in codes, from {signin.code_sender()}."
           + (" That's a test (Staging) key, though: its emails come from workos.dev and are meant for testing. "
              "For students, save the live key (it starts “sk_live_”)." if key.startswith("sk_test_") else ""),
           "success")

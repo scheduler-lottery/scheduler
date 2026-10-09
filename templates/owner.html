@@ -51,8 +51,8 @@
   <h2 id="signin-email">Sign-in email</h2>
   {% if workos.active %}
   <p><strong>WorkOS sends the sign-in codes</strong>, from {{ workos.sender }}.{% if workos.test %}
-    <strong>This is a test (Staging) key:</strong> its emails come from workos.dev and are meant for testing. For
-    students, save the live key (it starts “sk_live_”).{% endif %}{% if workos.from_setting %} The key is the
+    <strong>This is a test (Staging) key</strong>, meant for testing. For students, use the live key from WorkOS's
+    Production environment (it starts “sk_live_”).{% endif %}{% if workos.from_setting %} The key is the
     WORKOS_API_KEY setting in Vercel.{% endif %}</p>
   {% else %}
   <p><strong>Sign-in codes {% if smtp_from %}come from {{ smtp_from }}{% else %}have nothing to send them{% endif %}.</strong>
