@@ -1927,22 +1927,22 @@ def test_the_owner_uploads_site_fonts_and_the_site_serves_them(browser):
     owner = browser().sign_in_instructor("owner@gmail.com")
     font = b"wOF2" + b"\x00" * 64
     page = follow(owner, owner.post("/owner/fonts", {"fonts": [
-        (io.BytesIO(font), "roslindale-text-regular.woff2"),
-        (io.BytesIO(b"<html>"), "roslindale-text-bold.woff2"),
+        (io.BytesIO(font), "yalenew-roman.woff2"),
+        (io.BytesIO(b"<html>"), "yalenew-bold.woff2"),
         (io.BytesIO(font), "something-else.woff2"),
     ]}, content_type="multipart/form-data"))
-    assert "Uploaded 1 font file" in page and "roslindale-text-bold.woff2 (not a .woff2 font)" in page
+    assert "Uploaded 1 font file" in page and "yalenew-bold.woff2 (not a .woff2 font)" in page
     assert "something-else.woff2 (not one of the expected names)" in page
-    served = browser().get("/fonts/roslindale-text-regular.woff2")
+    served = browser().get("/fonts/yalenew-roman.woff2")
     assert served.status_code == 200 and served.data == font and served.mimetype == "font/woff2"
     assert "public" in served.headers["Cache-Control"] and "s-maxage" in served.headers["Cache-Control"]
-    assert browser().get("/fonts/roslindale-text-bold.woff2").status_code == 404  # not uploaded yet
+    assert browser().get("/fonts/yalenew-bold.woff2").status_code == 404  # not uploaded yet
     assert browser().get("/fonts/anything.woff2").status_code == 404
     assert "font-src 'self'" in served.headers["Content-Security-Policy"]
 
 
 def test_only_the_owner_can_upload_fonts(prof):
-    r = prof.post("/owner/fonts", {"fonts": [(io.BytesIO(b"wOF2"), "roslindale-text-regular.woff2")]},
+    r = prof.post("/owner/fonts", {"fonts": [(io.BytesIO(b"wOF2"), "yalenew-roman.woff2")]},
                   content_type="multipart/form-data")
     assert r.status_code in (302, 403, 404)
     assert q(prof.app, "SELECT COUNT(*) FROM site_assets") == 0
@@ -1981,3 +1981,16 @@ def test_the_owner_page_asks_a_signed_out_visitor_to_sign_in_and_returns(browser
     r = visitor.post("/teach/verify", {"code": visitor.last_code("owner@gmail.com")})
     assert r.headers["Location"].endswith("/owner/")  # straight back to the owner page
     assert visitor.get("/owner/").status_code == 200
+
+
+def test_uploaded_fonts_persist_through_the_daily_cleanup(browser):
+    import maintenance
+
+    owner = browser().sign_in_instructor("owner@gmail.com")
+    owner.post("/owner/fonts", {"fonts": [(io.BytesIO(b"wOF2" + b"\x01" * 32), "oldstyle7-roman.woff2")]},
+               content_type="multipart/form-data")
+    with owner.app.app_context():
+        db.run("UPDATE site_assets SET updated_at = '2000-01-01T00:00:00+00:00'")  # long ago
+        db.commit()
+        maintenance.run_daily()
+    assert browser().get("/fonts/oldstyle7-roman.woff2").status_code == 200

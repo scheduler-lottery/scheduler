@@ -7,27 +7,27 @@
    shift per-theme and are used for links, rings, and tinted text.
    ============================================================= */
 
-/* Roslindale: the reader's installed copy if they have one, otherwise the
-   file the site's owner uploaded on /owner (served at /fonts/...). Until
-   it's uploaded, the next font in each stack stands in. */
+/* The site's fonts: the reader's installed copy if they have one, otherwise
+   the file the site's owner uploaded on /owner (served at /fonts/...).
+   Until it's uploaded, the next font in each stack stands in. */
 @font-face { font-family: "Roslindale Display Condensed"; src: local("Roslindale Display Condensed Regular"), local("Roslindale-DisplayCondensedRegular"), url("/fonts/roslindale-display-condensed-regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
-@font-face { font-family: "Roslindale Display"; src: local("Roslindale Display SemiBold"), local("Roslindale-DisplaySemiBold"), url("/fonts/roslindale-display-semibold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
-@font-face { font-family: "Roslindale Text"; src: local("Roslindale Text Regular"), local("Roslindale-TextRegular"), url("/fonts/roslindale-text-regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
-@font-face { font-family: "Roslindale Text"; src: local("Roslindale Text Italic"), local("Roslindale-TextItalic"), url("/fonts/roslindale-text-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
-@font-face { font-family: "Roslindale Text"; src: local("Roslindale Text SemiBold"), local("Roslindale-TextSemiBold"), url("/fonts/roslindale-text-semibold.woff2") format("woff2"); font-weight: 600; font-style: normal; font-display: swap; }
-@font-face { font-family: "Roslindale Text"; src: local("Roslindale Text Bold"), local("Roslindale-TextBold"), url("/fonts/roslindale-text-bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "YaleNew"; src: local("YaleNew Regular"), local("YaleNew-Roman"), url("/fonts/yalenew-roman.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "YaleNew"; src: local("YaleNew Italic"), local("YaleNew-Italic"), url("/fonts/yalenew-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "YaleNew"; src: local("YaleNew Bold"), local("YaleNew-Bold"), url("/fonts/yalenew-bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "YaleNew"; src: local("YaleNew Bold Italic"), local("YaleNew-BoldItalic"), url("/fonts/yalenew-bolditalic.woff2") format("woff2"); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: "Old Style 7"; src: local("Old Style 7 Std Roman"), local("OldStyle7Std"), url("/fonts/oldstyle7-roman.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
 
 :root {
-  /* Fonts, paired the way whereby.com does: Roslindale Display Condensed for
-     headlines, Roslindale Text for a few accents, and Inter for everything
-     else. Roslindale shows where it's installed (a web license would let the
-     site serve it to everyone); elsewhere, close free matches stand in. The
-     Display settings menu can switch to all sans, all serif, or an
-     easy-to-read face (data-font, below). */
+  /* Fonts: Roslindale Display Condensed for headings, YaleNew for reading
+     text (with its italics), Old Style 7 for subtitles and lead lines, and
+     Inter for controls (buttons, fields, tags). The Appearance window can
+     switch to all sans-serif, all serif, or an easy-to-read face (data-font,
+     below). Free look-alikes stand in until the owner uploads the files. */
+  --font-text: "YaleNew", "Crimson Pro", Georgia, "Times New Roman", serif;
   --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-display: "Roslindale Display Condensed", "Instrument Serif", "Fraunces", Georgia, serif;
-  --font-accent: "Roslindale Text", "Fraunces", Georgia, serif;
-  --font-body: var(--font-ui);
+  --font-accent: "Old Style 7", "Old Style 7 Std", "Crimson Pro", Georgia, serif;
+  --font-body: var(--font-text);
   --display-weight: 400;
   --on-accent: #fff;
 
@@ -137,10 +137,9 @@ body {
 .btn, .status-pill, .count-number {
   font-family: var(--font-body);
 }
-h1, h2, .card-heading, .brand-name, .modal-title {
+h1, h2, h3, .card-heading, .brand-name, .modal-title {
   font-family: var(--font-display);
 }
-h3 { font-family: var(--font-ui); }
 .subtitle, .lead-line { font-family: var(--font-accent); }
 
 body,
@@ -1812,17 +1811,17 @@ h1 { font-size: 2.1rem; line-height: 1.12; }
 h2, .card-heading { font-size: 1.5rem; line-height: 1.2; }
 .modal-title { font-size: 1.45rem; }
 .brand-name { font-size: 1.3rem; }
-.btn, .status-pill, .count-number, input, select, textarea, button { font-family: var(--font-ui); }
+.btn, .status-pill, .count-number, input, select, textarea, button, .tag, .chip, .eyebrow,
+.flash, .size-readout, .appearance-group > legend { font-family: var(--font-ui); }
+h3 { font-weight: var(--display-weight); font-size: 1.2rem; }
 
-[data-font="sans"] { --font-display: var(--font-ui); --font-accent: var(--font-ui); --display-weight: 650; }
-[data-font="serif"] {
-  --font-ui: "Roslindale Text", "Fraunces", Georgia, serif;
-  --font-display: "Roslindale Display", "Fraunces", Georgia, serif;
-  --font-accent: var(--font-ui);
-  --display-weight: 600;
+[data-font="sans"] {
+  --font-text: var(--font-ui); --font-display: var(--font-ui); --font-accent: var(--font-ui); --display-weight: 650;
 }
+[data-font="serif"] { --font-ui: var(--font-text); --font-accent: var(--font-text); }
 [data-font="readable"] {
   --font-ui: "Atkinson Hyperlegible", Verdana, Tahoma, sans-serif;
+  --font-text: var(--font-ui);
   --font-display: var(--font-ui);
   --font-accent: var(--font-ui);
   --display-weight: 700;
@@ -2025,7 +2024,7 @@ h2, .card-heading { font-size: 1.5rem; line-height: 1.2; }
 .choice-input:checked + .font-sample { outline-color: var(--accent); }
 .font-sample-mixed { font-family: "Roslindale Display Condensed", "Instrument Serif", Georgia, serif; font-size: 2rem; }
 .font-sample-sans { font-family: "Inter", system-ui, sans-serif; font-weight: 600; }
-.font-sample-serif { font-family: "Roslindale Text", "Fraunces", Georgia, serif; }
+.font-sample-serif { font-family: "YaleNew", "Crimson Pro", Georgia, serif; }
 .font-sample-readable { font-family: "Atkinson Hyperlegible", Verdana, sans-serif; font-weight: 700; }
 
 .appearance-foot { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--border); padding-top: 16px; }

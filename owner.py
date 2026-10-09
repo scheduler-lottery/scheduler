@@ -22,12 +22,12 @@ bp = Blueprint("owner", __name__, url_prefix="/owner")
 # The web fonts style.css asks for (as /fonts/<name>). Each falls back to a
 # free look-alike until it's uploaded here.
 SITE_FONTS = (
-    "roslindale-display-condensed-regular.woff2",
-    "roslindale-display-semibold.woff2",
-    "roslindale-text-regular.woff2",
-    "roslindale-text-italic.woff2",
-    "roslindale-text-semibold.woff2",
-    "roslindale-text-bold.woff2",
+    "roslindale-display-condensed-regular.woff2",  # headings
+    "yalenew-roman.woff2",  # text
+    "yalenew-italic.woff2",
+    "yalenew-bold.woff2",
+    "yalenew-bolditalic.woff2",
+    "oldstyle7-roman.woff2",  # subtitles and lead lines
 )
 MAX_FONT_BYTES = 600 * 1024
 
