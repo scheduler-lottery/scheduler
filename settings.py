@@ -83,6 +83,7 @@ SOURCE_URL = _env("SOURCE_URL", "https://github.com/scheduler-lottery/scheduler"
 # yourself (or BUILT_BY to "-" to show no credit).
 BUILT_BY = _env("BUILT_BY", "Nathan Reitinger")
 BUILT_BY_EMAIL = _env("BUILT_BY_EMAIL", "nathan.reitinger@law.northwestern.edu").lower()
+BUILT_BY_URL = _env("BUILT_BY_URL", "https://www.law.northwestern.edu/faculty/profiles/nathanreitinger/")
 
 # Times in downloads and emails use the instructor's own time zone, which
 # their browser reports when they sign in. This is the fallback until then.

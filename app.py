@@ -184,6 +184,7 @@ def template_globals():
         "source_url": settings.SOURCE_URL,
         "built_by": "" if settings.BUILT_BY == "-" else settings.BUILT_BY,
         "built_by_email": settings.BUILT_BY_EMAIL,
+        "built_by_url": settings.BUILT_BY_URL,
         "code_sender": settings.SMTP_FROM,
         # On the general pages a student might wander to (Privacy, How it
         # works), a way back to their class.

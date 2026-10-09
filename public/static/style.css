@@ -8,10 +8,18 @@
    ============================================================= */
 
 :root {
-  /* Roslindale where it's installed (with a web license, it can be served
-     to everyone); Fraunces, a close free match, for everyone else. */
-  --font-body: "Roslindale Text", "Roslindale", "Fraunces", Georgia, "Times New Roman", serif;
-  --font-display: "Roslindale Display", "Roslindale", "Fraunces", Georgia, "Times New Roman", serif;
+  /* Fonts, paired the way whereby.com does: Roslindale Display Condensed for
+     headlines, Roslindale Text for a few accents, and Inter for everything
+     else. Roslindale shows where it's installed (a web license would let the
+     site serve it to everyone); elsewhere, close free matches stand in. The
+     Display settings menu can switch to all sans, all serif, or an
+     easy-to-read face (data-font, below). */
+  --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Roslindale Display Condensed", "Instrument Serif", "Fraunces", Georgia, serif;
+  --font-accent: "Roslindale Text", "Fraunces", Georgia, serif;
+  --font-body: var(--font-ui);
+  --display-weight: 400;
+  --on-accent: #fff;
 
   --bg: #ffffff;
   --dot: transparent;
@@ -58,7 +66,7 @@
   color-scheme: light;
 }
 
-[data-theme="dark"] {
+[data-mode="dark"] {
   --bg: #0d0f1e;
   --dot: rgba(129, 140, 248, 0.09);
   --card-bg: #161930;
@@ -102,7 +110,7 @@
    scales the whole site at once. */
 html {
   -webkit-text-size-adjust: 100%;
-  font-size: 16.5px;
+  font-size: calc(16px * var(--text-scale, 1));
 }
 
 body {
@@ -119,10 +127,11 @@ body {
 .btn, .status-pill, .count-number {
   font-family: var(--font-body);
 }
-h1, h2, h3, .brand-name, .modal-title {
+h1, h2, .card-heading, .brand-name, .modal-title {
   font-family: var(--font-display);
 }
-h1 { letter-spacing: -0.01em; }
+h3 { font-family: var(--font-ui); }
+.subtitle, .lead-line { font-family: var(--font-accent); }
 
 body,
 .card,
@@ -301,8 +310,6 @@ select,
 .theme-toggle-icon svg { width: 100%; height: 100%; }
 .icon-sun { opacity: 1; transform: rotate(0deg) scale(1); }
 .icon-moon { opacity: 0; transform: rotate(-70deg) scale(0.5); }
-[data-theme="dark"] .icon-sun { opacity: 0; transform: rotate(70deg) scale(0.5); }
-[data-theme="dark"] .icon-moon { opacity: 1; transform: rotate(0deg) scale(1); }
 
 /* ---------------------------------------------------------------
    Popovers — a dropdown anchored to a trigger (user menu) and a
@@ -487,7 +494,7 @@ input[type="email"]:focus, textarea:focus, select:focus {
 .btn:active { transform: scale(0.98); }
 .btn-primary {
   background: linear-gradient(135deg, var(--accent-btn-1), var(--accent-btn-2));
-  color: #fff;
+  color: var(--on-accent);
   box-shadow: var(--shadow-sm);
 }
 .btn-primary:hover { box-shadow: var(--shadow-md); }
@@ -567,7 +574,7 @@ input[type="email"]:focus, textarea:focus, select:focus {
   background-clip: text;
   color: transparent;
 }
-[data-theme="dark"] .count-number {
+[data-mode="dark"] .count-number {
   background: linear-gradient(135deg, var(--accent), var(--accent-strong));
   -webkit-background-clip: text;
   background-clip: text;
@@ -1007,7 +1014,6 @@ body.is-dragging .rank-item:not(.dragging) { pointer-events: none; }
 .manual-move-row { display: flex; gap: 8px; align-items: center; margin: 12px 0; flex-wrap: wrap; }
 
 @media (max-width: 480px) {
-  html { font-size: 16.5px; }
   .card { padding: 20px; border-radius: var(--radius-md); }
   .rank-header { flex-direction: column; }
   .rank-pos { width: 46px; }
@@ -1740,7 +1746,7 @@ details.guide:not([open]) { padding-bottom: 20px; }
 .cal-day.past { color: var(--muted); background: var(--surface-soft); }
 .cal-day[aria-pressed="true"] {
   background: linear-gradient(135deg, var(--accent-btn-1), var(--accent-btn-2));
-  border-color: transparent; color: #fff; font-weight: 700;
+  border-color: transparent; color: var(--on-accent); font-weight: 700;
 }
 .cal-summary { margin: 14px 0 6px; color: var(--muted); line-height: 1.5; }
 
@@ -1771,7 +1777,7 @@ details.guide:not([open]) { padding-bottom: 20px; }
   backdrop-filter: blur(10px) saturate(120%);
   -webkit-backdrop-filter: blur(10px) saturate(120%);
 }
-[data-theme="dark"] .modal-overlay { background: rgba(5, 6, 15, 0.5); }
+[data-mode="dark"] .modal-overlay { background: rgba(5, 6, 15, 0.5); }
 .modal-dialog,
 .toast-dock .undo-banner,
 .flash-stack .flash {
@@ -1787,3 +1793,156 @@ details.guide:not([open]) { padding-bottom: 20px; }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .modal-dialog, .toast-dock .undo-banner, .flash-stack .flash { background: var(--card-bg); }
 }
+
+/* =============================================================
+   Type: display headlines, Inter for the rest (see the tokens)
+   ============================================================= */
+h1, h2, .card-heading, .modal-title, .brand-name { font-weight: var(--display-weight); letter-spacing: 0; }
+h1 { font-size: 2.1rem; line-height: 1.12; }
+h2, .card-heading { font-size: 1.5rem; line-height: 1.2; }
+.modal-title { font-size: 1.45rem; }
+.brand-name { font-size: 1.3rem; }
+.btn, .status-pill, .count-number, input, select, textarea, button { font-family: var(--font-ui); }
+
+[data-font="sans"] { --font-display: var(--font-ui); --font-accent: var(--font-ui); --display-weight: 650; }
+[data-font="serif"] {
+  --font-ui: "Roslindale Text", "Fraunces", Georgia, serif;
+  --font-display: "Roslindale Display", "Fraunces", Georgia, serif;
+  --font-accent: var(--font-ui);
+  --display-weight: 600;
+}
+[data-font="readable"] {
+  --font-ui: "Atkinson Hyperlegible", Verdana, Tahoma, sans-serif;
+  --font-display: var(--font-ui);
+  --font-accent: var(--font-ui);
+  --display-weight: 700;
+}
+[data-font="sans"] h1, [data-font="readable"] h1 { font-size: 1.75rem; }
+[data-font="sans"] h2, [data-font="sans"] .card-heading,
+[data-font="readable"] h2, [data-font="readable"] .card-heading { font-size: 1.2rem; }
+
+/* =============================================================
+   Themes, chosen in Display settings. Light is the standard; each
+   dark theme builds on the dark tokens above (data-mode="dark").
+   ============================================================= */
+[data-theme="paper"] {
+  --bg: #faf8f3; --card-bg: #fffdf8; --surface-soft: #f3efe6; --surface-strong: #e9e3d6;
+  --text: #2b2924; --muted: #6c675c; --border: #e6dfd0; --border-strong: #d3cab6;
+  --accent: #8a4b16; --accent-strong: #6b3a10; --accent-soft: #f5e9da;
+  --accent-btn-1: #9a5520; --accent-btn-2: #7d4317;
+  --glass-bg: rgba(250, 248, 243, 0.75);
+}
+[data-theme="solarized-light"] {
+  --bg: #eee8d5; --card-bg: #fdf6e3; --surface-soft: #f5efdc; --surface-strong: #e8e1cb;
+  --text: #4c5e63; --muted: #657b83; --border: #e2dbc4; --border-strong: #cfc6aa;
+  --accent: #1f6fa8; --accent-strong: #185a8a; --accent-soft: rgba(38, 139, 210, 0.13);
+  --accent-btn-1: #268bd2; --accent-btn-2: #1f78b8;
+  --amber: #8f6c00; --amber-soft: rgba(181, 137, 0, 0.14);
+  --danger: #c0291f; --danger-bg: rgba(220, 50, 47, 0.11);
+  --success: #5f6e00; --success-bg: rgba(133, 153, 0, 0.14);
+  --glass-bg: rgba(253, 246, 227, 0.78);
+}
+[data-theme="black"] {
+  --bg: #000000; --card-bg: #0b0b0c; --surface-soft: #141416; --surface-strong: #1d1d21;
+  --text: #ececec; --muted: #a2a2aa; --border: #232327; --border-strong: #34343a;
+  --accent: #9fb0ff; --accent-strong: #c3ceff; --accent-soft: rgba(159, 176, 255, 0.14);
+  --glass-bg: rgba(8, 8, 10, 0.72); --glass-border: rgba(255, 255, 255, 0.08);
+}
+[data-theme="solarized-dark"] {
+  --bg: #002b36; --card-bg: #073642; --surface-soft: #0a3d4a; --surface-strong: #0f4a58;
+  --text: #a6b3b3; --muted: #8a9a9b; --border: #0f4a58; --border-strong: #1d5e6e;
+  --accent: #5aaee8; --accent-strong: #8cc8f0; --accent-soft: rgba(38, 139, 210, 0.2);
+  --accent-btn-1: #268bd2; --accent-btn-2: #1f78b8;
+  --amber: #d9a400; --amber-soft: rgba(181, 137, 0, 0.18);
+  --danger: #f2625e; --danger-bg: rgba(220, 50, 47, 0.18);
+  --success: #a6bf00; --success-bg: rgba(133, 153, 0, 0.18);
+  --glass-bg: rgba(0, 43, 54, 0.75); --glass-border: rgba(147, 161, 161, 0.14);
+}
+[data-theme="contrast-light"] {
+  --bg: #ffffff; --card-bg: #ffffff; --surface-soft: #ffffff; --surface-strong: #e6e6e6;
+  --text: #000000; --muted: #1f1f1f; --border: #000000; --border-strong: #000000;
+  --accent: #0000c8; --accent-strong: #00007a; --accent-soft: #e5e5ff;
+  --accent-btn-1: #0000c8; --accent-btn-2: #0000c8;
+  --amber: #6b4500; --amber-soft: #fff2d6; --danger: #a80000; --danger-bg: #ffe5e5;
+  --success: #005a1e; --success-bg: #e2f7e8;
+  --glass-bg: #ffffff; --glass-border: #000000; --shadow-sm: none; --shadow-md: none;
+}
+[data-theme="contrast-dark"] {
+  --bg: #000000; --card-bg: #000000; --surface-soft: #000000; --surface-strong: #262626;
+  --text: #ffffff; --muted: #f2f2f2; --border: #ffffff; --border-strong: #ffffff;
+  --accent: #ffe600; --accent-strong: #fff27a; --accent-soft: #332e00;
+  --accent-btn-1: #ffe600; --accent-btn-2: #ffe600; --on-accent: #000000;
+  --amber: #ffcc4d; --amber-soft: #2e2200; --danger: #ff8080; --danger-bg: #330000;
+  --success: #6dff9e; --success-bg: #002b10;
+  --glass-bg: #000000; --glass-border: #ffffff; --shadow-sm: none; --shadow-md: none;
+}
+
+/* High contrast: solid surfaces, heavier lines, underlined links, and a
+   focus ring nobody can miss. */
+[data-theme^="contrast"] .card,
+[data-theme^="contrast"] .modal-dialog,
+[data-theme^="contrast"] .popover-dropdown,
+[data-theme^="contrast"] .icon-dock,
+[data-theme^="contrast"] input,
+[data-theme^="contrast"] select,
+[data-theme^="contrast"] textarea,
+[data-theme^="contrast"] .btn-secondary,
+[data-theme^="contrast"] .btn-ghost,
+[data-theme^="contrast"] .cal-day,
+[data-theme^="contrast"] .day-chip,
+[data-theme^="contrast"] .tag { border: 2px solid var(--border); }
+[data-theme^="contrast"] .topbar,
+[data-theme^="contrast"] .modal-dialog,
+[data-theme^="contrast"] .toast-dock .undo-banner,
+[data-theme^="contrast"] .flash-stack .flash,
+[data-theme^="contrast"] .icon-dock {
+  background: var(--card-bg);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+[data-theme^="contrast"] .topbar { border-bottom: 2px solid var(--border); }
+[data-theme^="contrast"] a:not(.btn) { text-decoration: underline; }
+[data-theme^="contrast"] :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+[data-theme^="contrast"] .btn-primary { background: var(--accent); }
+[data-theme^="contrast"] .modal-overlay { background: rgba(0, 0, 0, 0.6); backdrop-filter: none; }
+
+/* =============================================================
+   The Display settings menu
+   ============================================================= */
+.settings-panel { width: min(330px, calc(100vw - 32px)); padding: 14px; }
+.settings-label {
+  margin: 4px 2px 8px; font-size: 0.78rem; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--muted); display: flex; justify-content: space-between;
+}
+.settings-value { text-transform: none; letter-spacing: 0; color: var(--text); }
+.theme-grid, .font-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 14px; }
+.theme-choice, .font-choice {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--card-bg); color: var(--text);
+  font: inherit; font-size: 0.85rem; text-align: left; cursor: pointer;
+}
+.theme-choice:hover, .font-choice:hover { border-color: var(--accent); }
+.theme-choice[aria-checked="true"], .font-choice[aria-checked="true"] {
+  border: 2px solid var(--accent); padding: 7px 9px; font-weight: 600;
+}
+.swatch { width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0, 0, 0, 0.18); }
+.swatch-light { background: linear-gradient(135deg, #ffffff 50%, #4638d1 50%); }
+.swatch-paper { background: linear-gradient(135deg, #faf8f3 50%, #8a4b16 50%); }
+.swatch-solarized-light { background: linear-gradient(135deg, #fdf6e3 50%, #268bd2 50%); }
+.swatch-contrast-light { background: linear-gradient(135deg, #ffffff 50%, #000000 50%); }
+.swatch-dark { background: linear-gradient(135deg, #0d0f1e 50%, #9aa3fb 50%); }
+.swatch-black { background: linear-gradient(135deg, #000000 50%, #9fb0ff 50%); }
+.swatch-solarized-dark { background: linear-gradient(135deg, #002b36 50%, #268bd2 50%); }
+.swatch-contrast-dark { background: linear-gradient(135deg, #000000 50%, #ffe600 50%); }
+.font-choice-mixed { font-family: "Roslindale Display Condensed", "Instrument Serif", Georgia, serif; font-size: 1rem; }
+.font-choice-sans { font-family: "Inter", system-ui, sans-serif; }
+.font-choice-serif { font-family: "Roslindale Text", "Fraunces", Georgia, serif; }
+.font-choice-readable { font-family: "Atkinson Hyperlegible", Verdana, sans-serif; }
+.size-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.size-row input[type="range"] { flex: 1; accent-color: var(--accent); }
+.size-step {
+  min-width: 38px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--card-bg); color: var(--text); font: inherit; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+}
+.size-step-big { font-size: 1rem; }
+.settings-reset { font-size: 0.85rem; }
