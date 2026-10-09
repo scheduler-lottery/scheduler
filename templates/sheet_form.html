@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}{{ 'New sign-up sheet' if mode == 'new' else 'Edit ' ~ sheet.title }} — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="admin-header">
+    <h1>{{ 'New sign-up sheet' if mode == 'new' else 'Edit sign-up sheet' }}</h1>
+    <a class="link-muted" href="{{ url_for('teach.sheet', sid=sheet.id) if mode == 'edit' else url_for('teach.dashboard') }}">← Back</a>
+  </div>
+  {% if mode == 'new' %}
+  <p class="subtitle">Three quick things and you're set. You can change any of it later.</p>
+  {% endif %}
+
+  <form method="post" class="form-stack" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if mode == 'edit' %}<input type="hidden" name="version" value="{{ version }}">{% endif %}
+
+    {% if removing %}
+    <div class="confirm-box">
+      <h2 class="card-heading">Remove {{ removing | map(attribute='label') | join(', ') }}?</h2>
+      <ul>
+        {% if impact.ranked %}<li>{{ impact.ranked | plural('student has', 'students have') }} ranked {{ 'it' if removing | length == 1 else 'them' }}. It comes off their lists; the rest of their order stays.</li>{% endif %}
+        {% if impact.cant %}<li>Can't-do marks on it go away for: {{ impact.cant | join(', ') }}.</li>{% endif %}
+        {% if impact.notes %}<li>Notes about it will be hidden for: {{ impact.notes | join(', ') }}.</li>{% endif %}
+        {% if impact.scheduled %}<li>Scheduled on it now: {{ impact.scheduled | join(', ') }} — they'll need a new day.</li>{% endif %}
+      </ul>
+      <p class="mini-hint">A copy of the sheet as it is now is saved first, so you can undo this under Backups.</p>
+      <div class="form-actions">
+        <button type="submit" name="confirm_remove" value="1" class="btn btn-danger">Yes, remove {{ 'it' if removing | length == 1 else 'them' }} and save</button>
+        <a class="btn btn-secondary" href="{{ url_for('teach.edit_sheet', sid=sheet.id) }}">Cancel — keep {{ 'it' if removing | length == 1 else 'them' }}</a>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="field">
+      <label for="title">Title</label>
+      <p class="field-help">What your students will see at the top of the page.</p>
+      <input type="text" id="title" name="title" value="{{ form.title }}" maxlength="100" required data-count
+             placeholder="e.g. CS &amp; Law, Fall 2026">
+    </div>
+
+    <fieldset class="field">
+      <legend>Days students can pick from</legend>
+      <p class="field-help">One per box, in order. Write each the way students should see it — like “Tue, Oct 27”.</p>
+      <ol class="day-rows" data-day-rows>
+        {% for d in form.days %}
+        <li class="day-row">
+          <input type="hidden" name="day_key" value="{{ d.key }}">
+          <input type="text" name="day_label" value="{{ d.label }}" maxlength="80" placeholder="e.g. Tue, Oct 27" aria-label="Day {{ loop.index }}">
+          <button type="button" class="row-btn" data-row-up aria-label="Move this day up" title="Move up">▲</button>
+          <button type="button" class="row-btn" data-row-down aria-label="Move this day down" title="Move down">▼</button>
+          <button type="button" class="row-btn row-remove" data-row-remove aria-label="Remove this day" title="Remove">✕</button>
+        </li>
+        {% endfor %}
+      </ol>
+      <template data-day-template>
+        <li class="day-row">
+          <input type="hidden" name="day_key" value="">
+          <input type="text" name="day_label" value="" maxlength="80" placeholder="e.g. Tue, Oct 27" aria-label="Day">
+          <button type="button" class="row-btn" data-row-up aria-label="Move this day up" title="Move up">▲</button>
+          <button type="button" class="row-btn" data-row-down aria-label="Move this day down" title="Move down">▼</button>
+          <button type="button" class="row-btn row-remove" data-row-remove aria-label="Remove this day" title="Remove">✕</button>
+        </li>
+      </template>
+      <button type="button" class="btn btn-secondary btn-small" data-add-day>＋ Add another day</button>
+      {% if mode == 'edit' and counts.submissions %}
+      <p class="field-help warn">Students have already ranked. Renaming a day is fine; removing one asks you to confirm first.</p>
+      {% endif %}
+    </fieldset>
+
+    <div class="field">
+      <label for="capacity">Seats per day</label>
+      <p class="field-help">How many presentations fit in one class meeting.</p>
+      <input type="number" id="capacity" name="capacity" min="1" max="500" value="{{ form.capacity }}" required class="input-short">
+    </div>
+
+    <div class="field">
+      <label for="rank_by">Rank by <span class="muted">(optional)</span></label>
+      <p class="field-help">A deadline to show students, like “Friday, Oct 10 at 5 PM”. Sign-ups don't close by themselves — you close them.</p>
+      <input type="text" id="rank_by" name="rank_by" value="{{ form.rank_by }}" maxlength="100" placeholder="e.g. Friday, Oct 10 at 5 PM">
+    </div>
+
+    <details class="more-options" {% if mode == 'edit' or form.note %}open{% endif %}>
+      <summary>More options</summary>
+      <div class="field">
+        <label for="note">Note to students <span class="muted">(optional)</span></label>
+        <p class="field-help">Shown when they sign in and rank, and in the message you post. Good for the format and length of presentations.</p>
+        <textarea id="note" name="note" rows="6" maxlength="2000" data-count
+                  placeholder="e.g. Each class fits 4 presentations: 20 minutes each — 10–15 presenting, then questions.">{{ form.note }}</textarea>
+      </div>
+
+      <fieldset class="field">
+        <legend>Who can sign up</legend>
+        <label class="choice">
+          <input type="radio" name="allow_unlisted" value="0" {{ 'checked' if not form.allow_unlisted }}>
+          <span><strong>Only names on my class list</strong> (recommended).
+          {% if mode == 'edit' and counts.roster and not counts.roster_with_email %}Your list has no emails, so students sign in by name and a PIN.{% elif mode == 'edit' and counts.roster and counts.roster_with_email < counts.roster %}{{ counts.roster_with_email }} on your list confirm with an emailed code; the {{ counts.roster - counts.roster_with_email }} without an email sign in with a PIN.{% else %}Students confirm it's them with a code emailed to the address on your list.{% endif %}</span>
+        </label>
+        <label class="choice">
+          <input type="radio" name="allow_unlisted" value="1" {{ 'checked' if form.allow_unlisted }}>
+          <span><strong>Anyone with the link.</strong> People not on your list can sign up with their name and a PIN
+          — handy for late adds, but anyone with the link could join.</span>
+        </label>
+      </fieldset>
+
+      <label class="choice">
+        <input type="checkbox" name="show_preview" value="1" {{ 'checked' if form.show_preview }}>
+        <span><strong>Let students see everyone's days.</strong> While sign-ups are open they see a draft; after you
+        publish, the final schedule. Classmates will see each other's names and days. (Either way, each student
+        always sees their own day once you publish.)</span>
+      </label>
+    </details>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary btn-large">{{ 'Create sign-up sheet' if mode == 'new' else 'Save changes' }}</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

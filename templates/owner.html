@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Site status — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Site status</h1>
+  <p class="subtitle">
+    Totals only. This page never shows who the instructors are, what their sheets say, or anything about
+    their students — those belong to each instructor alone.
+  </p>
+
+  <div class="stat-grid">
+    <div class="stat"><div class="stat-value">{{ stats.instructors }}</div><div class="stat-label">instructors</div></div>
+    <div class="stat"><div class="stat-value">{{ stats.sheets }}</div><div class="stat-label">sign-up sheets</div></div>
+    <div class="stat"><div class="stat-value">{{ stats.students }}</div><div class="stat-label">students on class lists</div></div>
+    <div class="stat"><div class="stat-value">{{ stats.rankings }}</div><div class="stat-label">rankings</div></div>
+    <div class="stat {{ 'stat-warn' if stats.emails_today >= email_limit * 0.8 }}">
+      <div class="stat-value">{{ stats.emails_today }} / {{ email_limit }}</div>
+      <div class="stat-label">emails in the last 24 hours (Gmail allows roughly 100–500 a day; past the limit here, codes stop going out until tomorrow)</div>
+    </div>
+  </div>
+
+  <h2>Setup</h2>
+  <ul class="plain-rows">
+    {% for name, detail, ok in checks %}
+    <li class="plain-row"><span><strong>{{ '✅' if ok else '⚠️' }} {{ name }}</strong> <span class="muted">— {{ detail }}</span></span></li>
+    {% endfor %}
+    <li class="plain-row"><span><strong>✅ Who can make an account</strong> <span class="muted">— {{ 'anyone' if '*' in domains else 'emails ending in ' ~ domains | join(', ') }}</span></span></li>
+  </ul>
+
+  <h2>Switch an account off or on</h2>
+  <p class="mini-hint">
+    For abuse only. A switched-off instructor can't sign in and their students' links stop working; nothing
+    is deleted. You need their exact address — there's deliberately no list.
+  </p>
+  <form method="post" action="{{ url_for('owner.account') }}" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="account-email" class="visually-hidden">Instructor email</label>
+    <input type="email" id="account-email" name="email" placeholder="instructor@school.edu" required>
+    <button class="btn btn-danger btn-small" type="submit" name="action" value="disable" data-confirm-click="Switch this account off? Its students' links will stop working until you switch it back on.">Switch off</button>
+    <button class="btn btn-secondary btn-small" type="submit" name="action" value="enable">Switch on</button>
+  </form>
+
+  <h2>Recent errors</h2>
+  {% if errors %}
+  <div class="table-wrap">
+    <table class="admin-table compact">
+      <thead><tr><th>When</th><th>Request</th><th>Error</th></tr></thead>
+      <tbody>
+        {% for e in errors %}
+        <tr>
+          <td class="nowrap muted"><time datetime="{{ e.created_at }}" data-local>{{ e.created_at[:16] }}</time></td>
+          <td class="nowrap"><code>{{ e.method }} {{ e.path }}</code></td>
+          <td>{{ e.error }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <form method="post" action="{{ url_for('owner.clear_errors') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-ghost btn-small" type="submit">Clear the error log</button>
+  </form>
+  {% else %}
+  <p class="muted">None. 🎉</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}{{ sheet.title }}{% endblock %}
+{% block content %}
+<div class="card">
+  <p class="eyebrow">{{ sheet.title }}</p>
+  <h1>Hi <bdi>{{ name }}</bdi></h1>
+
+  {% if published %}
+    {% if my_day %}
+    <div class="day-card">
+      <p class="day-card-label">Your presentation day</p>
+      <p class="day-card-day">{{ my_day }}</p>
+      {% if cant_do_my_day %}
+      <p class="day-card-warn">You marked this as a day you can't do. Please
+        <a href="mailto:{{ sheet.owner_email }}?subject={{ ('My presentation day — ' ~ sheet.title) | urlencode }}">email your instructor</a>.</p>
+      {% elif day_added_later %}
+      <p class="mini-hint">This day was added after you ranked, so it wasn't on your list.</p>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="disclaimer disclaimer-yellow">
+      The schedule is out, but you don't have a presentation day on it{% if not has_submitted %}, and you don't have a ranking saved{% endif %}.
+      <a href="mailto:{{ sheet.owner_email }}?subject={{ ('No presentation day — ' ~ sheet.title) | urlencode }}">Email your instructor</a>.
+    </div>
+    {% endif %}
+  {% endif %}
+
+  {% if is_test %}
+  <p class="mini-hint">This is a test student. Test rankings stop counting once real students rank.</p>
+  {% endif %}
+
+  {% if has_submitted %}
+  <div class="status-badge status-done">
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/>
+      <path d="M8.3 12.5l2.3 2.3 5-5.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    {{ 'Your ranking is saved — you can change it until sign-ups close' if sheet.bidding_open else 'Your ranking is saved — sign-ups are closed' }}
+  </div>
+  {% if new_days and sheet.bidding_open %}
+  <div class="disclaimer disclaimer-yellow">
+    Your instructor added {{ new_days | join(', ') }} after you ranked. It's at the bottom of your list for now —
+    <a href="{{ url_for('student.rank', sid=sheet.id) }}">check your order</a>.
+  </div>
+  {% endif %}
+  {% if summary %}
+  <div class="ranking-summary">
+    <p class="mini-hint">Your ranking, saved <time datetime="{{ summary.saved_at }}" data-local>{{ summary.saved_at[:16] }}</time>:</p>
+    <ol class="summary-list">{% for label in summary.ranking %}<li>{{ label }}</li>{% endfor %}</ol>
+    {% if summary.cant %}<p class="mini-hint">Can't do: {{ summary.cant | join(' · ') }}</p>{% endif %}
+  </div>
+  {% endif %}
+  {% elif sheet.bidding_open %}
+  <div class="status-badge status-pending">
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/>
+      <path d="M12 7.5V12l3 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    You haven't ranked the days yet
+  </div>
+  {% elif my_day and my_method == 'unranked' %}
+  <p class="mini-hint">You didn't rank the days before sign-ups closed, so you were given a day that still had room.</p>
+  {% elif my_day %}
+  <p class="mini-hint">Your instructor put you on this day.</p>
+  {% elif published %}
+  {% else %}
+  <div class="status-badge status-pending">
+    <span>You don't have a ranking saved, and sign-ups are closed. If you still need a presentation day,
+    <a href="mailto:{{ sheet.owner_email }}?subject={{ ('I still need to rank — ' ~ sheet.title) | urlencode }}">email your instructor</a>.</span>
+  </div>
+  {% endif %}
+
+  {% if sheet.rank_by and sheet.bidding_open %}
+  <p class="deadline">Please rank by <strong>{{ sheet.rank_by }}</strong>.</p>
+  {% elif sheet.bidding_open %}
+  <p class="mini-hint">Your instructor will close sign-ups when everyone's in.</p>
+  {% endif %}
+
+  <div class="action-tiles">
+    {% if sheet.bidding_open or has_submitted %}
+    <a href="{{ url_for('student.rank', sid=sheet.id) }}" class="action-tile">
+      <span class="action-tile-icon">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <span class="action-tile-label">{{ ('Change my ranking' if has_submitted else 'Rank the days') if sheet.bidding_open else 'See my ranking' }}</span>
+    </a>
+    {% endif %}
+    {% if sheet.show_preview and (published or sheet.bidding_open) %}
+    <a href="{{ url_for('student.schedule', sid=sheet.id) }}" class="action-tile">
+      <span class="action-tile-icon">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <rect x="3.5" y="5" width="17" height="15" rx="2.5" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M3.5 9.5h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span class="action-tile-label">{% if published %}See the whole schedule{% else %}See a draft of the schedule <br><i>(it changes as people rank)</i>{% endif %}</span>
+    </a>
+    {% endif %}
+  </div>
+
+  {% if not published and not sheet.bidding_open %}
+  <p class="hint">Sign-ups are closed. Your instructor will publish the schedule soon — your day will show up right here.</p>
+  {% elif not published %}
+  <p class="mini-hint">Once your instructor publishes the schedule, your day will show up right here.</p>
+  {% endif %}
+
+  {% if sheet.note %}
+  <div class="note-box">
+    <p class="note-box-label">From your instructor</p>
+    <p class="note-text">{{ sheet.note | autolink }}</p>
+  </div>
+  {% endif %}
+
+  <div class="signout-row">
+    <span class="signout-who">Signed in as <strong><bdi>{{ name }}</bdi></strong>{% if shared %} · on a shared computer{% endif %}</span>
+    <form method="post" action="{{ url_for('student.logout', sid=sheet.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-ghost">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Sign out
+    </button>
+    </form>
+  </div>
+  <p class="mini-hint">On a shared computer? Sign out when you're done.</p>
+  {% if other_classes > 0 %}
+  <form method="post" action="{{ url_for('student.logout_all', sid=sheet.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn-link link-muted">Sign out of every class on this computer ({{ other_classes + 1 }})</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

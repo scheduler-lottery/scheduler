@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Make the schedule again? — {{ sheet.title }}{% endblock %}
+{% block content %}
+<div class="card">
+  <p class="eyebrow"><a href="{{ url_for('teach.sheet', sid=sheet.id) }}#schedule" class="link-muted">← {{ sheet.title }}</a></p>
+  <h1>Make the schedule again?</h1>
+  <p class="subtitle">Students can already see their days. Here's what would change — nothing is saved until you press a button.</p>
+  <ul class="diff-list">
+    {% if changes.lose %}<li><strong>Would lose their day ({{ changes.lose | length }}):</strong> {{ changes.lose | join(', ') }}</li>{% endif %}
+    {% if changes.move %}<li><strong>Would change day ({{ changes.move | length }}):</strong> {{ changes.move | join('; ') }}</li>{% endif %}
+    {% if changes.gain %}<li><strong>Would get a day ({{ changes.gain | length }}):</strong> {{ changes.gain | join(', ') }}</li>{% endif %}
+  </ul>
+  {% if fillable %}
+  <form method="post" action="{{ url_for('teach.give_open_seats', sid=sheet.id) }}" class="choice-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-primary btn-block">Keep everyone's day — just give the open seats to {{ fillable | plural('student') }} without one</button>
+  </form>
+  {% endif %}
+  <form method="post" action="{{ url_for('teach.run_assignment', sid=sheet.id) }}" class="choice-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="confirmed" value="1">
+    <button type="submit" class="btn btn-danger btn-block">Make it again and show students the new days</button>
+    <a class="btn btn-secondary btn-block" href="{{ url_for('teach.sheet', sid=sheet.id) }}#schedule">Keep the schedule students see now</a>
+  </form>
+  <p class="mini-hint">To give one person a day without changing anyone else's, use “Move a student” instead. A copy of the current schedule is saved first either way, and you can undo.</p>
+</div>
+{% endblock %}

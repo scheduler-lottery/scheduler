@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Your sign-up sheets — {{ app_name }}{% endblock %}
+{% block content %}
+{% if deleted %}
+<section class="card">
+  <h2 class="card-heading">Recently deleted</h2>
+  <p class="mini-hint">You can bring these back, exactly as they were, for 30 days after deleting.</p>
+  <ul class="plain-rows">
+    {% for d in deleted %}
+    <li class="plain-row">
+      <span><strong>{{ d.title }}</strong> <span class="muted">— deleted <time datetime="{{ d.created_at }}" data-local>{{ d.created_at[:16] }}</time>{% if d.summary %} · {{ d.summary }}{% endif %}</span></span>
+      <span class="row-actions">
+        <form method="post" action="{{ url_for('teach.restore_deleted', snap_id=d.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-primary btn-small" type="submit">Bring it back</button>
+        </form>
+        <a class="btn btn-ghost btn-small" href="{{ url_for('teach.snapshot_zip', snap_id=d.id) }}">Download a copy</a>
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<div class="card">
+  <div class="admin-header">
+    <h1>Your sign-up sheets</h1>
+    {% if sheets %}<a class="btn btn-primary" href="{{ url_for('teach.new_sheet') }}">＋ New sign-up sheet</a>{% endif %}
+  </div>
+  <p class="mini-hint">Signed in as {{ instructor.email }}. Only you can see these sheets.</p>
+
+  {% if sheets %}
+  <ul class="sheet-list">
+    {% for s in sheets %}
+    <li class="sheet-row">
+      <a class="sheet-item" href="{{ url_for('teach.sheet', sid=s.id) }}">
+        <span class="sheet-main">
+          <span class="sheet-title">{{ s.title }}</span>
+          <span class="sheet-meta">
+            {% if s.first_day %}{{ s.first_day }}{% if s.last_day and s.last_day != s.first_day %} – {{ s.last_day }}{% endif %} · {% endif %}
+            {% if s.roster_count %}{{ s.listed_count }} of {{ s.roster_count }} ranked{% else %}{{ s.listed_count + s.unlisted_count }} ranked{% endif %}{% if s.roster_count and s.unlisted_count %} (+{{ s.unlisted_count }} not on the list){% endif %}
+            {% if s.published_at %}· schedule published{% elif s.assigned_count %}· schedule made{% endif %}
+            {% if s.same_title %}· link code <code>{{ s.id }}</code>{% endif %}
+          </span>
+        </span>
+        {% if s.bidding_open and not s.roster_count and not s.allow_unlisted %}
+        <span class="status-pill closed">Waiting for class list</span>
+        {% else %}
+        <span class="status-pill {{ 'open' if s.bidding_open else 'closed' }}">{{ 'Open' if s.bidding_open else 'Closed' }}</span>
+        {% endif %}
+      </a>
+      <form method="post" action="{{ url_for('teach.duplicate_sheet', sid=s.id) }}" class="sheet-copy">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-ghost btn-small" title="Same days and settings, no students — for next term">Copy for next term</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% elif deleted %}
+  <div class="empty-state">
+    <p>You have no sheets right now — your deleted ones are above, and you can bring them back.</p>
+    <a class="btn btn-primary" href="{{ url_for('teach.new_sheet') }}">＋ New sign-up sheet</a>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <h2>Make your first sign-up sheet</h2>
+    <ol class="steps">
+      <li class="step"><span class="step-num">1</span><span>List the days students can present.</span></li>
+      <li class="step"><span class="step-num">2</span><span>Drag in your class list from Canvas — we'll show you where to find it.</span></li>
+      <li class="step"><span class="step-num">3</span><span>Share the link. When everyone's ranked, one button makes the schedule.</span></li>
+    </ol>
+    <a class="btn btn-primary btn-large" href="{{ url_for('teach.new_sheet') }}">Create a sign-up sheet</a>
+    <p class="mini-hint">Looking for a sheet you already made? It's under the email address you used then — sign out and sign in with that one.</p>
+  </div>
+  {% endif %}
+
+  <details class="more-options">
+    <summary>Bring back a sheet from a backup file</summary>
+    <form method="post" action="{{ url_for('teach.restore_file_as_new') }}" enctype="multipart/form-data" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="backup-file" class="visually-hidden">Backup file</label>
+      <input type="file" id="backup-file" name="backup" accept=".zip,.json" required>
+      <button type="submit" class="btn btn-secondary btn-small">Bring it back as a new sheet</button>
+    </form>
+    <p class="field-help">Use the backup file (it ends in .zip) from “Download a backup” or a backup email. It becomes a new sheet with its own student link.</p>
+  </details>
+</div>
+
+{% if download_url %}<a href="{{ download_url }}" data-auto-download hidden>Download the backup</a>{% endif %}
+{% endblock %}

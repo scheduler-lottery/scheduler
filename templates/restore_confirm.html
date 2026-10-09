@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Go back to an earlier version — {{ sheet.title }}{% endblock %}
+{% block content %}
+<div class="card">
+  <p class="eyebrow"><a href="{{ url_for('teach.sheet', sid=sheet.id) }}#backups" class="link-muted">← {{ sheet.title }}</a></p>
+  <h1>{{ 'Restore from a backup file' if file_new else 'Go back to an earlier version' }}</h1>
+  <p class="subtitle">
+    {% if file_new %}The backup file was taken{% else %}This version was saved{% endif %}
+    <time datetime="{{ source.created_at }}" data-local="seconds">{{ source.created_at[:16] }}</time>{% if source.reason and not file_new %} ({{ source.reason }}){% endif %}.
+  </p>
+
+  {% if different_sheet %}
+  <div class="warn-box"><p>⚠️ This backup is from a different sheet: “{{ different_sheet }}”. Most likely you want to bring it back as a new sheet.</p></div>
+  {% endif %}
+
+  <table class="admin-table compact">
+    <tbody>
+      <tr><th scope="row">{{ 'The file' if file_new else 'That version' }}</th><td>{{ diff.then }}</td></tr>
+      <tr><th scope="row">Your sheet now</th><td>{{ diff.now }}</td></tr>
+    </tbody>
+  </table>
+
+  {% if diff.takes_down_schedule %}
+  <div class="warn-box"><p>⚠️ That version has no schedule, so going back takes down the schedule your students can see now. They won't see a day until you make and publish one again.</p></div>
+  {% endif %}
+  {% if diff.day_changes or diff.settings_changes or diff.seat_changes %}
+  <ul class="diff-list">
+    {% for c in diff.day_changes %}<li>Days: {{ c }}</li>{% endfor %}
+    {% for c in diff.settings_changes %}<li>Settings: {{ c }}</li>{% endfor %}
+    {% if diff.seat_changes %}<li><strong>Schedule changes ({{ diff.seat_changes | length }}):</strong> {{ diff.seat_changes[:12] | join('; ') }}{{ ' …' if diff.seat_changes | length > 12 }}</li>{% endif %}
+  </ul>
+  {% endif %}
+  {% if diff.same %}
+  <p class="lead-line">It holds exactly what your sheet holds now — there's nothing to bring back.</p>
+  {% else %}
+  <ul class="diff-list">
+    {% if diff.comes_back %}<li><strong>Comes back:</strong> {{ diff.comes_back | join(', ') }}</li>{% endif %}
+    {% if diff.made_since %}<li><strong>{{ 'Rankings here now (they go away if you replace):' if different_sheet else 'Ranked since then:' }}</strong> {{ diff.made_since | join(', ') }}</li>{% endif %}
+    {% if diff.changed_since %}<li><strong>Changed their ranking since then:</strong> {{ diff.changed_since | join(', ') }}</li>{% endif %}
+    {% if diff.differs_older %}<li><strong>Ranked differently in that version:</strong> {{ diff.differs_older | join(', ') }}</li>{% endif %}
+  </ul>
+  {% endif %}
+
+  <form method="post" action="{{ action_url }}" class="choice-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if different_sheet %}
+    <button type="submit" name="mode" value="new" class="btn btn-primary btn-block">Bring it back as a new sheet (recommended)</button>
+    {% endif %}
+    {% if different_sheet %}
+    <button type="submit" name="mode" value="exact" class="btn btn-secondary btn-block"
+            data-confirm="Replace everything on “{{ sheet.title }}” with the backup of “{{ different_sheet }}”? Its current rankings go away (a copy is saved first).">
+      Replace this sheet with it entirely
+    </button>
+    {% elif not diff.same %}
+    <button type="submit" name="mode" value="keep" class="btn btn-primary btn-block">
+      Go back, but keep rankings made or changed since then (recommended)
+    </button>
+    <button type="submit" name="mode" value="exact" class="btn btn-secondary btn-block"
+            {% if diff.made_since or diff.changed_since %}data-confirm="This removes rankings made or changed since then ({{ (diff.made_since + diff.changed_since) | join(', ') }}). Continue?"{% endif %}>
+      Go back exactly{% if diff.made_since or diff.changed_since %} (removes the newer rankings){% endif %}
+    </button>
+    {% endif %}
+    {% if file_new and not different_sheet %}
+    <button type="submit" name="mode" value="new" class="btn btn-ghost btn-block">Bring it back as a separate new sheet instead</button>
+    {% endif %}
+    <a class="btn btn-ghost btn-block" href="{{ url_for('teach.sheet', sid=sheet.id) }}#backups">Cancel</a>
+  </form>
+  <p class="mini-hint">Whether sign-ups are open stays as it is now. A copy of your sheet as it is now is saved first, so you can undo this.</p>
+</div>
+{% endblock %}

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}How days are given out — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="card">
+  <h1><span aria-hidden="true">🧩</span> How days are given out</h1>
+
+  <div class="note-box">
+    <p class="note-box-label">For students, in three sentences</p>
+    <p>Put the days in your real order of preference — your favorite at the top.</p>
+    <p>After sign-ups close, everyone gets a day as high on their own list as possible; when more people want a day than it has places, a fair random draw decides.</p>
+    <p>Ranking early doesn't help, and ranking a day higher than you really want it never helps you.</p>
+  </div>
+
+  <h2>“I really can't do this day”</h2>
+  <p>
+    Use it only for a real conflict. You won't be put on a day you marked — ever. If every
+    day you <em>can</em> do fills up, your instructor decides where you go, with your note in front of them —
+    nobody else is moved automatically to make room, so marking days you could really do never helps. Notes are
+    seen only by your instructor.
+  </p>
+
+  <h2>Is it fair?</h2>
+  <ul>
+    <li><strong>Not first-come, first-served.</strong> When you ranked isn't used at all.</li>
+    <li><strong>Ties are broken by a random draw</strong>, made once for each sign-up sheet. Your place in it is fixed
+      — it doesn't change when classmates rank, change their minds, or mark days. The same rankings always
+      give the same schedule, so the draw can't simply be re-run until someone likes the result. (Your instructor picks
+      how ties are broken before making the schedule, and can move people by hand afterwards — every change is
+      kept in the sheet's history.)</li>
+    <li><strong>Honesty is your best strategy.</strong> Changing your order can't get you a better day, and
+      can't-do marks never move anyone else — they're read by your instructor.</li>
+  </ul>
+
+  <h2>Common questions</h2>
+  <p>
+    <strong>Why didn't I get my first choice?</strong><br>
+    Places are limited. If more students want a day than it has places, the random draw decides who gets it — then
+    everyone else gets their next choice that still has room.
+  </p>
+  <p>
+    <strong>Should I put a day I don't want first, to “game” it?</strong><br>
+    No. Ranking your honest order is always at least as good as anything else, no matter what anyone else does.
+  </p>
+  <p>
+    <strong>When will I know my day?</strong><br>
+    When your instructor publishes the schedule, your day appears on your class's page, where you ranked.
+  </p>
+
+  <details class="more-options">
+    <summary>For the curious: what the computer actually does</summary>
+    <p>
+      Picture a very polite round of speed dating between students and days. Each student “asks” their favorite day.
+      If a day gets more requests than it has places, it holds on to some students (by its random draw, since days
+      don't have opinions) and turns the rest away. Anyone turned away asks their next favorite day. This repeats
+      until nobody is turned away. A day never locks anyone in until the very end — that's why it's called
+      <strong>deferred acceptance</strong>. It's the same family of methods some cities use to assign students to
+      public schools with limited seats.
+    </p>
+    <p>A small example: 4 students and 2 days, with 2 places each.</p>
+    <ul>
+      <li><strong>Ana</strong>, <strong>Ben</strong> and <strong>Cleo</strong> rank Day 1 first, then Day 2.</li>
+      <li><strong>Dev</strong> ranks Day 2 first, then Day 1.</li>
+      <li>Day 1's random draw came out Ben, Ana, Cleo, Dev.</li>
+    </ul>
+    <p>
+      Round 1: Ana, Ben and Cleo all ask Day 1, which has 2 places — by its draw it keeps Ben and Ana and turns Cleo
+      away. Dev asks Day 2, which keeps Dev. Round 2: Cleo asks Day 2, which still has room. Done: Day 1 has Ana and
+      Ben; Day 2 has Cleo and Dev. Cleo didn't get a first choice, but no change would help Cleo without bumping
+      someone the draw put ahead.
+    </p>
+    <h3>The options an instructor can pick</h3>
+    {% for algo_id, algo in algorithms.items() %}
+    <div class="algo-card">
+      <h4>{{ algo.label }}</h4>
+      <p class="algo-desc">{{ algo.description }}</p>
+      <p class="mini-hint">{{ algo.technical }}</p>
+    </div>
+    {% endfor %}
+    <p class="mini-hint">
+      The core uses <a href="https://github.com/daffidwilde/matching" target="_blank" rel="noopener">matching</a>, an
+      open-source Python package for exactly this kind of problem.
+    </p>
+  </details>
+</div>
+{% endblock %}

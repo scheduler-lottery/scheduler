@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Almost there — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="card center-card">
+  <h1>Almost there</h1>
+  <p class="subtitle">
+    This site is deployed, but it's missing settings it needs before anyone can use it:
+  </p>
+  <ul class="plain-list">
+    {% for name in missing %}<li><code>{{ name }}</code></li>{% endfor %}
+  </ul>
+  <p class="hint">
+    If you run this site: in Vercel, open the project → Settings → Environment Variables, add
+    {{ 'it' if missing|length == 1 else 'them' }} (the README explains each one), then redeploy.
+  </p>
+</div>
+{% endblock %}

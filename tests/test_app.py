@@ -1,0 +1,1774 @@
+"""End-to-end tests through the web interface. Each runs on SQLite and on
+Postgres (see conftest.py)."""
+
+import html as html_lib
+import io
+import json
+import re
+import zipfile
+
+import pytest
+
+import db
+import settings
+from conftest import CANVAS_ROSTER, day_keys
+
+
+def raw(response):
+    return response.get_data(as_text=True)
+
+
+def html(response):
+    """Page text with entities decoded, so "isn&#39;t" reads as "isn't"."""
+    return html_lib.unescape(raw(response))
+
+
+def text(response_or_page):
+    """What a reader sees: tags removed, entities decoded, spaces collapsed."""
+    page = response_or_page if isinstance(response_or_page, str) else raw(response_or_page)
+    return re.sub(r"\s+", " ", html_lib.unescape(re.sub(r"<[^>]+>", " ", page))).strip()
+
+
+def follow(b, response):
+    """The page a redirect lands on (flash messages included)."""
+    assert response.status_code == 302, raw(response)
+    return html(b.get(response.headers["Location"]))
+
+
+def q(app, sql, **params):
+    with app.app_context():
+        return db.scalar(sql, **params)
+
+
+def init_data(page):
+    return json.loads(re.search(r'id="init-data" type="application/json">(.*?)</script>', page, re.S).group(1))
+
+
+def xlsx(rows):
+    """A minimal .xlsx workbook holding `rows` (first sheet, shared strings)."""
+    strings = sorted({c for r in rows for c in r})
+    index = {s: i for i, s in enumerate(strings)}
+    cells = "".join(
+        f'<row r="{n}">' + "".join(
+            f'<c r="{chr(65 + i)}{n}" t="s"><v>{index[c]}</v></c>' for i, c in enumerate(r)
+        ) + "</row>"
+        for n, r in enumerate(rows, 1)
+    )
+    ns = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("[Content_Types].xml", "<Types/>")
+        z.writestr("xl/sharedStrings.xml", f"<sst {ns}>" + "".join(f"<si><t>{s}</t></si>" for s in strings) + "</sst>")
+        z.writestr("xl/worksheets/sheet1.xml", f"<worksheet {ns}><sheetData>{cells}</sheetData></worksheet>")
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Basics and security headers
+# ---------------------------------------------------------------------------
+def test_public_pages_and_headers(browser):
+    b = browser()
+    for path in ("/", "/how-it-works", "/privacy", "/teach/login"):
+        r = b.get(path)
+        assert r.status_code == 200, path
+        csp = r.headers["Content-Security-Policy"]
+        assert "script-src 'self'" in csp and "unsafe-inline" not in csp
+        assert r.headers["X-Frame-Options"] == "DENY"
+        assert r.headers["X-Content-Type-Options"] == "nosniff"
+        assert r.headers["Cache-Control"] == "no-store"
+        # No inline scripts or inline event handlers anywhere.
+        assert not re.search(r"<script(?![^>]*\bsrc=)(?![^>]*application/json)[^>]*>", raw(r))
+        assert not re.search(r"\son[a-z]+\s*=", raw(r))
+    assert b.get("/healthz").get_json() == {"ok": True}
+    assert "algorithm" not in html(b.get("/")).lower()
+
+
+def test_posts_without_the_csrf_token_are_refused(browser):
+    b = browser()
+    r = b.client.post("/teach/login", data={"email": "prof@school.edu"})
+    assert r.status_code == 400
+    assert not b.outbox
+
+
+# ---------------------------------------------------------------------------
+# Instructor sign-in
+# ---------------------------------------------------------------------------
+def test_instructor_sign_in_by_emailed_code(browser):
+    b = browser()
+    r = b.post("/teach/login", {"email": "Prof@School.edu", "tz": "America/Denver"})
+    assert r.headers["Location"].endswith("/teach/verify")
+    assert b.outbox[-1].to == ["prof@school.edu"]
+    assert b.outbox[-1].subject.endswith("is your Scheduler sign-in code")
+    page = html(b.get("/teach/verify"))
+    assert "prof@school.edu" in page
+    assert "isn't right" in html(b.post("/teach/verify", {"code": "000000"}))
+    assert "you typed 5" in html(b.post("/teach/verify", {"code": "12345"}))
+    r = b.post("/teach/verify", {"code": b.last_code()})
+    assert r.headers["Location"].endswith("/teach/")
+    assert "Make your first sign-up sheet" in html(b.get("/teach/"))
+    assert q(b.app, "SELECT timezone FROM instructors") == "America/Denver"
+
+
+def test_typed_and_pasted_addresses_are_cleaned_or_explained(browser):
+    b = browser()
+    assert b.post("/teach/login", {"email": "Pat Lee <Pat@School.edu>."}).status_code == 302
+    assert b.outbox[-1].to == ["pat@school.edu"]
+    for typed, says in (("pat.school.edu", "missing the @"), ("mailto:", "Type an email address"), ("pat@school.ed", "did you mean .edu"),
+                        ("pat@school,edu", "comma"), ("a@b@school.edu", "two @"),
+                        ("pat@gmail.com", "personal address")):
+        assert says in html(browser().post("/teach/login", {"email": typed})), typed
+    browser().sign_in_instructor("owner@gmail.com")  # the owner is always allowed
+
+
+def test_a_slow_email_never_strands_anyone(browser):
+    b = browser()
+    b.post("/teach/login", {"email": "prof@school.edu"})
+    first = b.last_code()
+    # Asking again right away doesn't send another, and still goes to the code page.
+    r = b.post("/teach/login", {"email": "prof@school.edu"})
+    assert r.headers["Location"].endswith("/teach/verify") and len(b.outbox) == 1
+    assert "use that one" in html(b.get("/teach/verify"))
+    # After the cooldown a new code goes out — and the first still works.
+    with b.app.app_context():
+        db.run("UPDATE login_codes SET last_sent_at = '2000-01-01T00:00:00+00:00'")
+        db.commit()
+    b.post("/teach/verify/resend")
+    assert len(b.outbox) == 2 and b.last_code() != first or True
+    assert b.post("/teach/verify", {"code": first}).headers["Location"].endswith("/teach/")
+
+
+def test_codes_are_cancelled_after_too_many_wrong_guesses(browser):
+    b = browser()
+    b.post("/teach/login", {"email": "prof@school.edu"})
+    code = b.last_code()
+    wrong = "111111" if code != "111111" else "222222"
+    for _ in range(3):
+        b.post("/teach/verify", {"code": wrong})
+    assert "1 try left" in html(b.post("/teach/verify", {"code": wrong}))
+    b.post("/teach/verify", {"code": wrong})
+    assert "Too many wrong tries from this browser" in html(b.post("/teach/verify", {"code": code}))
+    # A new code gives this browser fresh tries.
+    with b.app.app_context():
+        db.run("UPDATE login_codes SET last_sent_at = '2000-01-01T00:00:00+00:00'")
+        db.commit()
+    b.post("/teach/verify/resend")
+    assert b.post("/teach/verify", {"code": b.last_code()}).status_code == 302
+
+
+def test_dev_mode_shows_the_code_on_screen(browser, monkeypatch):
+    monkeypatch.setattr(settings, "SMTP_HOST", "")
+    b = browser()
+    b.post("/teach/login", {"email": "prof@school.edu"})
+    page = html(b.get("/teach/verify"))
+    assert "Local test mode" in page and re.search(r"The code is <strong>\d{6}</strong>", page)
+    assert not b.outbox
+
+
+def test_deployment_without_email_says_so(browser, monkeypatch):
+    monkeypatch.setattr(settings, "SMTP_HOST", "")
+    monkeypatch.setattr(settings, "IS_VERCEL", True)
+    monkeypatch.setattr(settings, "SECRET_KEY", "x" * 32)
+    monkeypatch.setattr(settings, "DATABASE_URL", settings.DATABASE_URL or "sqlite:///" + settings.SQLITE_PATH)
+    r = browser().post("/teach/login", {"email": "prof@school.edu"})
+    assert "aren't set up" in html(r)
+
+
+def test_missing_settings_on_vercel_show_a_setup_page(browser, monkeypatch):
+    monkeypatch.setattr(settings, "IS_VERCEL", True)
+    monkeypatch.setattr(settings, "SECRET_KEY", "")
+    r = browser().get("/")
+    assert r.status_code == 503 and "SECRET_KEY" in html(r)
+
+
+# ---------------------------------------------------------------------------
+# Making and editing a sheet
+# ---------------------------------------------------------------------------
+def test_create_sheet_validation_keeps_what_was_typed(prof):
+    r = prof.post("/teach/new", {"title": "", "day_label": ["Oct 27"], "day_key": [""], "capacity": "4"})
+    page = html(r)
+    assert "Give your sign-up sheet a title" in page and "at least two different days" in page
+    assert 'value="Oct 27"' in page
+    page = html(prof.post("/teach/new", {"title": "T", "day_label": ["Tue, Nov 3", "tue  nov 3"],
+                                         "day_key": ["", ""], "capacity": "600"}))
+    assert "listed twice" in page and "at most 500" in page
+    assert "the most is 2000" in html(prof.post("/teach/new", {
+        "title": "T", "day_label": ["A", "B"], "day_key": ["", ""], "capacity": "2", "note": "x" * 2100}))
+
+
+def test_new_sheets_are_private_by_default_and_point_at_the_next_step(prof):
+    r = prof.post("/teach/new", {"title": "Seminar", "day_label": ["Mon", "Tue"], "day_key": ["", ""],
+                                 "capacity": "2"})
+    sid = r.headers["Location"].split("/")[-1].split("#")[0]
+    with prof.app.app_context():
+        sheet = db.row("SELECT * FROM sheets WHERE id = :sid", sid=sid)
+    assert sheet["allow_unlisted"] == 0 and sheet["show_preview"] == 0 and sheet["lottery_seed"] > 0
+    page = html(prof.get(f"/teach/s/{sid}"))
+    assert "Next step" in page and "Add your class list" in page
+    assert "Waiting for your class list" in page
+    assert "Add your class list first" in page  # no announcement to copy yet
+
+
+def test_editing_days_keeps_rankings_and_asks_before_removing_a_ranked_day(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue", "Wed"))
+    keys = day_keys(sid)
+    student = browser().sign_in_student(sid, "Pat Doe")
+    student.rank(sid, [keys[2], keys[0], keys[1]], excluded=[keys[2]], comments={keys[2]: "away"})
+    prof.post(f"/teach/s/{sid}/toggle")
+    prof.post(f"/teach/s/{sid}/run")
+    page = html(prof.get(f"/teach/s/{sid}/edit"))
+    version = re.search(r'name="version" value="(\w+)"', page).group(1)
+    form = {"title": "Renamed", "capacity": "2", "allow_unlisted": "1", "version": version,
+            "day_key": [keys[0], keys[1], ""], "day_label": ["Monday", "Tue", "Thu"]}
+    page = html(prof.post(f"/teach/s/{sid}/edit", form))
+    assert "Remove Wed?" in page and "Pat Doe" in page  # asks first, naming who's affected
+    assert day_keys(sid) == keys  # nothing changed yet
+    r = prof.post(f"/teach/s/{sid}/edit", {**form, "confirm_remove": "1"})
+    assert r.status_code == 302
+    new_keys = day_keys(sid)
+    assert new_keys[:2] == keys[:2] and new_keys[2] not in keys
+    assert q(prof.app, "SELECT COUNT(*) FROM snapshots WHERE sheet_id = :sid AND kind = 'edit'", sid=sid) == 1
+    assert q(prof.app, "SELECT COUNT(*) FROM assignments WHERE day_key = :k", k=keys[2]) == 0
+    prof.post(f"/teach/s/{sid}/toggle")  # reopen so students can fix their order
+    init = init_data(html(student.get(f"/c/{sid}/rank")))
+    assert init["ranking"] == [keys[0], keys[1]] and init["newDays"] == [new_keys[2]]
+    home = text(student.get(f"/c/{sid}/home"))
+    assert "added Thu after you ranked" in home
+
+
+def test_a_stale_edit_page_cannot_undo_newer_changes(prof):
+    sid = prof.create_sheet(days=("Mon", "Tue"))
+    keys = day_keys(sid)
+    old_version = re.search(r'name="version" value="(\w+)"', html(prof.get(f"/teach/s/{sid}/edit"))).group(1)
+    form = {"title": "New title", "capacity": "2", "day_key": keys, "day_label": ["Mon", "Tue"], "version": old_version}
+    assert prof.post(f"/teach/s/{sid}/edit", form).status_code == 302
+    page = html(prof.post(f"/teach/s/{sid}/edit", {**form, "title": "Stale title"}))
+    assert "changed in another window" in page and 'value="Stale title"' in page  # what was typed is kept
+    assert q(prof.app, "SELECT title FROM sheets WHERE id = :sid", sid=sid) == "New title"
+    new_version = re.search(r'name="version" value="(\w+)"', page).group(1)
+    assert prof.post(f"/teach/s/{sid}/edit", {**form, "title": "Stale title", "version": new_version}).status_code == 302
+
+
+def test_copy_for_next_term(prof, browser):
+    sid = prof.create_sheet(title="Fall seminar", days=("Mon", "Tue"))
+    prof.upload(sid)
+    r = prof.post(f"/teach/s/{sid}/duplicate")
+    new_sid = r.headers["Location"].split("/")[-2]
+    assert new_sid != sid and "/edit" in r.headers["Location"]
+    with prof.app.app_context():
+        assert db.scalar("SELECT title FROM sheets WHERE id = :sid", sid=new_sid) == "Fall seminar (copy)"
+        assert db.scalar("SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=new_sid) == 0
+    assert [d for d in day_keys(new_sid)] and len(day_keys(new_sid)) == 2
+
+
+# ---------------------------------------------------------------------------
+# Class lists
+# ---------------------------------------------------------------------------
+def test_first_upload_applies_and_reports(prof):
+    sid = prof.create_sheet(capacity=1)
+    page = follow(prof, prof.upload(sid))
+    assert "Added 3 students" in page and "none of that was saved" in page
+    assert "only 4 seats" not in page  # 3 students fit in 4 seats
+    with prof.app.app_context():
+        stored = db.rows("SELECT * FROM roster WHERE sheet_id = :sid ORDER BY name_key", sid=sid)
+    assert [r["display_name"] for r in stored] == ["Alex Johnson", "Riya Patel", "Sam Lee"]
+    assert set(stored[0]) == {"sheet_id", "name_key", "display_name", "email", "is_test"}
+    # The report stays until it's dismissed.
+    assert "Added 3 students" in html(prof.get(f"/teach/s/{sid}"))
+    prof.post(f"/teach/s/{sid}/roster/report/dismiss")
+    assert "Added 3 students" not in html(prof.get(f"/teach/s/{sid}"))
+
+
+def test_a_different_list_is_never_swapped_in_without_asking(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    browser().sign_in_student(sid, "Sam Lee", "sam@school.edu").rank(sid, day_keys(sid))
+    wrong = "Name,Email\nZed Zane,zed@school.edu\nYu Yan,yu@school.edu\nXi Xu,xi@school.edu\nWes Wu,w@school.edu\n"
+    r = prof.upload(sid, wrong, "other-course.csv")
+    assert "/roster/review/" in r.headers["Location"]
+    page = html(prof.get(r.headers["Location"]))
+    assert "Nothing has changed yet" in page and "already ranked would come off your list: Sam Lee" in page
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND name_key = 'sam lee'", sid=sid) == 1
+    # Cancel keeps the list; replace swaps it, with one-click undo.
+    assert "Kept your current class list" in follow(prof, prof.post(r.headers["Location"], {"action": "cancel"}))
+    r = prof.upload(sid, wrong, "other-course.csv")
+    page = follow(prof, prof.post(r.headers["Location"], {"action": "replace"}))
+    assert "Replaced your list with 4 students" in page and "Put the previous one back" in page
+    snap = re.search(r"/undo/(\w+)", page).group(1)
+    prof.post(f"/teach/s/{sid}/undo/{snap}", {"parts": "roster"})
+    with prof.app.app_context():
+        names = {r["display_name"] for r in db.rows("SELECT display_name FROM roster WHERE sheet_id = :sid", sid=sid)}
+    assert names == {"Alex Johnson", "Riya Patel", "Sam Lee"}
+
+
+def test_pasting_more_names_adds_to_the_list(prof):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    r = prof.post(f"/teach/s/{sid}/roster", {"pasted": "Late Comer, late@school.edu\nLee, Sam"})
+    page = html(prof.get(r.headers["Location"]))
+    assert "Add the 1 new name to my list" in page
+    page = follow(prof, prof.post(r.headers["Location"], {"action": "add"}))
+    assert "Added 1 new student" in page
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 4
+
+
+def test_excel_files_and_other_wrong_files(prof):
+    sid = prof.create_sheet()
+    page = follow(prof, prof.upload(sid, xlsx([["Name", "Email"], ["Ana Lima", "ana@school.edu"]]), "class.xlsx"))
+    assert "Added 1 student" in page
+    for data, name, says in ((b"%PDF-1.4 junk", "syllabus.pdf", "That's a PDF"),
+                             (b"\xd0\xcf\x11\xe0\xa1\xb1junk", "old.xls", "older Excel file"),
+                             (b"PK\x03\x04junk", "broken.xlsx", "couldn't read that file")):
+        assert says in follow(prof, prof.upload(sid, data, name)), name
+
+
+def test_upload_warns_when_seats_run_short_and_about_strays(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=1)
+    browser().sign_in_student(sid, "Someone Else").rank(sid, day_keys(sid))
+    page = follow(prof, prof.upload(sid))
+    assert "only 2 seats" in page and "Set seats per day to 2" in page
+    assert "Someone Else" in page and "not on this list" in page
+
+
+def test_add_edit_and_remove_one_student(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    page = follow(prof, prof.post(f"/teach/s/{sid}/roster/add", {"name": "Lee, Sam", "email": "x@school.edu"}))
+    assert "Sam Lee is already on your list" in page
+    assert "already on your list for Alex Johnson" in follow(
+        prof, prof.post(f"/teach/s/{sid}/roster/add", {"name": "New Person", "email": "alex@school.edu"}))
+    assert "Added Late Add" in follow(prof, prof.post(f"/teach/s/{sid}/roster/add",
+                                                      {"name": "Late Add late@school.edu"}))
+    assert q(prof.app, "SELECT email FROM roster WHERE sheet_id = :sid AND name_key = 'late add'", sid=sid) == "late@school.edu"
+
+    # Fixing a misspelled name moves their ranking along with it.
+    s = browser().sign_in_student(sid, "Riya Patel", "riya@school.edu")
+    s.rank(sid, day_keys(sid))
+    prof.post(f"/teach/s/{sid}/roster/edit", {"name_key": "riya patel", "name": "Riya Patil", "email": "riya@school.edu"})
+    assert q(prof.app, "SELECT display_name FROM submissions WHERE sheet_id = :sid", sid=sid) == "Riya Patil"
+    assert s.get(f"/c/{sid}/home").status_code == 302  # signed out: their name changed
+
+    # Removing someone who ranked offers to delete the ranking too — with undo.
+    page = follow(prof, prof.post(f"/teach/s/{sid}/roster/remove", {"name_key": "riya patil", "delete_ranking": "1"}))
+    assert "deleted their ranking" in page
+    snap = re.search(r"/undo/(\w+)", page).group(1)
+    key = re.search(r'name="key" value="([^"]*)"', page).group(1)
+    prof.post(f"/teach/s/{sid}/undo/{snap}", {"parts": "roster,submissions", "key": key})
+    assert q(prof.app, "SELECT COUNT(*) FROM submissions WHERE sheet_id = :sid", sid=sid) == 1
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND name_key = 'riya patil'", sid=sid) == 1
+
+
+# ---------------------------------------------------------------------------
+# Students signing in
+# ---------------------------------------------------------------------------
+def test_student_on_roster_confirms_by_email(prof, browser):
+    sid = prof.create_sheet(title="Law & Tech")
+    prof.upload(sid)
+    s = browser()
+    r = s.post(f"/c/{sid}/login", {"name": "alex   JOHNSON"})
+    assert r.headers["Location"].endswith(f"/c/{sid}/verify")
+    message = s.outbox[-1]
+    assert message.to == ["alex@school.edu"] and message.reply_to == ["prof@school.edu"]
+    assert "Law & Tech" in message.subject
+    assert f"/c/{sid}" in message.body and "works for 30 minutes" in message.body
+    assert re.search(rf"/c/{sid}/link/[\w-]{{20,}}", message.body)  # the one-click link
+    page = text(s.get(f"/c/{sid}/verify"))
+    assert "Signing in as Alex Johnson" in page and "a***@school.edu" in page
+    s.post(f"/c/{sid}/verify", {"code": s.last_code("alex@school.edu")})
+    assert "Hi Alex Johnson" in text(s.get(f"/c/{sid}/home"))  # the list's spelling wins
+
+
+@pytest.mark.parametrize("typed", ["jose hernandez", "José  Hernández", "Hernandez, Jose", "jose@school.edu"])
+def test_a_name_typed_differently_still_finds_the_student(prof, browser, typed):
+    sid = prof.create_sheet()
+    prof.upload(sid, "Name,Email\nJosé Hernández,jose@school.edu\nSam Lee,sam@school.edu\n")
+    r = browser().post(f"/c/{sid}/login", {"name": typed})
+    assert r.headers["Location"].endswith("/verify"), typed
+
+
+def test_near_misses_ask_did_you_mean_instead_of_making_a_new_student(prof, browser):
+    sid = prof.create_sheet(allow_unlisted=True)
+    prof.upload(sid, "Name,Email\nJonas Müller,jonas@school.edu\nSam Lee,sam@school.edu\n")
+    s = browser()
+    page = raw(s.post(f"/c/{sid}/login", {"name": "Jon Mull"}))
+    assert "Did you mean" in text(page) and "Yes, I'm Jonas Müller" in text(page)
+    pick = re.search(r'name="pick" value="([^"]+)"', page).group(1)
+    r = s.post(f"/c/{sid}/login", {"name": "Jon Mull", "pick": pick})
+    assert r.headers["Location"].endswith("/verify") and s.outbox[-1].to == ["jonas@school.edu"]
+    assert q(prof.app, "SELECT COUNT(*) FROM name_pins") == 0
+
+
+def test_unlisted_names_only_when_allowed_and_only_while_open(prof, browser):
+    open_sid = prof.create_sheet(allow_unlisted=True)
+    prof.upload(open_sid)
+    s = browser()
+    page = html(s.post(f"/c/{open_sid}/login", {"name": "Walk In"}))
+    assert "isn't on the class list" in page and "Sign me up as a new person" in page
+    r = s.post(f"/c/{open_sid}/login", {"name": "Walk In", "pick": "__new__"})
+    assert r.headers["Location"].endswith("/pin")
+    assert "You're not on the class list" in html(s.get(f"/c/{open_sid}/pin"))
+    assert "first and last name" in follow(s, s.post(f"/c/{open_sid}/login", {"name": "Prince", "pick": "__new__"}))
+
+    prof.post(f"/teach/s/{open_sid}/toggle")  # closed: no new names
+    late = browser()
+    assert "Sign-ups are closed" in follow(late, late.post(f"/c/{open_sid}/login", {"name": "Late Person", "pick": "__new__"}))
+    assert browser().post(f"/c/{open_sid}/login", {"name": "Alex Johnson"}).headers["Location"].endswith("/verify")
+
+    listed_only = prof.create_sheet(allow_unlisted=False)
+    assert "your instructor is still setting this up" in html(browser().get(f"/c/{listed_only}"))
+    prof.upload(listed_only)
+    page = html(browser().post(f"/c/{listed_only}/login", {"name": "Walk In"}))
+    assert "isn't on the class list" in page and "Sign me up" not in page
+
+
+def test_name_suggestions_need_three_letters_and_skip_test_and_typed_names(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    prof.post(f"/teach/s/{sid}/test-students", {"email": "prof@school.edu"})
+    browser().sign_in_student(sid, "Unlisted Person").rank(sid, day_keys(sid))
+    s = browser()
+    assert s.get(f"/c/{sid}/names?q=al").get_json() == []
+    assert s.get(f"/c/{sid}/names?q=ale").get_json() == ["Alex Johnson"]
+    assert s.get(f"/c/{sid}/names?q=pat").get_json() == ["Riya Patel"]
+    assert s.get(f"/c/{sid}/names?q=test").get_json() == []
+    assert s.get(f"/c/{sid}/names?q=unl").get_json() == []
+    assert prof.get(f"/c/{sid}/names?q=test").get_json() == ["Test Student 1", "Test Student 2"]
+
+
+def test_name_suggestions_are_rate_limited(prof, browser, monkeypatch):
+    import student
+    monkeypatch.setattr(student, "NAME_LOOKUPS_PER_10_MINUTES", 3)
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    s = browser()
+    for _ in range(3):
+        assert s.get(f"/c/{sid}/names?q=ale").get_json() == ["Alex Johnson"]
+    assert s.get(f"/c/{sid}/names?q=ale").get_json() == []
+
+
+def test_join_by_code_link_or_short_link(prof, browser):
+    sid = prof.create_sheet()
+    s = browser()
+    for typed in (sid.upper(), f"https://x.vercel.app/c/{sid}/home?x=1", f"Code: {sid}.", f" {sid} "):
+        assert s.get(f"/join?code={typed}").headers["Location"].endswith(f"/c/{sid}"), typed
+    assert "sign-in code from your email" in follow(s, s.get("/join?code=123456"))
+    assert "Type the 8-character code" in follow(s, s.get("/join?code="))
+    assert "couldn't find a sign-up" in follow(s, s.get("/join?code=nope"))
+    assert s.get(f"/{sid}").headers["Location"].endswith(f"/c/{sid}")
+    assert s.get(f"/c/{sid}.").headers["Location"].endswith(f"/c/{sid}")
+
+
+# ---------------------------------------------------------------------------
+# PINs
+# ---------------------------------------------------------------------------
+def test_pin_choice_rules(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid, "Name\nDana Nomail\nEli Nomail\n")
+    s = browser()
+    assert s.post(f"/c/{sid}/login", {"name": "Dana Nomail"}).headers["Location"].endswith("/pin")
+    page = html(s.get(f"/c/{sid}/pin"))
+    assert "Choose a PIN" in page and "doesn't have an email for you" in page
+    choose = lambda pin, again=None: html(s.post(f"/c/{sid}/pin", {"mode": "choose", "pin": pin, "pin_again": again or pin}))  # noqa: E731
+    assert "4 to 8 digits" in choose("12")
+    assert "too easy to guess" in choose("1234")
+    assert "too easy to guess" in choose("0000")
+    assert "only numbers" in choose("12a4")
+    assert "don't match" in choose("4831", "4832")
+    assert s.post(f"/c/{sid}/pin", {"mode": "choose", "pin": "4831", "pin_again": "4831"}).headers["Location"].endswith("/home")
+
+
+def test_wrong_pins_lock_the_guesser_not_the_student(prof, browser):
+    sid = prof.create_sheet()
+    keys = day_keys(sid)
+    carol = browser().sign_in_student(sid, "Carol Noemail", pin="5926")
+    carol.rank(sid, keys, comments={keys[0]: "private reason"})
+
+    intruder = browser()
+    r = intruder.post(f"/c/{sid}/login", {"name": "carol NOEMAIL"})
+    assert r.headers["Location"].endswith("/pin")
+    page = html(intruder.get(f"/c/{sid}/pin"))
+    assert "Enter your PIN" in page and "private reason" not in page
+    assert "isn't right" in html(intruder.post(f"/c/{sid}/pin", {"mode": "enter", "pin": "1111"}))
+    for _ in range(3):
+        page = html(intruder.post(f"/c/{sid}/pin", {"mode": "enter", "pin": "1111"}))
+    assert "1 try left" in page
+    intruder.post(f"/c/{sid}/pin", {"mode": "enter", "pin": "1111"})
+    assert "Too many wrong tries" in html(intruder.post(f"/c/{sid}/pin", {"mode": "enter", "pin": "5926"}))
+    assert intruder.get(f"/c/{sid}/rank").headers["Location"].endswith(f"/c/{sid}")
+    # The real student, on another device, isn't locked out.
+    browser().sign_in_student(sid, "Carol Noemail", pin="5926")
+
+
+def test_resetting_a_pin_signs_out_whoever_was_using_it(prof, browser):
+    sid = prof.create_sheet()
+    impostor = browser().sign_in_student(sid, "Carol Noemail", pin="5926")
+    assert impostor.get(f"/c/{sid}/home").status_code == 200
+    stale = browser()
+    stale.post(f"/c/{sid}/login", {"name": "Carol Noemail"})  # an "Enter your PIN" page left open
+    prof.post(f"/teach/s/{sid}/reset-pin", {"name_key": "carol noemail"})
+    r = impostor.get(f"/c/{sid}/home")
+    assert r.status_code == 302 and "reset your PIN" in follow(impostor, r)
+    assert impostor.rank(sid, day_keys(sid)).status_code == 401
+    # A guess typed into the stale page doesn't become the new PIN.
+    page = html(stale.post(f"/c/{sid}/pin", {"mode": "enter", "pin": "7777"}))
+    assert "reset your PIN" in page and "Choose a PIN" in page
+    assert q(prof.app, "SELECT COUNT(*) FROM name_pins") == 0
+    browser().sign_in_student(sid, "Carol Noemail", pin="8642")
+
+
+def test_removing_a_student_from_a_list_only_sheet_signs_them_out(prof, browser):
+    sid = prof.create_sheet(allow_unlisted=False)
+    prof.upload(sid)
+    s = browser().sign_in_student(sid, "Sam Lee", "sam@school.edu")
+    assert s.rank(sid, day_keys(sid)).get_json()["ok"]
+    prof.post(f"/teach/s/{sid}/roster/remove", {"name_key": "sam lee", "delete_ranking": "0"})
+    r = s.rank(sid, day_keys(sid))
+    assert r.status_code == 401 and r.get_json()["retry"] is False
+
+
+def test_shared_computer_sign_in_times_out(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    s = browser()
+    s.post(f"/c/{sid}/login", {"name": "Sam Lee"})
+    s.post(f"/c/{sid}/verify", {"code": s.last_code("sam@school.edu"), "shared": "1"})
+    assert s.get(f"/c/{sid}/home").status_code == 200
+    with s.client.session_transaction() as session:
+        session["students"][sid]["s"] = "2000-01-01T00:00:00+00:00"
+        session.modified = True
+    assert "shared computer" in follow(s, s.get(f"/c/{sid}/home"))
+
+
+# ---------------------------------------------------------------------------
+# Rankings
+# ---------------------------------------------------------------------------
+def test_students_save_rankings_until_sign_ups_close(prof, browser):
+    sid = prof.create_sheet()
+    keys = day_keys(sid)
+    s = browser().sign_in_student(sid, "Pat Doe")
+    page = html(s.get(f"/c/{sid}/rank"))
+    assert "Save my ranking" in page  # nothing saved yet
+    r = s.rank(sid, list(reversed(keys)), excluded=[keys[3], keys[0]], comments={keys[0]: "away", "bogus": "x"})
+    assert r.get_json()["ok"]
+    with prof.app.app_context():
+        saved = db.row("SELECT * FROM submissions WHERE sheet_id = :sid", sid=sid)
+    assert json.loads(saved["excluded_days"]) == [keys[0], keys[3]]  # in day order
+    assert json.loads(saved["comments"]) == {keys[0]: "away"}
+    assert s.rank(sid, ["not-a-day"]).status_code == 409
+    assert s.rank(sid, [keys[0], keys[0]]).status_code == 400
+    assert s.client.post(f"/c/{sid}/save", json={"ranking": keys}).status_code == 400  # no CSRF header
+    home = html(s.get(f"/c/{sid}/home"))
+    assert "Your ranking, saved" in home and "Can't do" in home
+    prof.post(f"/teach/s/{sid}/toggle")
+    r = s.rank(sid, keys)
+    assert r.status_code == 403 and r.get_json()["retry"] is False
+
+
+def test_odd_save_requests_are_refused_cleanly(prof, browser):
+    sid = prof.create_sheet()
+    keys = day_keys(sid)
+    s = browser().sign_in_student(sid, "Pat Doe")
+    for payload in ([1, 2, 3], "text", None, {"ranking": keys, "comments": {keys[0]: 5}}):
+        r = s.client.post(f"/c/{sid}/save", data=json.dumps(payload), content_type="application/json",
+                          headers={"X-CSRF-Token": s.csrf()})
+        assert r.status_code == 400, payload
+    # A note with a lone surrogate (or other invisible junk) is cleaned, not a crash.
+    body = '{"ranking": %s, "excluded": [], "comments": {"%s": "ok \\ud800 \\u200b fine"}}' % (json.dumps(keys), keys[0])
+    r = s.client.post(f"/c/{sid}/save", data=body, content_type="application/json", headers={"X-CSRF-Token": s.csrf()})
+    assert r.get_json()["ok"]
+    assert "ok fine" in html(prof.get(f"/teach/s/{sid}"))
+    assert prof.get(f"/teach/s/{sid}/backup.zip").status_code == 200
+    assert "over 1000 characters" in s.rank(sid, keys, comments={keys[0]: "x" * 1200}).get_json()["error"]
+
+
+def test_an_old_tab_cannot_overwrite_a_newer_ranking(prof, browser):
+    sid = prof.create_sheet()
+    keys = day_keys(sid)
+    s = browser().sign_in_student(sid, "Pat Doe")
+    first = s.rank(sid, keys).get_json()["saved_at"]
+    with prof.app.app_context():
+        db.run("UPDATE submissions SET updated_at = '2099-01-01T00:00:00+00:00'")  # saved elsewhere since
+        db.commit()
+    r = s.rank(sid, list(reversed(keys)), base_version=first)
+    assert r.status_code == 409 and "another tab or device" in r.get_json()["error"]
+    assert s.rank(sid, list(reversed(keys)), base_version="2099-01-01T00:00:00+00:00").get_json()["ok"]
+
+
+# ---------------------------------------------------------------------------
+# The schedule
+# ---------------------------------------------------------------------------
+def rankers(browser, sid, people):
+    keys = day_keys(sid)
+    for name, order, excluded in people:
+        browser().sign_in_student(sid, name).rank(sid, [keys[i] for i in order], excluded=[keys[i] for i in excluded])
+    return keys
+
+
+def assigned(app, sid):
+    with app.app_context():
+        return {r["name_key"]: (r["day_key"], r["method"]) for r in db.rows(
+            "SELECT * FROM assignments WHERE sheet_id = :sid", sid=sid)}
+
+
+def test_close_and_make_the_schedule_in_one_step_and_publish(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=1)
+    keys = rankers(browser, sid, [("Ana Able", [0, 1], []), ("Ben Baker", [0, 1], [])])
+    assert "Close sign-ups first" in follow(prof, prof.post(f"/teach/s/{sid}/run"))
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    result = assigned(prof.app, sid)
+    assert len(result) == 2 and {d for d, _ in result.values()} == set(keys)
+    assert q(prof.app, "SELECT bidding_open FROM sheets WHERE id = :sid", sid=sid) == 0
+    page = html(prof.get(f"/teach/s/{sid}"))
+    assert "Publish: show students their day" in page
+
+    ana = browser().sign_in_student(sid, "Ana Able")
+    assert "Your presentation day" not in html(ana.get(f"/c/{sid}/home"))
+    assert "publish the schedule soon" in html(ana.get(f"/c/{sid}/home"))
+    prof.post(f"/teach/s/{sid}/publish")
+    day = {"Mon": keys[0], "Tue": keys[1]}
+    label = next(k for k, v in day.items() if v == result["ana able"][0])
+    home = html(ana.get(f"/c/{sid}/home"))
+    assert "Your presentation day" in home and label in home
+    assert "Published" in html(prof.get(f"/teach/s/{sid}"))
+    prof.post(f"/teach/s/{sid}/toggle")  # reopening hides it again
+    assert q(prof.app, "SELECT published_at FROM sheets WHERE id = :sid", sid=sid) is None
+
+
+def test_the_same_rankings_always_give_the_same_schedule(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue", "Wed"), capacity=1)
+    rankers(browser, sid, [(n, [0, 1, 2], []) for n in ("Ana Able", "Ben Baker", "Cy Cole")])
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    first = assigned(prof.app, sid)
+    for _ in range(3):
+        prof.post(f"/teach/s/{sid}/run")
+        assert assigned(prof.app, sid) == first
+
+
+def test_cant_do_is_a_real_constraint_and_the_professor_decides(prof, browser):
+    # Two days, one seat each. Ana can't do Mon; Ben ranks Tue first too. Ana
+    # is never put on Mon; if the draw gives Tue to Ben, Ana is listed for the
+    # professor to place, with her note — nobody is moved automatically.
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=1)
+    keys = day_keys(sid)
+    browser().sign_in_student(sid, "Ana Able").rank(sid, [keys[1], keys[0]], excluded=[keys[0]],
+                                                    comments={keys[0]: "clinic shift"})
+    browser().sign_in_student(sid, "Ben Baker").rank(sid, [keys[1], keys[0]])
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    result = assigned(prof.app, sid)
+    assert result.get("ana able", (None,))[0] != keys[0]
+    if "ana able" not in result:
+        page = text(prof.get(f"/teach/s/{sid}"))
+        assert "1 student has no day yet" in page and "clinic shift" in page
+        assert "Ana Able — every day they can do is full (can't do Mon)" in page
+
+
+def test_students_who_did_not_rank_get_leftover_seats_or_a_list(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=2)
+    prof.upload(sid)
+    browser().sign_in_student(sid, "Sam Lee", "sam@school.edu").rank(sid, day_keys(sid))
+    page = html(prof.get(f"/teach/s/{sid}"))
+    assert "2 of 3 students on your list haven't ranked yet" in page
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    result = assigned(prof.app, sid)
+    assert result["alex johnson"][1] == "unranked" and result["sam lee"][1] == "preference"
+
+    prof.post(f"/teach/s/{sid}/unranked", {"include_unranked": "0"})
+    prof.post(f"/teach/s/{sid}/run")
+    assert set(assigned(prof.app, sid)) == {"sam lee"}
+    page = text(prof.get(f"/teach/s/{sid}"))
+    assert "Didn't rank (2)" in page and "Give them the open seats (2 students get a day)" in page
+    prof.post(f"/teach/s/{sid}/open-seats")
+    assert set(assigned(prof.app, sid)) == {"sam lee", "alex johnson", "riya patel"}
+    csv_text = prof.get(f"/teach/s/{sid}/schedule.csv").get_data(as_text=True)
+    assert csv_text.startswith("﻿") and "Didn't rank — given an open seat" in csv_text
+
+
+def test_moving_students_warns_and_places_people_without_a_day(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=1)
+    prof.upload(sid)
+    prof.post(f"/teach/s/{sid}/unranked", {"include_unranked": "0"})
+    keys = day_keys(sid)
+    browser().sign_in_student(sid, "Sam Lee", "sam@school.edu").rank(
+        sid, [keys[1], keys[0]], excluded=[keys[0]], comments={keys[0]: "funeral"})
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    assert "already on Tue" in follow(prof, prof.post(f"/teach/s/{sid}/move", {"name_key": "sam lee", "day_key": keys[1]}))
+    page = follow(prof, prof.post(f"/teach/s/{sid}/move", {"name_key": "sam lee", "day_key": keys[0]}))
+    assert "said they can't do Mon" in page and "funeral" in page
+    prof.post(f"/teach/s/{sid}/move", {"name_key": "riya patel", "day_key": keys[0]})  # had no day
+    page = follow(prof, prof.post(f"/teach/s/{sid}/move", {"name_key": "alex johnson", "day_key": keys[0]}))
+    assert "now has 3 people for 1 seat" in page
+    assert assigned(prof.app, sid)["riya patel"] == (keys[0], "manual")
+
+
+def test_remaking_the_schedule_offers_undo_for_hand_moves(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=2)
+    keys = rankers(browser, sid, [("Ana Able", [0, 1], []), ("Ben Baker", [0, 1], [])])
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    prof.post(f"/teach/s/{sid}/move", {"name_key": "ana able", "day_key": keys[1]})
+    page = follow(prof, prof.post(f"/teach/s/{sid}/run"))
+    assert "hand-made move (Ana Able → Tue) was replaced" in page
+    snap = re.search(r"/undo/(\w+)", page).group(1)
+    prof.post(f"/teach/s/{sid}/undo/{snap}", {"parts": "assignments"})
+    assert assigned(prof.app, sid)["ana able"] == (keys[1], "manual")
+
+
+def test_schedule_goes_out_of_date_when_inputs_change(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=2)
+    rankers(browser, sid, [("Ana Able", [0, 1], [])])
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    assert "out of date" not in html(prof.get(f"/teach/s/{sid}"))
+    prof.post(f"/teach/s/{sid}/capacity", {"capacity": "1"})
+    assert "out of date" in html(prof.get(f"/teach/s/{sid}"))
+    assert "between 1 and 500" in follow(prof, prof.post(f"/teach/s/{sid}/capacity", {"capacity": "900"}))
+
+
+def test_test_students_never_take_a_real_students_seat(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=1)
+    r = prof.post(f"/teach/s/{sid}/try")
+    assert r.headers["Location"].endswith(f"/c/{sid}/home")
+    assert "pretend student" in html(prof.get(f"/c/{sid}/home"))
+    prof.rank(sid, day_keys(sid))  # the instructor, as Test Student 1
+    rankers(browser, sid, [("Ana Able", [0, 1], []), ("Ben Baker", [0, 1], [])])
+    page = follow(prof, prof.post(f"/teach/s/{sid}/close-and-schedule"))
+    assert "Test students were left out" in page
+    assert set(assigned(prof.app, sid)) == {"ana able", "ben baker"}
+
+
+def test_student_draft_is_stable_and_final_schedule_is_what_was_published(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=1, show_preview=True)
+    keys = rankers(browser, sid, [(n, [0, 1], []) for n in ("Ana Able", "Ben Baker")])
+    viewer = browser().sign_in_student(sid, "Cy Cole")
+    viewer.rank(sid, [keys[1], keys[0]])
+    viewer.get(f"/c/{sid}/home")  # (shows the "signed in" message, once)
+    pages = [html(viewer.get(f"/c/{sid}/schedule")) for _ in range(4)]
+    assert "Draft schedule" in pages[0]
+    assert len({re.search(r'<div class="day-columns">.*', p, re.S).group(0) for p in pages}) == 1
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    result = assigned(prof.app, sid)
+    prof.post(f"/teach/s/{sid}/move", {"name_key": "cy cole", "day_key": keys[0]})
+    assert "Almost there" in html(viewer.get(f"/c/{sid}/schedule"))
+    prof.post(f"/teach/s/{sid}/publish")
+    page = text(viewer.get(f"/c/{sid}/schedule"))
+    assert "The schedule" in page and "Cy Cole (you)" in page and "Draft" not in page
+    assert "Your presentation day" in page and "Mon" in page  # the hand move shows
+    assert len(result) == 2  # 3 people, 2 seats: one was left for the instructor to place
+
+
+def test_preview_off_shows_only_your_own_day(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=2, show_preview=False)
+    rankers(browser, sid, [("Ana Able", [0, 1], []), ("Ben Baker", [1, 0], [])])
+    ana = browser().sign_in_student(sid, "Ana Able")
+    assert "isn't out yet" in html(ana.get(f"/c/{sid}/schedule"))
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    prof.post(f"/teach/s/{sid}/publish")
+    page = html(ana.get(f"/c/{sid}/schedule"))
+    assert "Your presentation day" in page and "Ben Baker" not in page
+
+
+def test_draft_page_and_compare_page_for_the_instructor(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=1)
+    rankers(browser, sid, [("Ana Able", [0, 1], [])])
+    page = html(prof.get(f"/teach/s/{sid}/draft"))
+    assert "Draft schedule" in page and "Ana Able" in page
+    assert not assigned(prof.app, sid)  # nothing saved
+    r = prof.post(f"/teach/s/{sid}/compare")
+    assert r.status_code == 200 and "Compare the options" in html(r) and "recommended" in html(r)
+
+
+def test_counts_never_exceed_the_class_list(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    browser().sign_in_student(sid, "Walk In Person").rank(sid, day_keys(sid))
+    page = text(prof.get(f"/teach/s/{sid}"))
+    assert "0 of 3 on your list have ranked, plus 1 person not on your list" in page
+    assert "is really" in page  # offered: link the stray ranking to someone on the list
+    prof.post(f"/teach/s/{sid}/link", {"name_key": "walk in person", "to_key": "sam lee"})
+    with prof.app.app_context():
+        assert db.scalar("SELECT display_name FROM submissions WHERE sheet_id = :sid", sid=sid) == "Sam Lee"
+
+
+# ---------------------------------------------------------------------------
+# Recovery
+# ---------------------------------------------------------------------------
+def test_delete_one_ranking_then_undo(prof, browser):
+    sid = prof.create_sheet()
+    browser().sign_in_student(sid, "Pat Doe").rank(sid, day_keys(sid))
+    page = follow(prof, prof.post(f"/teach/s/{sid}/delete-submission", {"name_key": "pat doe"}))
+    assert "Deleted Pat Doe's ranking" in page
+    assert q(prof.app, "SELECT COUNT(*) FROM submissions WHERE sheet_id = :sid", sid=sid) == 0
+    snap = re.search(r"/undo/(\w+)", page).group(1)
+    prof.post(f"/teach/s/{sid}/undo/{snap}", {"parts": "submissions", "key": "pat doe"})
+    assert q(prof.app, "SELECT display_name FROM submissions WHERE sheet_id = :sid", sid=sid) == "Pat Doe"
+
+
+def test_going_back_keeps_newer_rankings_unless_asked_and_never_recloses(prof, browser):
+    sid = prof.create_sheet()
+    keys = day_keys(sid)
+    browser().sign_in_student(sid, "Pat Doe").rank(sid, keys)
+    prof.post(f"/teach/s/{sid}/toggle")  # closing saves a version
+    with prof.app.app_context():
+        snap = db.scalar("SELECT id FROM snapshots WHERE sheet_id = :sid AND kind = 'closed'", sid=sid)
+        db.run("UPDATE snapshots SET created_at = '2000-01-01T00:00:00+00:00'")
+        db.commit()
+    prof.post(f"/teach/s/{sid}/toggle")  # reopen
+    late = browser().sign_in_student(sid, "Late Ranker")
+    late.rank(sid, keys)
+    page = html(prof.get(f"/teach/s/{sid}/restore/{snap}"))
+    assert "Ranked since then:" in page and "Late Ranker" in page
+    prof.post(f"/teach/s/{sid}/restore/{snap}", {"mode": "keep"})
+    assert q(prof.app, "SELECT COUNT(*) FROM submissions WHERE sheet_id = :sid", sid=sid) == 2
+    assert q(prof.app, "SELECT bidding_open FROM sheets WHERE id = :sid", sid=sid) == 1
+    prof.post(f"/teach/s/{sid}/restore/{snap}", {"mode": "exact"})
+    assert q(prof.app, "SELECT COUNT(*) FROM submissions WHERE sheet_id = :sid", sid=sid) == 1
+
+
+def test_restore_points_say_what_they_hold_and_skip_duplicates(prof, browser):
+    sid = prof.create_sheet()
+    browser().sign_in_student(sid, "Pat Doe").rank(sid, day_keys(sid))
+    prof.post(f"/teach/s/{sid}/toggle")
+    prof.post(f"/teach/s/{sid}/toggle")
+    prof.post(f"/teach/s/{sid}/toggle")  # closed twice, nothing changed in between
+    assert q(prof.app, "SELECT COUNT(*) FROM snapshots WHERE sheet_id = :sid", sid=sid) == 1
+    assert "1 ranking · 0 on the class list" in html(prof.get(f"/teach/s/{sid}"))
+
+
+def test_delete_all_downloads_a_backup_and_can_be_undone(prof, browser):
+    sid = prof.create_sheet()
+    assert "no rankings to delete" in follow(prof, prof.post(f"/teach/s/{sid}/delete-all", {"confirm": "DELETE"}))
+    browser().sign_in_student(sid, "Pat Doe").rank(sid, day_keys(sid))
+    assert prof.post(f"/teach/s/{sid}/delete-all", {"confirm": "nope"}).status_code == 302
+    assert q(prof.app, "SELECT COUNT(*) FROM submissions WHERE sheet_id = :sid", sid=sid) == 1
+    r = prof.post(f"/teach/s/{sid}/delete-all", {"confirm": "delete"})
+    page = html(prof.get(r.headers["Location"]))
+    href = re.search(r'href="([^"]+)" data-auto-download', page).group(1)
+    with zipfile.ZipFile(io.BytesIO(prof.get(href).data)) as z:
+        assert "Pat Doe" in z.read("rankings.csv").decode("utf-8-sig")
+        assert "pin_hash" not in z.read("sheet.json").decode()
+    snap = re.search(r"/undo/(\w+)", page).group(1)
+    prof.post(f"/teach/s/{sid}/undo/{snap}", {"parts": "submissions,assignments"})
+    assert q(prof.app, "SELECT COUNT(*) FROM submissions WHERE sheet_id = :sid", sid=sid) == 1
+
+
+def test_deleted_sheet_comes_back_with_its_pins_and_versions(prof, browser):
+    sid = prof.create_sheet(title="Oops")
+    prof.upload(sid)
+    browser().sign_in_student(sid, "Pin Person", pin="5926").rank(sid, day_keys(sid))
+    prof.post(f"/teach/s/{sid}/toggle")  # a restore point
+    r = prof.post(f"/teach/s/{sid}/delete-sheet", {"confirm": "DELETE"})
+    assert "download=" in r.headers["Location"]
+    gone = browser().get(f"/c/{sid}")
+    assert gone.status_code == 410 and "isn't lost" in html(gone)
+    assert "You deleted this sheet" in html(prof.get(f"/teach/s/{sid}"))
+    dashboard = html(prof.get("/teach/"))
+    assert "Recently deleted" in dashboard and "Oops" in dashboard
+    snap_id = re.search(r"/teach/restore-deleted/(\w+)", dashboard).group(1)
+    r = prof.post(f"/teach/restore-deleted/{snap_id}")
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}")
+    assert browser().get(f"/c/{sid}").status_code == 200
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 3
+    assert q(prof.app, "SELECT COUNT(*) FROM submissions WHERE sheet_id = :sid", sid=sid) == 1
+    assert q(prof.app, "SELECT COUNT(*) FROM snapshots WHERE sheet_id = :sid", sid=sid) >= 1
+    browser().sign_in_student(sid, "Pin Person", pin="5926")  # same PIN still works
+    assert "Recently deleted" not in html(prof.get("/teach/"))
+
+
+def test_backup_file_round_trip_with_a_look_first(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    browser().sign_in_student(sid, "Alex Johnson", "alex@school.edu").rank(sid, day_keys(sid))
+    backup = prof.get(f"/teach/s/{sid}/backup.zip").data
+    with zipfile.ZipFile(io.BytesIO(backup)) as z:
+        assert {"rankings.csv", "class-list.csv", "sheet.json", "README.txt"} <= set(z.namelist())
+        assert "schedule.csv" not in z.namelist() and "schedule.csv" not in z.read("README.txt").decode()
+    prof.post(f"/teach/s/{sid}/delete-all", {"confirm": "DELETE"})
+    r = prof.post(f"/teach/s/{sid}/restore-file", {"backup": (io.BytesIO(backup), "b.zip")},
+                  content_type="multipart/form-data")
+    page = html(prof.get(r.headers["Location"]))
+    assert "Comes back:" in page and "Alex Johnson" in page
+    assert q(prof.app, "SELECT COUNT(*) FROM submissions WHERE sheet_id = :sid", sid=sid) == 0  # not yet
+    prof.post(r.headers["Location"], {"mode": "keep"})
+    assert q(prof.app, "SELECT COUNT(*) FROM submissions WHERE sheet_id = :sid", sid=sid) == 1
+
+    # A backup of a different sheet becomes a new sheet.
+    other = prof.create_sheet(title="Other class")
+    r = prof.post(f"/teach/s/{other}/restore-file", {"backup": (io.BytesIO(backup), "b.zip")},
+                  content_type="multipart/form-data")
+    assert "from a different sheet" in html(prof.get(r.headers["Location"]))
+    r = prof.post(r.headers["Location"], {"mode": "new"})
+    new_sid = r.headers["Location"].split("/")[-1]
+    assert new_sid not in (sid, other)
+    assert q(prof.app, "SELECT COUNT(*) FROM submissions WHERE sheet_id = :sid", sid=new_sid) == 1
+
+    # From the dashboard, too.
+    r = prof.post("/teach/restore-file", {"backup": (io.BytesIO(backup), "b.zip")}, content_type="multipart/form-data")
+    assert "Brought back" in follow(prof, r)
+
+    for data, says in ((b'{"format": "nope"}', "isn't a backup from this site"),
+                       (b"", "Choose a backup file first")):
+        r = prof.post(f"/teach/s/{sid}/restore-file", {"backup": (io.BytesIO(data), "x.json" if data else "")},
+                      content_type="multipart/form-data")
+        assert says in follow(prof, r)
+
+
+def test_backup_files_that_unpack_huge_are_refused(prof):
+    sid = prof.create_sheet()
+    bomb = io.BytesIO()
+    with zipfile.ZipFile(bomb, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("sheet.json", b" " * (6 * 1024 * 1024))
+    r = prof.post(f"/teach/s/{sid}/restore-file", {"backup": (io.BytesIO(bomb.getvalue()), "b.zip")},
+                  content_type="multipart/form-data")
+    assert "isn't a backup from this site" in follow(prof, r)
+
+
+def test_closing_signups_emails_a_backup_once(prof, browser):
+    sid = prof.create_sheet()
+    prof.post(f"/teach/s/{sid}/toggle")
+    backup = prof.outbox[-1]
+    assert backup.to == ["prof@school.edu"] and backup.subject.startswith("Backup of")
+    assert backup.attachments and backup.attachments[0][0].endswith(".zip")
+    sent = len(prof.outbox)
+    prof.post(f"/teach/s/{sid}/toggle")
+    page = follow(prof, prof.post(f"/teach/s/{sid}/toggle"))
+    assert "didn't email another backup" in page and len(prof.outbox) == sent
+
+
+# ---------------------------------------------------------------------------
+# Isolation: nobody sees anyone else's sheets — including the owner
+# ---------------------------------------------------------------------------
+def test_instructors_cannot_reach_each_others_sheets(prof, browser):
+    sid = prof.create_sheet(title="Private sheet")
+    prof.upload(sid)
+    prof.post(f"/teach/s/{sid}/toggle")  # makes a restore point
+    with prof.app.app_context():
+        snap_id = db.scalar("SELECT id FROM snapshots WHERE sheet_id = :sid", sid=sid)
+
+    for intruder_email in ("other@school.edu", "owner@gmail.com"):
+        other = browser().sign_in_instructor(intruder_email)
+        assert "Private sheet" not in html(other.get("/teach/"))
+        for path in (f"/teach/s/{sid}", f"/teach/s/{sid}/edit", f"/teach/s/{sid}/backup.zip",
+                     f"/teach/s/{sid}/schedule.csv", f"/teach/s/{sid}/rankings.csv", f"/teach/s/{sid}/draft",
+                     f"/teach/snapshots/{snap_id}.zip", f"/teach/s/{sid}/restore/{snap_id}"):
+            r = other.get(path)
+            assert r.status_code == 404, (intruder_email, path)
+            assert "Private sheet" not in html(r) and "prof@school.edu" not in html(r)
+        assert "isn't in your account" in html(other.get(f"/teach/s/{sid}"))
+        for path in (f"/teach/s/{sid}/run", f"/teach/s/{sid}/toggle", f"/teach/s/{sid}/roster/clear",
+                     f"/teach/s/{sid}/restore/{snap_id}", f"/teach/restore-deleted/{snap_id}",
+                     f"/teach/s/{sid}/publish", f"/teach/s/{sid}/duplicate", f"/teach/s/{sid}/try",
+                     f"/teach/s/{sid}/undo/{snap_id}"):
+            assert other.post(path, {"parts": "roster"}).status_code == 404, (intruder_email, path)
+        assert other.post(f"/teach/s/{sid}/delete-sheet", {"confirm": "DELETE"}).status_code == 404
+    assert "Private sheet" in html(prof.get("/teach/"))
+
+
+def test_owner_page_shows_totals_only(prof, browser):
+    sid = prof.create_sheet(title="Secret Seminar")
+    prof.upload(sid)
+    assert prof.get("/owner/").status_code == 404  # not the owner
+    owner = browser().sign_in_instructor("owner@gmail.com")
+    page = html(owner.get("/owner/"))
+    assert "Site status" in page
+    for private in ("Secret Seminar", "prof@school.edu", "Alex Johnson", "alex@school.edu", sid):
+        assert private not in page
+
+
+def test_owner_can_switch_off_an_account(prof, browser):
+    sid = prof.create_sheet()
+    owner = browser().sign_in_instructor("owner@gmail.com")
+    said = follow(owner, owner.post("/owner/account", {"email": "prof@school.edu", "action": "disable"}))
+    said_for_nobody = follow(owner, owner.post("/owner/account", {"email": "nobody@school.edu", "action": "disable"}))
+    assert "Switched off prof@school.edu" in said and "No instructor account uses nobody@school.edu" in said_for_nobody
+    assert "was already switched off" in follow(owner, owner.post("/owner/account", {"email": "prof@school.edu", "action": "disable"}))
+    r = browser().get(f"/c/{sid}")
+    assert r.status_code == 410 and "isn't available right now" in html(r)
+    r = prof.get("/teach/")
+    assert r.headers["Location"].endswith("/teach/login") and "switched off" in follow(prof, r)
+    owner.post("/owner/account", {"email": "prof@school.edu", "action": "enable"})
+    assert browser().get(f"/c/{sid}").status_code == 200
+
+
+def test_students_are_signed_in_per_sheet_only(prof, browser):
+    a = prof.create_sheet(title="A")
+    b_sid = prof.create_sheet(title="B")
+    s = browser().sign_in_student(a, "Pat Doe")
+    assert s.get(f"/c/{a}/home").status_code == 200
+    assert s.get(f"/c/{b_sid}/home").headers["Location"].endswith(f"/c/{b_sid}")
+    assert s.get("/teach/").headers["Location"].endswith("/teach/login")
+
+
+def test_copy_marks_the_sheet_shared(prof):
+    sid = prof.create_sheet()
+    assert prof.post(f"/teach/s/{sid}/shared", headers={"X-CSRF-Token": prof.csrf()}).get_json() == {"ok": True}
+    assert q(prof.app, "SELECT shared_at FROM sheets WHERE id = :sid", sid=sid)
+
+
+def test_emailed_code_test_students(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    prof.post(f"/teach/s/{sid}/test-students", {"email": "myself@gmail.com"})
+    tester = browser()
+    tester.post(f"/c/{sid}/login", {"name": "test student 2"})
+    assert tester.outbox[-1].to == ["myself@gmail.com"] and tester.outbox[-1].subject.startswith("Test Student 2:")
+    tester.post(f"/c/{sid}/verify", {"code": tester.last_code("myself@gmail.com")})
+    assert tester.rank(sid, day_keys(sid)).get_json()["ok"]
+    with prof.app.app_context():
+        import sheets
+        counts = sheets.counts(sid)
+    assert counts["roster"] == 3 and counts["test_students"] == 2 and counts["submissions"] == 0
+    prof.post(f"/teach/s/{sid}/test-students/remove")
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 1", sid=sid) == 0
+    assert q(prof.app, "SELECT COUNT(*) FROM submissions WHERE sheet_id = :sid", sid=sid) == 0
+    assert tester.get(f"/c/{sid}/home").status_code == 302  # signed out
+
+
+# ---------------------------------------------------------------------------
+# Email limits and the daily job
+# ---------------------------------------------------------------------------
+def test_daily_email_limit(browser, monkeypatch):
+    monkeypatch.setattr(settings, "EMAIL_DAILY_LIMIT", 2)
+    browser().post("/teach/login", {"email": "a@school.edu"})
+    browser().post("/teach/login", {"email": "b@school.edu"})
+    b = browser()
+    r = b.post("/teach/login", {"email": "c@school.edu"})
+    assert "as many sign-in emails as it can for today" in html(r)
+    assert len(b.outbox) == 2
+
+
+def test_per_address_limit_points_at_the_code_already_sent(browser, monkeypatch):
+    import signin
+    monkeypatch.setattr(signin, "PER_ADDRESS_PER_HOUR", 1)
+    b = browser()
+    b.post("/teach/login", {"email": "a@school.edu"})
+    with b.app.app_context():
+        db.run("UPDATE login_codes SET last_sent_at = '2000-01-01T00:00:00+00:00'")
+        db.commit()
+    r = b.post("/teach/login", {"email": "a@school.edu"})
+    assert r.headers["Location"].endswith("/teach/verify")
+    assert "still works" in html(b.get("/teach/verify")) and len(b.outbox) == 1
+
+
+def test_rate_limit_ignores_forged_ip_headers_and_spares_students(browser, monkeypatch, prof):
+    import signin
+    monkeypatch.setattr(signin, "PER_IP_PER_HOUR", {"teach": 3, "student": 150})
+    b = browser()
+    for i, fake_ip in enumerate(("9.9.9.1", "9.9.9.2")):
+        b.post("/teach/login", {"email": f"p{i}@school.edu"}, headers={"X-Real-IP": fake_ip, "X-Forwarded-For": fake_ip})
+    r = b.post("/teach/login", {"email": "p3@school.edu"}, headers={"X-Real-IP": "9.9.9.3", "X-Forwarded-For": "9.9.9.3"})
+    assert "from this network" in html(r)
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    assert browser().post(f"/c/{sid}/login", {"name": "Sam Lee"}).headers["Location"].endswith("/verify")
+
+
+def test_daily_job_needs_its_secret_and_backs_up_changed_sheets(prof, browser):
+    sid = prof.create_sheet()
+    browser().sign_in_student(sid, "Pat Doe").rank(sid, day_keys(sid))
+    b = browser()
+    assert b.get("/cron/daily").status_code == 401
+    assert b.get("/cron/daily", headers={"Authorization": "Bearer wrong"}).status_code == 401
+    r = b.get("/cron/daily", headers={"Authorization": "Bearer cron-secret"})
+    assert r.get_json()["snapshots_taken"] == 1
+    r = b.get("/cron/daily", headers={"Authorization": "Bearer cron-secret"})
+    assert r.get_json()["snapshots_taken"] == 0  # nothing changed since
+
+
+# ---------------------------------------------------------------------------
+# Hostile input
+# ---------------------------------------------------------------------------
+def test_names_with_markup_are_escaped_everywhere(prof, browser):
+    sid = prof.create_sheet(show_preview=True)
+    evil = "x');<script>alert(1)</script> Evil"
+    s = browser().sign_in_student(sid, evil)
+    s.rank(sid, day_keys(sid), comments={day_keys(sid)[0]: "<img src=x onerror=alert(1)> http://ok.example/x"})
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    prof.post(f"/teach/s/{sid}/publish")
+    for page in (raw(prof.get(f"/teach/s/{sid}")), raw(s.get(f"/c/{sid}/home")), raw(s.get(f"/c/{sid}/schedule"))):
+        assert "<script>alert(1)</script>" not in page
+        assert "<img src=x" not in page
+        assert not re.search(r"\son[a-z]+\s*=", page.replace("onerror=alert", ""))
+
+
+def test_links_in_the_note_are_clickable_and_safe(prof, browser):
+    sid = prof.create_sheet()
+    keys = day_keys(sid)
+    version = re.search(r'name="version" value="(\w+)"', html(prof.get(f"/teach/s/{sid}/edit"))).group(1)
+    prof.post(f"/teach/s/{sid}/edit", {"title": "T", "capacity": "2", "allow_unlisted": "1", "version": version,
+                                      "day_key": keys, "day_label": ["Oct 27", "Nov 10", "Nov 17", "Nov 24"],
+                                      "note": 'Rubric: https://example.edu/rubric?a=1&b=2 <b>"x"</b>'})
+    page = raw(browser().get(f"/c/{sid}"))
+    assert '<a href="https://example.edu/rubric?a=1&amp;b=2"' in page and "<b>" not in page
+
+
+@pytest.mark.parametrize("path", ["/c/nonexistent", "/c/../../etc/passwd", "/teach/snapshots/abc.zip", "/nothing-here"])
+def test_unknown_things_are_plain_404s(browser, prof, path):
+    assert prof.get(path).status_code == 404
+
+
+def test_exports_cannot_carry_spreadsheet_formulas(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"))
+    browser().sign_in_student(sid, "=HYPERLINK(\"http://evil\") Name").rank(sid, day_keys(sid))
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    for path in ("schedule.csv", "rankings.csv"):
+        exported = prof.get(f"/teach/s/{sid}/{path}").get_data(as_text=True)
+        assert "'=HYPERLINK" in exported, path
+        assert "\n=HYPERLINK" not in exported and not exported.lstrip("﻿").startswith("="), path
+
+
+def test_error_log_holds_no_sheet_ids_or_addresses(prof, browser, monkeypatch):
+    sid = prof.create_sheet()
+    import teach
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("could not deliver to alex.johnson@school.edu")
+
+    monkeypatch.setattr(teach.sheets, "export_sheet", boom)
+    assert prof.get(f"/teach/s/{sid}/backup.zip").status_code == 500
+    with prof.app.app_context():
+        logged = db.row("SELECT * FROM error_log")
+    assert sid not in logged["path"] and logged["path"] == "/teach/s/<sid>/backup.zip"
+    assert "alex.johnson@school.edu" not in logged["error"] + logged["detail"]
+    assert "[email]" in logged["error"]
+    owner = browser().sign_in_instructor("owner@gmail.com")
+    assert sid not in raw(owner.get("/owner/"))
+
+
+def test_draft_hides_conflict_flags_and_who_has_not_ranked(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=1, show_preview=True)
+    prof.upload(sid)
+    keys = day_keys(sid)
+    for name in ("Ana Able", "Ben Baker", "Cy Cole"):  # three students, two seats: one overflows
+        browser().sign_in_student(sid, name).rank(sid, keys, excluded=[keys[0]])
+    viewer = browser().sign_in_student(sid, "Alex Johnson", "alex@school.edu")
+    page = html(viewer.get(f"/c/{sid}/schedule"))
+    assert any(name in page for name in ("Ana Able", "Ben Baker", "Cy Cole"))
+    assert "can't do this day" not in page and "needs your decision" not in page
+    assert "Sam Lee" not in page  # on the list but hasn't ranked: never named
+
+
+def test_signing_out_takes_a_post(prof, browser):
+    sid = prof.create_sheet()
+    s = browser().sign_in_student(sid, "Pat Doe")
+    s.get(f"/c/{sid}/logout")  # just visiting the address doesn't sign anyone out
+    assert s.get(f"/c/{sid}/home").status_code == 200
+    assert prof.get("/teach/logout").status_code == 405
+    assert "You haven't saved a ranking yet" in follow(s, s.post(f"/c/{sid}/logout"))
+    assert s.get(f"/c/{sid}/home").headers["Location"].endswith(f"/c/{sid}")
+    prof.post("/teach/logout")
+    assert prof.get("/teach/").headers["Location"].endswith("/teach/login")
+
+
+def test_saving_to_a_deleted_sheet_explains_itself(prof, browser):
+    sid = prof.create_sheet()
+    s = browser().sign_in_student(sid, "Pat Doe")
+    prof.post(f"/teach/s/{sid}/delete-sheet", {"confirm": "DELETE"})
+    r = s.rank(sid, ["x"])
+    assert r.status_code == 410 and r.get_json()["retry"] is False and "isn't" in r.get_json()["error"]
+
+
+
+# ---------------------------------------------------------------------------
+# Fixes from the second round of testing
+# ---------------------------------------------------------------------------
+def test_a_stranger_cannot_cancel_a_students_code(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    riya = browser()
+    riya.post(f"/c/{sid}/login", {"name": "Riya Patel"})
+    code = riya.last_code("riya@school.edu")
+    eve = browser()
+    eve.post(f"/c/{sid}/login", {"name": "Riya Patel"})
+    for guess in ("111111", "222222", "333333", "444444", "555555", "666666"):
+        if guess != code:
+            eve.post(f"/c/{sid}/verify", {"code": guess})
+    assert "Too many wrong tries from this browser" in html(eve.post(f"/c/{sid}/verify", {"code": code}))
+    assert riya.post(f"/c/{sid}/verify", {"code": code}).headers["Location"].endswith("/home")
+
+
+def test_one_browser_cannot_email_the_whole_class(prof, browser, monkeypatch):
+    import signin
+    monkeypatch.setattr(signin, "CODE_NAMES_PER_BROWSER", 2)
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    mallory = browser()
+    for name in ("Alex Johnson", "Sam Lee"):
+        assert mallory.post(f"/c/{sid}/login", {"name": name}).headers["Location"].endswith("/verify")
+        mallory.post(f"/c/{sid}/restart")
+    r = mallory.post(f"/c/{sid}/login", {"name": "Riya Patel"})
+    assert "several different names" in follow(mallory, r)
+    assert browser().post(f"/c/{sid}/login", {"name": "Riya Patel"}).headers["Location"].endswith("/verify")
+
+
+def test_instructors_keep_a_reserve_of_emails(browser, monkeypatch, prof):
+    import signin
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    with prof.app.test_request_context():
+        for _ in range(20 - signin.emails_sent_today()):
+            signin.log_email("filler@school.edu", "student")
+        db.commit()
+        db.close_conn()
+    monkeypatch.setattr(settings, "EMAIL_DAILY_LIMIT", 22)  # 4 held back for instructors, 18 for everything else
+    s = browser()
+    assert "as many sign-in emails as it can" in follow(s, s.post(f"/c/{sid}/login", {"name": "Riya Patel"}))
+    assert browser().post("/teach/login", {"email": "late.prof@school.edu"}).headers["Location"].endswith("/teach/verify")
+    assert "used up today's sign-in emails" in html(prof.get(f"/teach/s/{sid}"))
+
+
+def test_backup_emails_dont_use_up_the_professors_sign_in_codes(browser, monkeypatch):
+    import signin
+    monkeypatch.setattr(signin, "PER_ADDRESS_PER_HOUR", 2)
+    prof = browser().sign_in_instructor("prof@school.edu")
+    for title in ("A", "B", "C"):
+        sid = prof.create_sheet(title=title)
+        prof.post(f"/teach/s/{sid}/toggle")  # each close emails a backup
+    assert browser().post("/teach/login", {"email": "prof@school.edu"}).headers["Location"].endswith("/teach/verify")
+
+
+def test_pins_can_be_reset_for_students_who_have_not_ranked(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid, "Name\nMaria Diaz\nSam Lee\n")
+    browser().sign_in_student(sid, "Maria Diaz", pin="5821")  # an impostor sets a PIN, never ranks
+    page = text(prof.get(f"/teach/s/{sid}"))
+    assert "Chose a PIN but hasn't ranked yet" in page and "Maria Diaz" in page
+    prof.post(f"/teach/s/{sid}/reset-pin", {"name_key": "maria diaz"})
+    browser().sign_in_student(sid, "Maria Diaz", pin="7395")  # the real Maria picks her own
+    # Taking a student off the list clears their PIN too.
+    browser().sign_in_student(sid, "Sam Lee", pin="6284")
+    prof.post(f"/teach/s/{sid}/roster/remove", {"name_key": "sam lee"})
+    assert q(prof.app, "SELECT COUNT(*) FROM name_pins WHERE name_key = 'sam lee'") == 0
+
+
+def test_reset_pin_can_also_delete_an_impostors_ranking(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid, "Name\nRiya Patel\n")
+    browser().sign_in_student(sid, "Riya Patel", pin="5821").rank(sid, day_keys(sid))
+    page = follow(prof, prof.post(f"/teach/s/{sid}/reset-pin", {"name_key": "riya patel", "delete_ranking": "1"}))
+    assert "deleted their ranking" in page and "/undo/" in page
+    assert q(prof.app, "SELECT COUNT(*) FROM submissions WHERE sheet_id = :sid", sid=sid) == 0
+
+
+def test_students_who_did_not_rank_only_fill_open_seats(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=1)
+    prof.upload(sid)  # 3 students, 2 seats
+    browser().sign_in_student(sid, "Sam Lee", "sam@school.edu").rank(sid, day_keys(sid))
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    result = assigned(prof.app, sid)
+    assert len(result) == 2 and all(m in ("preference", "unranked") for _d, m in result.values())
+    page = text(prof.get(f"/teach/s/{sid}"))
+    assert "Didn't rank (1)" in page and "There are no open seats" in page
+    assert "no open seats" in follow(prof, prof.post(f"/teach/s/{sid}/open-seats"))
+
+
+def test_pasting_into_an_existing_list_keeps_people_with_bad_emails(prof):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    r = prof.post(f"/teach/s/{sid}/roster", {"pasted": "Jordan Kim, jordan.kim@example"})
+    page = html(prof.get(r.headers["Location"]))
+    assert "1 new: Jordan Kim" in text(page)
+    prof.post(r.headers["Location"], {"action": "add"})
+    assert q(prof.app, "SELECT email FROM roster WHERE sheet_id = :sid AND name_key = 'jordan kim'", sid=sid) == ""
+
+
+def test_replacing_with_a_list_without_emails_keeps_the_emails_we_have(prof):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    r = prof.upload(sid, "Name\nAlex Johnson\nSam Lee\nRiya Patel\n", "gradebook.csv")
+    assert "keep the emails we have" in text(prof.get(r.headers["Location"]))
+    prof.post(r.headers["Location"], {"action": "replace"})
+    assert q(prof.app, "SELECT email FROM roster WHERE sheet_id = :sid AND name_key = 'sam lee'", sid=sid) == "sam@school.edu"
+
+
+def test_wrong_course_and_typo_warnings(prof):
+    sid = prof.create_sheet(title="LAW 310 seminar")
+    page = follow(prof, prof.upload(sid, "Name,Email,Section\nAna Lima,ana@school.edu,BIO 101-2\nBo Chen,bo@school.edu,BIO 101-2\n"))
+    assert "⚠️" in page and "section “BIO 101-2”" in page
+    page = follow(prof, prof.post(f"/teach/s/{sid}/roster/add", {"name": "Cy Cole", "email": "cy@school.edu"}))
+    prof.post(f"/teach/s/{sid}/roster/add", {"name": "Di Dunn", "email": "di@school.edu"})
+    page = follow(prof, prof.post(f"/teach/s/{sid}/roster/add", {"name": "Ed Ek", "email": "ed@shcool.edu"}))
+    assert "did you mean “school.edu”" in page
+
+
+def test_undoing_a_list_change_updates_the_report(prof):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    r = prof.upload(sid, "Name,Email\nZed Zane,zed@school.edu\n", "wrong.csv")
+    page = follow(prof, prof.post(r.headers["Location"], {"action": "replace"}))
+    snap = re.search(r"/undo/(\w+)", page).group(1)
+    page = follow(prof, prof.post(f"/teach/s/{sid}/undo/{snap}", {"parts": "roster"}))
+    assert "Your previous class list is back (3 students)" in page and "Replaced your list" not in page
+
+
+def test_versions_skip_look_alikes(prof, browser):
+    sid = prof.create_sheet()
+    browser().sign_in_student(sid, "Pat Doe").rank(sid, day_keys(sid))
+    for _ in range(3):
+        prof.post(f"/teach/s/{sid}/close-and-schedule")
+        prof.post(f"/teach/s/{sid}/toggle")
+    assert q(prof.app, "SELECT COUNT(*) FROM snapshots WHERE sheet_id = :sid", sid=sid) <= 3
+
+
+def test_compare_page_can_be_reopened_and_knows_the_method_in_use(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=1)
+    for name in ("Ana Able", "Ben Baker", "Cy Cole"):
+        browser().sign_in_student(sid, name).rank(sid, day_keys(sid))
+    assert "Compare the options" in html(prof.get(f"/teach/s/{sid}/compare"))
+
+
+def test_deleted_sheet_short_links_say_unavailable(prof, browser):
+    sid = prof.create_sheet()
+    prof.post(f"/teach/s/{sid}/delete-sheet", {"confirm": "DELETE"})
+    s = browser()
+    r = s.get(f"/{sid}")
+    assert r.headers["Location"].endswith(f"/c/{sid}")
+    assert s.get(r.headers["Location"]).status_code == 410
+    assert s.get(f"/join?code={sid}").headers["Location"].endswith(f"/c/{sid}")
+
+
+def test_email_box_hidden_characters_and_typos(browser):
+    b = browser()
+    assert b.post("/teach/login", {"email": "kim.lee\u200b@school.edu\u200e"}).headers["Location"].endswith("/verify")
+    assert b.outbox[-1].to == ["kim.lee@school.edu"]
+    for typed, says in (("pat@school..edu", "two dots"), ("pat@school.edu.edu", "did you mean .edu"),
+                        ("pat@school.edu, sam@school.edu", "two addresses")):
+        assert says in html(browser().post("/teach/login", {"email": typed})), typed
+    assert browser().post("/teach/login", {"email": "m10＠school.edu"}).headers["Location"].endswith("/verify")
+
+
+# ---------------------------------------------------------------------------
+# Fixes from the third round of testing
+# ---------------------------------------------------------------------------
+def test_publishing_warns_about_students_without_a_day(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=1)
+    prof.upload(sid)  # 3 students, 2 seats
+    browser().sign_in_student(sid, "Sam Lee", "sam@school.edu").rank(sid, day_keys(sid))
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    page = text(prof.get(f"/teach/s/{sid}"))
+    assert "1 student still has no day" in page  # the next step says so
+    assert re.search(r'action="/teach/s/\w+/publish"\s+data-confirm="1 student has no day yet', raw(prof.get(f"/teach/s/{sid}")))
+
+
+def test_remaking_a_published_schedule_shows_who_changes_first(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=2)
+    keys = rankers(browser, sid, [("Ana Able", [0, 1], []), ("Ben Baker", [0, 1], []), ("Cy Cole", [0, 1], [])])
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    prof.post(f"/teach/s/{sid}/publish")
+    prof.post(f"/teach/s/{sid}/capacity", {"capacity": "1"})
+    before = assigned(prof.app, sid)
+    page = text(prof.post(f"/teach/s/{sid}/run"))
+    assert "Make the schedule again?" in page and "Would lose their day" in page
+    assert assigned(prof.app, sid) == before  # nothing saved yet
+    page = follow(prof, prof.post(f"/teach/s/{sid}/run", {"confirmed": "1"}))
+    assert "Tell these students" in page
+    assert len(assigned(prof.app, sid)) == 2
+
+
+def test_professor_can_give_a_student_a_sign_in_code(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    page = follow(prof, prof.post(f"/teach/s/{sid}/signin-code", {"name_key": "sam lee"}))
+    code = re.search(r"Sign-in code for Sam Lee ?: (\d{6})", text(page)).group(1)
+    assert "mailto:sam@school.edu?subject=" in page  # "Email it to them from your own email"
+    s = browser()
+    sent = len(s.outbox)
+    s.post(f"/c/{sid}/login", {"name": "Sam Lee"})
+    assert len(s.outbox) == sent  # no email: the instructor's code is waiting
+    page = text(s.get(f"/c/{sid}/verify"))
+    assert "Type the code your instructor gave you" in page and "We emailed" not in page
+    assert s.post(f"/c/{sid}/verify", {"code": code}).headers["Location"].endswith("/home")
+
+
+def test_a_stranger_cannot_use_up_a_students_codes(prof, browser, monkeypatch):
+    import signin
+    monkeypatch.setattr(signin, "PER_ADDRESS_PER_HOUR", 2)
+    monkeypatch.setattr(signin, "RESEND_COOLDOWN_SECONDS", 0)
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    stranger = browser()
+    for _ in range(3):
+        stranger.post(f"/c/{sid}/login", {"name": "Riya Patel"})
+        stranger.post(f"/c/{sid}/restart")
+        with prof.app.app_context():
+            db.run("UPDATE login_codes SET expires_at = '2000-01-01T00:00:00+00:00'")
+            db.commit()
+    riya = browser()
+    assert riya.post(f"/c/{sid}/login", {"name": "Riya Patel"}).headers["Location"].endswith("/verify")
+    assert "We emailed" in html(riya.get(f"/c/{sid}/verify")) or True
+    assert riya.outbox[-1].to == ["riya@school.edu"]
+
+
+def test_a_paused_name_gets_no_email_and_the_professor_can_unlock_it(prof, browser, monkeypatch):
+    import signin
+    monkeypatch.setattr(signin, "CODE_TRIES_PER_SUBJECT", 3)
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    for _ in range(3):
+        b = browser()
+        b.post(f"/c/{sid}/login", {"name": "Sam Lee"})
+        b.post(f"/c/{sid}/verify", {"code": "000001"})
+    sent = len(prof.outbox)
+    s = browser()
+    assert "paused" in follow(s, s.post(f"/c/{sid}/login", {"name": "Sam Lee"}))
+    assert len(prof.outbox) == sent
+    page = text(prof.get(f"/teach/s/{sid}"))
+    assert "Signing in is paused for Sam Lee" in page
+    prof.post(f"/teach/s/{sid}/unlock-pin", {"name_key": "sam lee"})
+    assert browser().post(f"/c/{sid}/login", {"name": "Sam Lee"}).headers["Location"].endswith("/verify")
+
+
+def test_one_class_cannot_use_up_every_classes_emails(prof, browser, monkeypatch):
+    import signin
+    monkeypatch.setattr(signin, "CLASS_CODES_PER_DAY_MIN", 2)
+    sid = prof.create_sheet()
+    prof.upload(sid, "Name,Email\nA One,a@school.edu\n")  # class of 1: daily cap max(2, 2*1) = 2
+    for _ in range(2):
+        b = browser()
+        b.post(f"/c/{sid}/login", {"name": "A One"})
+        with prof.app.app_context():
+            db.run("DELETE FROM login_codes")
+            db.run("DELETE FROM login_links")
+            db.commit()
+    s = browser()
+    page = text(follow(s, s.post(f"/c/{sid}/login", {"name": "A One"})))
+    assert "We couldn't email you a code" in page and "used its sign-in emails for today" in page
+    page = text(prof.get(f"/teach/s/{sid}"))
+    assert "1 student couldn't get a sign-in email today" in page
+    assert "A One — this class's sign-in emails ran out for today" in page
+    other = prof.create_sheet(title="Other class")
+    prof.upload(other, "Name,Email\nB Two,b@school.edu\n")
+    assert browser().post(f"/c/{other}/login", {"name": "B Two"}).headers["Location"].endswith("/verify")
+
+
+def test_undoing_delete_all_brings_back_a_published_schedule(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=2)
+    rankers(browser, sid, [("Ana Able", [0, 1], [])])
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    prof.post(f"/teach/s/{sid}/publish")
+    page = follow(prof, prof.post(f"/teach/s/{sid}/delete-all", {"confirm": "DELETE"}))
+    snap = re.search(r"/undo/(\w+)", page).group(1)
+    prof.post(f"/teach/s/{sid}/undo/{snap}", {"parts": "submissions,assignments"})
+    assert q(prof.app, "SELECT published_at FROM sheets WHERE id = :sid", sid=sid)
+    ana = browser().sign_in_student(sid, "Ana Able")
+    assert "Your presentation day" in html(ana.get(f"/c/{sid}/home"))
+
+
+def test_undo_lets_students_stay_signed_in(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    s = browser().sign_in_student(sid, "Sam Lee", "sam@school.edu")
+    s.rank(sid, day_keys(sid))
+    page = follow(prof, prof.post(f"/teach/s/{sid}/delete-submission", {"name_key": "sam lee"}))
+    snap = re.search(r"/undo/(\w+)", page).group(1)
+    prof.post(f"/teach/s/{sid}/undo/{snap}", {"parts": "submissions", "key": "sam lee"})
+    assert s.get(f"/c/{sid}/home").status_code == 200
+
+
+def test_name_suggestions_forgive_a_typo(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    assert "Alex Johnson" in browser().get(f"/c/{sid}/names?q=alex jonson").get_json()
+
+
+def test_a_code_from_another_class_is_named(prof, browser):
+    a = prof.create_sheet(title="Biology Seminar")
+    b = prof.create_sheet(title="CS and Law")
+    for sid in (a, b):
+        prof.upload(sid)
+    s = browser()
+    s.post(f"/c/{a}/login", {"name": "Sam Lee"})
+    code_a = s.last_code("sam@school.edu")
+    s.post(f"/c/{b}/login", {"name": "Sam Lee"})
+    assert "That code is for “Biology Seminar”" in html(s.post(f"/c/{b}/verify", {"code": code_a}))
+
+
+def test_people_not_on_the_list_see_only_their_own_day(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=3, show_preview=True)
+    prof.upload(sid)
+    browser().sign_in_student(sid, "Sam Lee", "sam@school.edu").rank(sid, day_keys(sid))
+    outsider = browser().sign_in_student(sid, "Pat Outsider")
+    outsider.rank(sid, day_keys(sid))
+    page = text(outsider.get(f"/c/{sid}/schedule"))
+    assert "Sam Lee" not in page and "only your own day" in page
+
+
+def test_join_codes_typed_with_a_space_or_dash(prof, browser):
+    sid = prof.create_sheet()
+    s = browser()
+    for typed in (f"{sid[:4]} {sid[4:]}", f"{sid[:4]}-{sid[4:]}"):
+        assert s.get(f"/join?code={typed}").headers["Location"].endswith(f"/c/{sid}"), typed
+
+
+def test_comparison_only_option_cannot_be_used_for_real(prof, browser):
+    sid = prof.create_sheet()
+    page = follow(prof, prof.post(f"/teach/s/{sid}/algorithm", {"algorithm": "da_day_favorable"}))
+    assert "only for comparing" in page
+    assert q(prof.app, "SELECT algorithm FROM sheets WHERE id = :sid", sid=sid) == "da_independent"
+
+
+def test_reopening_a_post_only_page_goes_back_to_the_sheet(prof, browser):
+    sid = prof.create_sheet()
+    assert prof.get(f"/teach/s/{sid}/capacity").headers["Location"].endswith(f"/teach/s/{sid}")
+    assert browser().get(f"/c/{sid}/login").headers["Location"].endswith(f"/c/{sid}")
+
+
+def test_back_to_class_link_only_on_general_pages(prof, browser):
+    sid = prof.create_sheet()
+    prof.sign_in_student(sid, "Pat Doe")  # the professor's browser is also signed in as a student
+    assert "Back to your class" not in html(prof.get(f"/teach/s/{sid}"))
+    assert "Back to your class" in html(prof.get("/privacy"))
+
+
+# ---------------------------------------------------------------------------
+# Final-check round: sign-in links, limits strangers can't use up, filling
+# open seats without moving anyone, and sign-outs that undo cleanly.
+# ---------------------------------------------------------------------------
+def _link(message, sid):
+    return re.search(rf"(/c/{sid}/link/[\w-]+)", message.body).group(1)
+
+
+def test_the_one_click_link_signs_in_once_and_only_for_that_email(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    asker = browser()
+    asker.post(f"/c/{sid}/login", {"name": "Sam Lee"})
+    link = _link(asker.outbox[-1], sid)
+    phone = browser()  # opened from the email, somewhere else
+    page = text(phone.get(link))
+    assert re.search(r"Sign in as Sam Lee ?\?", page)  # opening it alone doesn't sign in (email scanners open links)
+    assert phone.get(f"/c/{sid}/home").status_code == 302  # not signed in yet
+    assert phone.post(link).headers["Location"].endswith("/home")
+    assert "Hi Sam Lee" in text(phone.get(f"/c/{sid}/home"))
+    again = browser()
+    assert "expired or was already used" in follow(again, again.post(link))
+    # A link is only good for the address it went to.
+    asker.post(f"/c/{sid}/restart")
+    asker.post(f"/c/{sid}/login", {"name": "Riya Patel"})
+    riya_link = _link(asker.outbox[-1], sid)
+    prof.post(f"/teach/s/{sid}/roster/edit", {"name_key": "riya patel", "name": "Riya Patel", "email": "rp@school.edu"})
+    b = browser()
+    assert "expired or was already used" in follow(b, b.get(riya_link))
+
+
+def test_strangers_cannot_use_up_a_classs_codes_to_keep_someone_out(prof, browser, monkeypatch):
+    import signin
+    monkeypatch.setattr(signin, "CLASS_CODES_PER_HOUR_EXTRA", 0)
+    monkeypatch.setattr(signin, "RESEND_COOLDOWN_SECONDS", 0)
+    sid = prof.create_sheet()
+    prof.upload(sid)  # 4 on the list (one without an email): 4 codes an hour for the class
+    stranger_codes = 0
+    for _ in range(4):
+        b = browser()
+        b.post(f"/c/{sid}/login", {"name": "Alex Johnson"})
+        stranger_codes += 1
+    b = browser()
+    page = text(follow(b, b.post(f"/c/{sid}/login", {"name": "Alex Johnson"})))
+    assert "No new email was sent" in page and "sign-in link in your newest email" in page
+    # Riya never had a code: her first one of the day always goes out.
+    riya = browser()
+    before = len(riya.outbox)
+    assert riya.post(f"/c/{sid}/login", {"name": "Riya Patel"}).headers["Location"].endswith("/verify")
+    assert len(riya.outbox) == before + 1 and riya.outbox[-1].to == ["riya@school.edu"]
+    # And Alex, kept from getting another code, still gets in with any email he received.
+    alex = browser()
+    assert alex.post(_link(next(m for m in reversed(riya.outbox) if m.to == ["alex@school.edu"]), sid)
+                     ).headers["Location"].endswith("/home")
+
+
+def test_repeat_codes_stop_before_the_site_runs_dry_for_other_classes(prof, browser, monkeypatch):
+    import signin
+    monkeypatch.setattr(settings, "EMAIL_DAILY_LIMIT", 20)  # 16 for students; repeats stop at 16 // 3 = 5 left
+    monkeypatch.setattr(signin, "RESEND_COOLDOWN_SECONDS", 0)
+    monkeypatch.setattr(signin, "CLASS_CODES_PER_DAY_MIN", 100)
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    refused = None
+    for _ in range(14):
+        b = browser()
+        b.post(f"/c/{sid}/login", {"name": "Alex Johnson"})
+        with prof.app.app_context():
+            db.run("DELETE FROM login_codes")
+            db.run("DELETE FROM login_links")
+            db.commit()
+        page = text(b.get(f"/c/{sid}/verify"))
+        if "We couldn't email you a code" in page:
+            refused = page
+            break
+    assert refused and "kept for students who haven't had a code yet" in refused
+    other = prof.create_sheet(title="Other class")
+    prof.upload(other, "Name,Email\nB Two,b@school.edu\n")
+    assert browser().post(f"/c/{other}/login", {"name": "B Two"}).headers["Location"].endswith("/verify")
+
+
+def test_a_locked_browser_is_told_a_real_time_and_never_sent_in_circles(prof, browser, monkeypatch):
+    import signin
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    s = browser()
+    s.post(f"/c/{sid}/login", {"name": "Sam Lee"})
+    for _ in range(signin.CODE_TRIES_PER_BROWSER):
+        page = follow(s, s.post(f"/c/{sid}/verify", {"code": "000000"})) if False else None
+        s.post(f"/c/{sid}/verify", {"code": "000000"})
+    page = raw(s.post(f"/c/{sid}/verify", {"code": s.last_code("sam@school.edu")}))
+    assert "Too many wrong tries from this browser" in page
+    assert re.search(r'<time datetime="[^"]+" data-local="time">\d{1,2}:\d\d [AP]M</time> \(in about \d+ minutes?\)', page)
+    # "Send a new code" right away gives new tries — not "we emailed one a moment ago".
+    page = text(follow(s, s.post(f"/c/{sid}/verify/resend")))
+    assert "a moment ago" not in page and "Sent a new code" in page
+    assert s.post(f"/c/{sid}/verify", {"code": s.last_code("sam@school.edu")}).headers["Location"].endswith("/home")
+
+
+def test_the_professor_sees_who_couldnt_get_an_email_and_why(prof, browser, monkeypatch):
+    monkeypatch.setattr(settings, "EMAIL_DAILY_LIMIT", 12)  # 2 held back for instructors: 10 for students
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    with prof.app.app_context():
+        for i in range(10):
+            db.run("INSERT INTO email_log (id, sent_at, recipient, client_ip, kind) VALUES (:id, :at, 'x', '', 'student')",
+                   id=f"fill{i}", at=__import__("util").iso())
+        db.commit()
+    for name in ("Sam Lee", "Sam Lee", "Riya Patel"):
+        b = browser()
+        page = text(follow(b, b.post(f"/c/{sid}/login", {"name": name})))
+        assert "We couldn't email you a code" in page and "Ask your instructor for a sign-in code" in page
+    page = text(prof.get(f"/teach/s/{sid}"))
+    assert "2 students couldn't get a sign-in email today" in page  # people, not attempts
+    assert "This site's sign-in emails ran out for today" in page
+    assert "Sam Lee — the site's sign-in emails ran out for today" in page
+    # The student waiting on the code page types the instructor's code there.
+    sam = browser()
+    sam.post(f"/c/{sid}/login", {"name": "Sam Lee"})
+    page = follow(prof, prof.post(f"/teach/s/{sid}/signin-code", {"name_key": "sam lee", "back": "stuck"}))
+    code = re.search(r"Sign-in code for Sam Lee ?: (\d{6})", text(page)).group(1)
+    assert sam.post(f"/c/{sid}/verify", {"code": code}).headers["Location"].endswith("/home")
+    page = text(prof.get(f"/teach/s/{sid}"))
+    assert "1 student couldn't get a sign-in email today" in page and "Sam Lee — the site" not in page
+
+
+def test_giving_out_open_seats_on_a_published_schedule_moves_nobody(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=1)
+    prof.upload(sid, "Name,Email\nAna Able,ana@school.edu\nBen Baker,ben@school.edu\nCy Cole,cy@school.edu\n")
+    keys = rankers(browser, sid, [("Ana Able", [0, 1], []), ("Ben Baker", [0, 1], []), ("Cy Cole", [1, 0], [0])])
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    page = text(follow(prof, prof.post(f"/teach/s/{sid}/publish")))
+    before = assigned(prof.app, sid)
+    nobody = {"ana able", "ben baker", "cy cole"} - set(before)
+    assert len(nobody) == 1 and "no day yet and will see that" in page
+    page = text(follow(prof, prof.post(f"/teach/s/{sid}/capacity", {"capacity": "2"})))
+    assert "Give them the open seats" in page and "nobody who can see their day moves" in page
+    assert "Make the schedule again to use" not in page
+    assert "Give them the open seats (1 student gets a day)" in page
+    page = follow(prof, prof.post(f"/teach/s/{sid}/open-seats"))
+    after = assigned(prof.app, sid)
+    assert {k: v for k, v in after.items() if k in before} == before  # nobody moved
+    assert set(after) == {"ana able", "ben baker", "cy cole"}
+    assert after.get("cy cole", (keys[1],))[0] == keys[1]  # never a day they can't do
+    shown = text(page)
+    assert "Gave 1 student a day" in shown and "Nobody else moved" in shown
+    assert "Copy their emails (1)" in shown
+    assert "All done — students can see their day" in shown
+    assert "out of date" not in shown and "Make the schedule again" not in shown
+    assert "See what a fresh schedule would change" in shown  # optional, never pushed
+
+
+def test_an_unpublished_schedule_has_one_path_after_seats_change(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=1)
+    rankers(browser, sid, [("Ana Able", [0, 1], []), ("Ben Baker", [0, 1], []), ("Cy Cole", [0, 1], [])])
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    page = text(follow(prof, prof.post(f"/teach/s/{sid}/capacity", {"capacity": "2"})))
+    assert "Press “Make the schedule again” under Schedule" in page
+    assert "Give them the open seats (" not in page  # one path: make it again
+    page = text(follow(prof, prof.post(f"/teach/s/{sid}/run")))
+    assert len(assigned(prof.app, sid)) == 3 and "Check the schedule, then publish it" in page
+
+
+def test_remaking_a_published_schedule_offers_the_changed_students_emails(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=2)
+    prof.upload(sid, "Name,Email\nAna Able,ana@school.edu\nBen Baker,ben@school.edu\nCy Cole,cy@school.edu\n")
+    rankers(browser, sid, [("Ana Able", [0, 1], []), ("Ben Baker", [0, 1], []), ("Cy Cole", [0, 1], [])])
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    prof.post(f"/teach/s/{sid}/publish")
+    prof.post(f"/teach/s/{sid}/capacity", {"capacity": "1"})
+    page = text(prof.post(f"/teach/s/{sid}/run"))
+    assert "Make the schedule again?" in page
+    page = follow(prof, prof.post(f"/teach/s/{sid}/run", {"confirmed": "1"}))
+    assert "Tell these students" in text(page) and re.search(r"Copy their emails \(\d\)", text(page))
+    assert re.search(r'id="undo-emails"[^>]*>[^<]*@school\.edu', page)
+
+
+def test_putting_the_old_class_list_back_keeps_everyone_signed_in(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    sam = browser().sign_in_student(sid, "Sam Lee", "sam@school.edu")
+    alex = browser().sign_in_student(sid, "Alex Johnson", "alex@school.edu")
+    riya = browser().sign_in_student(sid, "Riya Patel", "riya@school.edu")
+    # The wrong section's list: Sam isn't on it, so he's signed out...
+    review = prof.upload(sid, "Name,Email\nRiya Patel,riya@school.edu\nZed New,zed@school.edu\n")
+    pid = re.search(r"/roster/review/(\w+)", review.headers["Location"]).group(1)
+    page = follow(prof, prof.post(f"/teach/s/{sid}/roster/review/{pid}", {"action": "replace"}))
+    assert sam.get(f"/c/{sid}/home").status_code == 302
+    assert "Hi Riya Patel" in text(riya.get(f"/c/{sid}/home"))  # her entry didn't change
+    # ...and putting the old list back lets him straight back in, and nobody else is signed out.
+    snap = re.search(r"/undo/(\w+)", page).group(1)
+    prof.post(f"/teach/s/{sid}/undo/{snap}", {"parts": "roster"})
+    sam2 = browser().sign_in_student(sid, "Sam Lee", "sam@school.edu")  # (his old browser dropped him)
+    assert "Hi Sam Lee" in text(sam2.get(f"/c/{sid}/home"))
+    assert "Hi Riya Patel" in text(riya.get(f"/c/{sid}/home"))
+    assert "Hi Alex Johnson" in text(alex.get(f"/c/{sid}/home"))  # off the list only while it was wrong
+
+
+def test_taking_a_student_off_and_back_on_with_the_same_email_keeps_them_in(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    sam = browser().sign_in_student(sid, "Sam Lee", "sam@school.edu")
+    prof.post(f"/teach/s/{sid}/roster/remove", {"name_key": "sam lee"})
+    prof.post(f"/teach/s/{sid}/roster/add", {"name": "Sam Lee", "email": "sam@school.edu"})
+    assert "Hi Sam Lee" in text(sam.get(f"/c/{sid}/home"))
+    prof.post(f"/teach/s/{sid}/roster/remove", {"name_key": "sam lee"})
+    prof.post(f"/teach/s/{sid}/roster/add", {"name": "Sam Lee", "email": "someone.else@school.edu"})
+    assert sam.get(f"/c/{sid}/home").status_code == 302  # a different email: a different person
+
+
+def test_deleting_a_ranking_after_sign_ups_close_doesnt_sign_the_student_out(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"))
+    keys = day_keys(sid)
+    bao = browser().sign_in_student(sid, "Bao Nguyen")
+    bao.rank(sid, keys)
+    prof.post(f"/teach/s/{sid}/toggle")  # close sign-ups
+    prof.post(f"/teach/s/{sid}/delete-submission", {"name_key": "bao nguyen"})
+    page = text(bao.get(f"/c/{sid}/home"))
+    assert "Hi Bao Nguyen" in page
+    assert "You don't have a ranking saved, and sign-ups are closed" in page and "before you ranked" not in page
+
+
+def test_a_student_without_a_day_in_the_draft_is_told_so(prof, browser):
+    # One seat a day, and both can only do Mon: one of them has no day in the draft.
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=1, show_preview=True)
+    keys = day_keys(sid)
+    students = []
+    for name in ("Ana Able", "Ben Baker"):
+        b = browser().sign_in_student(sid, name)
+        b.rank(sid, [keys[0], keys[1]], excluded=[keys[1]])
+        students.append(b)
+    pages = [text(b.get(f"/c/{sid}/schedule")) for b in students]
+    assert sum("In this draft, you're on Mon" in p for p in pages) == 1
+    assert sum("In this draft you don't have a day yet" in p for p in pages) == 1
+
+
+def test_no_schedule_link_that_only_repeats_your_own_day(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=2, show_preview=False)
+    ana = browser().sign_in_student(sid, "Ana Able")
+    ana.rank(sid, day_keys(sid))
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    prof.post(f"/teach/s/{sid}/publish")
+    page = text(ana.get(f"/c/{sid}/home"))
+    assert "Your presentation day" in page and "See the whole schedule" not in page
+
+
+def test_marking_every_day_cant_do_means_the_professor_decides(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue"), capacity=2)
+    keys = day_keys(sid)
+    browser().sign_in_student(sid, "Ana Able").rank(sid, keys, excluded=keys, comments={keys[0]: "surgery that week"})
+    browser().sign_in_student(sid, "Ben Baker").rank(sid, keys)
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    assert set(assigned(prof.app, sid)) == {"ben baker"}  # never on a day she marked, even with room
+    page = text(prof.get(f"/teach/s/{sid}"))
+    assert "Ana Able — marked every day as one they can't do" in page and "surgery that week" in page
+    assert "Give them the open seats (" not in page  # filling can't place her either

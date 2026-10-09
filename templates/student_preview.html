@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Schedule' if mode == 'final' else 'Draft schedule' }} — {{ sheet.title }}{% endblock %}
+{% block content %}
+<div class="card">
+  <p class="eyebrow">{{ sheet.title }}</p>
+  {% if mode == 'final' %}
+    <h1>The schedule</h1>
+    {% if my_day %}
+    <div class="day-card">
+      <p class="day-card-label">Your presentation day</p>
+      <p class="day-card-day">{{ my_day }}</p>
+    </div>
+    {% else %}
+    <div class="disclaimer disclaimer-yellow">
+      You don't have a presentation day on this schedule.
+      <a href="mailto:{{ sheet.owner_email }}?subject={{ ('No presentation day — ' ~ sheet.title) | urlencode }}">Email your instructor</a>.
+    </div>
+    {% endif %}
+  {% elif mode == 'draft' %}
+    <h1>Draft schedule</h1>
+    <p class="subtitle">How the days would be given out if sign-ups closed right now. It changes as people rank, and it isn't final until your instructor publishes the schedule.</p>
+    {% if my_day %}
+    <p class="lead-line">In this draft, you're on <strong>{{ my_day }}</strong>.</p>
+    {% elif ranked_me %}
+    <div class="disclaimer disclaimer-yellow">In this draft you don't have a day yet — every day you can do is already taken. If it stays that way when sign-ups close, your instructor will decide where you go. (You could also look at your can't-do marks again.)</div>
+    {% endif %}
+    {% if counts.roster and counts.listed_submissions < counts.roster %}
+    <div class="disclaimer disclaimer-red">
+      Not everyone has ranked yet ({{ counts.listed_submissions }} of {{ counts.roster }} on the class list so far), so this will very likely change.
+    </div>
+    {% elif not counts.roster %}
+    <div class="disclaimer disclaimer-yellow">There's no class list for this sign-up, so we can't tell how many people still need to rank. Treat this as a rough draft.</div>
+    {% else %}
+    <div class="disclaimer disclaimer-neutral">Everyone on the class list has ranked. This is still a draft until your instructor publishes the schedule.</div>
+    {% endif %}
+  {% elif mode == 'waiting' %}
+    <h1>Almost there</h1>
+    <p class="subtitle">Sign-ups are closed. Your instructor will publish the schedule soon — your day will appear here and on your home page.</p>
+  {% else %}
+    <h1>The schedule isn't out yet</h1>
+    <p class="subtitle">Once sign-ups close, your instructor will publish the schedule. Your day will appear here and on your home page.</p>
+  {% endif %}
+
+  {% if outsider %}
+  <p class="mini-hint">You're not on the class list, so you can see only your own day here. If you should be on it, email your instructor.</p>
+  {% endif %}
+  {% if by_day %}
+    {% if mode == 'draft' and not ranked %}
+    <p class="muted">No one has ranked the days yet — check back later.</p>
+    {% else %}
+    <p class="mini-hint">Everyone signed in to this class can see this list.</p>
+    <div class="day-columns">
+      {% for d in days %}
+      <div class="day-column">
+        <h2 class="day-heading">{{ d.label }}</h2>
+        {% if by_day[d.key] | length > sheet.capacity_per_day %}
+        <p class="mini-hint">{{ by_day[d.key] | length | plural('person', 'people') }} ({{ sheet.capacity_per_day | plural('seat') }})</p>
+        {% else %}
+        <p class="mini-hint">{{ by_day[d.key] | length }} of {{ sheet.capacity_per_day | plural('seat') }} taken</p>
+        {% endif %}
+        {% if mode == 'draft' and d.key in oversubscribed %}
+        <p class="mini-hint">More people want this day than it has seats. A fair random draw decides, so nothing is reserved yet.</p>
+        {% endif %}
+        <ul class="assign-list">
+          {% for a in by_day[d.key] %}
+          <li{% if a.key == me %} class="me"{% endif %}><bdi>{{ a.name }}</bdi>{% if a.key == me %} <strong>(you)</strong>{% endif %}</li>
+          {% else %}
+          <li class="muted">Nobody yet</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  {% endif %}
+
+  <p><a class="btn btn-secondary" href="{{ url_for('student.home', sid=sheet.id) }}">← Back</a></p>
+</div>
+{% endblock %}

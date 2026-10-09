@@ -1,0 +1,347 @@
+"""
+Scheduler — fair presentation-day sign-ups for any class.
+
+This file is what Vercel runs: it looks for a Flask object named `app` in
+app.py. Locally, run `python app.py` and open http://127.0.0.1:5050.
+
+The pieces:
+  teach.py    instructor pages (/teach/...)       — only ever your own sheets
+  student.py  student pages (/c/<sheet id>/...)   — one class at a time
+  owner.py    site-wide counts for the owner (/owner) — no one's data
+  signin.py   emailed one-time codes and their rate limits
+  sheets.py   sheet data, backups and restore points
+  roster.py   reading class lists out of Canvas exports and spreadsheets
+  matching_engine.py  the assignment algorithms
+"""
+
+import hmac
+import re
+from datetime import timedelta
+
+from flask import Flask, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
+from flask_mailman import Mail
+from markupsafe import Markup, escape
+from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
+
+import auth
+import db
+import maintenance
+import owner
+import settings
+import sheets
+import student
+import teach
+from matching_engine import ALGORITHMS
+from util import ID_ALPHABET, in_zone, initials, iso, parse_iso, plural
+
+app = Flask(__name__, static_folder="public/static", static_url_path="/static")
+
+# On Vercel, files in public/ are served straight from the CDN; locally,
+# Flask serves the same folder so `python app.py` looks identical.
+app.secret_key = settings.SECRET_KEY or "local-development-only-not-secret"
+app.config.update(
+    PERMANENT_SESSION_LIFETIME=timedelta(days=90),
+    SESSION_COOKIE_NAME="scheduler_session",
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=settings.IS_VERCEL,
+    MAX_CONTENT_LENGTH=2 * 1024 * 1024,
+    MAIL_SERVER=settings.SMTP_HOST,
+    MAIL_PORT=settings.SMTP_PORT,
+    MAIL_USERNAME=settings.SMTP_USER,
+    MAIL_PASSWORD=settings.SMTP_PASSWORD,
+    MAIL_USE_SSL=settings.SMTP_PORT == 465,
+    MAIL_USE_TLS=settings.SMTP_PORT != 465,
+    MAIL_TIMEOUT=15,
+    MAIL_DEFAULT_SENDER=settings.SMTP_FROM,
+)
+mail = Mail(app)
+
+if settings.IS_VERCEL:
+    # Vercel's edge terminates HTTPS and forwards the real scheme, host, and
+    # client address; trust exactly one hop of those headers.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+URL_IN_TEXT = re.compile(r"\bhttps?://[^\s<>\"']+[^\s<>\"'.,;:!?)\]]")
+
+
+def autolink(text):
+    """Text as the instructor wrote it, with web addresses made clickable.
+    Escaped first, so nothing in it can become markup."""
+    escaped = str(escape(text or ""))
+    return Markup(URL_IN_TEXT.sub(
+        lambda m: f'<a href="{m.group(0)}" target="_blank" rel="noopener nofollow">{m.group(0)}</a>', escaped
+    ))
+
+
+TIME_MARKER = re.compile(r"\[\[at:([0-9T:.+\-Z]{10,40})\]\]")
+
+
+def local_times(text):
+    """A message with [[at:timestamp]] markers (from signin.clock) as
+    times each reader's browser shows in their own time zone — the class's
+    time zone until it does. Escaped first, so nothing else becomes markup."""
+    sheet = g.get("sheet")
+    instructor = auth.current_instructor()
+    zone = ((sheet and sheet.get("owner_timezone")) or (instructor and instructor.get("timezone"))
+            or settings.DEFAULT_TIMEZONE)
+
+    def swap(match):
+        try:
+            when = parse_iso(match.group(1))
+        except ValueError:
+            return ""
+        shown = in_zone(when, zone)
+        hour = shown.strftime("%I").lstrip("0") or "12"
+        return f'<time datetime="{iso(when)}" data-local="time">{hour}:{shown.strftime("%M %p")}</time>'
+
+    return Markup(TIME_MARKER.sub(swap, str(escape(text or ""))))
+
+
+app.add_template_filter(initials, "initials")
+app.add_template_filter(local_times, "local_times")
+app.add_template_filter(autolink, "autolink")
+app.add_template_filter(lambda n, word, many=None: plural(n, word, many), "plural")
+app.teardown_appcontext(db.close_conn)
+
+app.register_blueprint(teach.bp)
+app.register_blueprint(student.bp)
+app.register_blueprint(owner.bp)
+
+
+# ---------------------------------------------------------------------------
+# Every request
+# ---------------------------------------------------------------------------
+def missing_settings():
+    """Settings a real deployment can't run without. Locally there are
+    safe fallbacks (a SQLite file, a throwaway key), so nothing is fatal."""
+    if not settings.IS_VERCEL:
+        return []
+    return [name for name in ("SECRET_KEY", "DATABASE_URL") if not getattr(settings, name)]
+
+
+@app.before_request
+def before_every_request():
+    if request.endpoint == "static":
+        return None
+    missing = missing_settings()
+    if missing:
+        return render_template("setup_needed.html", missing=missing), 503
+    if request.method == "POST" and not auth.csrf_ok():
+        if request.is_json:
+            return jsonify(ok=False, error="This page expired. Refresh it and try again."), 400
+        return render_template(
+            "error.html", code=400, title="That form expired",
+            message="Go back, refresh the page, and try again.",
+        ), 400
+    return None
+
+
+CONTENT_SECURITY_POLICY = "; ".join([
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' https://fonts.googleapis.com",
+    "font-src https://fonts.gstatic.com",
+    "img-src 'self' data:",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+])
+
+
+@app.after_request
+def security_headers(response):
+    # No inline scripts anywhere, so injected markup can't run code.
+    response.headers.setdefault("Content-Security-Policy", CONTENT_SECURITY_POLICY)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    # Share links are the keys to a sign-up sheet; don't leak them in Referer.
+    response.headers.setdefault("Referrer-Policy", "same-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if request.endpoint != "static":
+        # Pages hold names and rankings: never store them in any cache.
+        response.headers.setdefault("Cache-Control", "no-store")
+    return response
+
+
+@app.context_processor
+def template_globals():
+    try:
+        instructor = auth.current_instructor()
+    except Exception:  # a broken database shouldn't also break the error page
+        instructor = None
+    return {
+        "app_name": settings.APP_NAME,
+        "instructor": instructor,
+        "is_owner": auth.is_owner(instructor),
+        "csrf_token": auth.csrf_token,
+        "nav_sheet": g.get("sheet"),
+        "nav_student": g.get("student"),
+        "contact_email": settings.CONTACT_EMAIL,
+        "code_sender": settings.SMTP_FROM,
+        # On the general pages a student might wander to (Privacy, How it
+        # works), a way back to their class.
+        "back_to_class": next(iter(session.get("students") or {}), None)
+        if request.endpoint in ("how_it_works", "privacy") else None,
+    }
+
+
+@app.errorhandler(HTTPException)
+def http_error(err):
+    messages = {
+        404: ("Page not found", "That page doesn't exist. If you followed a link, check that it was copied in full."),
+        405: ("That didn't work", "Go back and try again."),
+        413: ("That file is too big", "Uploads can be up to 2 MB — a class list is usually far smaller. Is it the right file?"),
+    }
+    title, message = messages.get(err.code, (err.name, err.description))
+    found = re.match(r"^/(teach/s|c)/([a-z0-9]{8})/", request.path)
+    if err.code == 405 and request.method == "GET" and found:
+        # Reopening a page that only exists as the answer to a button (a
+        # refresh, the back button, a bookmark): go to the sheet instead.
+        if found.group(1) == "teach/s":
+            return redirect(url_for("teach.sheet", sid=found.group(2)))
+        return redirect(url_for("student.signin", sid=found.group(2)))
+    if request.is_json:
+        return jsonify(ok=False, error=message), err.code
+    return render_template(
+        "error.html", code=err.code, title=title, message=message, show_join=err.code == 404,
+    ), err.code
+
+
+@app.errorhandler(Exception)
+def unexpected_error(err):
+    db.rollback()
+    db.record_error(request.method, f"{type(err).__name__}: {err}")
+    app.logger.exception("Unhandled error on %s %s", request.method, request.path)
+    message = "Something went wrong on our end. Your work up to the last save is safe — please try again."
+    if request.is_json:
+        return jsonify(ok=False, error=message), 500
+    return render_template("error.html", code=500, title="Something went wrong", message=message), 500
+
+
+# ---------------------------------------------------------------------------
+# Public pages
+# ---------------------------------------------------------------------------
+@app.route("/")
+def landing():
+    return render_template("landing.html", code=(request.args.get("code") or "")[:80])
+
+
+def find_code(raw):
+    """The sheet code in whatever a student pasted: the code itself, the
+    whole link (with or without anything after it), "Code: k7q2mx9p", or the
+    code typed with a space or dash in the middle ("k7q2 mx9p")."""
+    text = (raw or "").strip().split("?")[0].split("#")[0]
+    if "/c/" in text:
+        text = text.split("/c/", 1)[1].split("/")[0]
+    tokens = [t.lower() for t in re.findall(r"[A-Za-z0-9]+", text)]
+    joined = "".join(tokens)
+    for token in tokens + ([joined] if len(joined) == 8 else []):
+        if len(token) == 8 and all(ch in ID_ALPHABET for ch in token):
+            return token
+    return ""
+
+
+JOIN_MISSES_PER_HOUR = 30
+
+
+def _join_misses(record=False):
+    """Wrong codes typed from this network address in the last hour (so the
+    box can't be used to try codes until one works)."""
+    import signin
+    from util import iso, new_id, now
+
+    client = "b:" + signin.browser_id()
+    if record:
+        db.run("INSERT INTO auth_failures (id, scope, subject, client, at) VALUES (:id, 'join', '', :c, :at)",
+               id=new_id(16), c=client, at=iso())
+        db.commit()
+        return 0
+    return db.scalar(
+        "SELECT COUNT(*) FROM auth_failures WHERE scope = 'join' AND client = :c AND at > :since",
+        c=client, since=iso(now() - timedelta(hours=1)),
+    ) or 0
+
+
+@app.route("/join")
+def join():
+    """Students who were given a code instead of a link."""
+    raw = (request.args.get("code") or "").strip()
+    code = find_code(raw)
+    if code and (sheets.get_sheet(code) or _was_deleted(code)):
+        return redirect(url_for("student.signin", sid=code))
+    if raw and _join_misses() >= JOIN_MISSES_PER_HOUR:
+        flash("Too many codes that didn't match were tried from here. Use the link your instructor shared, "
+              "or try again in an hour.", "error")
+        return redirect(url_for("landing"))
+    if raw:
+        _join_misses(record=True)
+    if not raw:
+        flash("Type the 8-character code your instructor gave you (letters and numbers).", "error")
+    elif raw.isdigit() and len(raw) == 6:
+        flash("That looks like the sign-in code from your email. Open your class's link first, then type "
+              "the code there.", "error")
+    else:
+        flash(f"We couldn't find a sign-up with the code “{raw[:40]}”. Check it with your instructor — it's "
+              "8 letters and numbers, like k7q2mx9p.", "error")
+    return redirect(url_for("landing", code=raw[:80]))
+
+
+@app.route("/<code>")
+def short_link(code):
+    """example.com/k7q2mx9p works as well as example.com/c/k7q2mx9p."""
+    sid = find_code(code)
+    if sid and (sheets.get_sheet(sid) or _was_deleted(sid)):
+        return redirect(url_for("student.signin", sid=sid))
+    abort(404)
+
+
+def _was_deleted(sid):
+    """A sheet taken offline but not gone for good: its link should say so
+    rather than claim the code is wrong."""
+    return bool(db.scalar("SELECT 1 FROM snapshots WHERE sheet_id = :sid AND kind = 'deleted'", sid=sid))
+
+
+@app.route("/how-it-works")
+def how_it_works():
+    return render_template("how_it_works.html", algorithms=ALGORITHMS)
+
+
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html")
+
+
+@app.route("/healthz")
+def healthz():
+    try:
+        db.scalar("SELECT 1")
+        return jsonify(ok=True)
+    except Exception:
+        return jsonify(ok=False), 503
+
+
+@app.route("/cron/daily")
+def cron_daily():
+    """Called once a day by Vercel Cron (see vercel.json), which sends
+    "Authorization: Bearer <CRON_SECRET>". Nobody else can trigger it."""
+    expected = f"Bearer {settings.CRON_SECRET}"
+    if not settings.CRON_SECRET or not hmac.compare_digest(
+        request.headers.get("Authorization", ""), expected
+    ):
+        return jsonify(ok=False), 401
+    return jsonify(ok=True, **maintenance.run_daily())
+
+
+@app.cli.command("init-db")
+def init_db_command():
+    """Create the tables (the app also does this on its own at first start)."""
+    db.ensure_schema()
+    print("Database is ready.")
+
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5050)

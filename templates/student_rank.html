@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Rank the days' if bidding_open else 'Your ranking' }} — {{ sheet.title }}{% endblock %}
+{% block content %}
+<div class="card">
+  <p class="eyebrow">{{ sheet.title }}</p>
+  <div class="rank-header">
+    <div>
+      <h1>{{ 'Rank the days' if bidding_open else 'Your ranking' }}</h1>
+      {% if not bidding_open and not has_submitted %}
+        <p class="subtitle locked"><span aria-hidden="true">🔒</span> Sign-ups are closed, and you don't have a ranking saved.
+          If you still need a presentation day, <a href="mailto:{{ sheet.owner_email }}?subject={{ ('I still need to rank — ' ~ sheet.title) | urlencode }}">email your instructor</a>.</p>
+      {% elif bidding_open %}
+        <p class="subtitle">
+          Hi <bdi>{{ name }}</bdi> — put all {{ days | length }} days in the order you'd like them, favorite at the
+          top. You'll get a day as high on your list as possible.
+        </p>
+        {% if sheet.rank_by %}<p class="deadline">Please rank by <strong>{{ sheet.rank_by }}</strong>.</p>{% endif %}
+      {% else %}
+        <p class="subtitle locked"><span aria-hidden="true">🔒</span> Sign-ups are closed — here's what you sent. If
+          something needs to change, <a href="mailto:{{ sheet.owner_email }}?subject={{ ('My ranking — ' ~ sheet.title) | urlencode }}">email your instructor</a>.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if bidding_open %}
+  {% if new_days %}
+  <div class="disclaimer disclaimer-yellow">
+    Your instructor added {{ new_days | join(', ') }} after you ranked, so it's at the bottom of your list. Move it
+    where you'd like it — your change saves by itself.
+  </div>
+  {% endif %}
+  <ol class="steps">
+    <li class="step">
+      <span class="step-num">1</span>
+      <span>Drag the days (or use the ▲▼ buttons) so your favorite is at the top.</span>
+    </li>
+    <li class="step">
+      <span class="step-num">2</span>
+      <span class="step-optional">Only if you truly can't make a day: tick “I really can't do this day” and say why.</span>
+    </li>
+    <li class="step">
+      <span class="step-num">3</span>
+      {% if has_submitted %}
+      <span>Your ranking is saved. Any change you make now <strong>saves by itself</strong>, until sign-ups close.</span>
+      {% else %}
+      <span>When the order looks right, press <strong>Save my ranking</strong>. After that, changes save by themselves.</span>
+      {% endif %}
+    </li>
+  </ol>
+
+  <details class="explainer">
+    <summary>Why does the order matter?</summary>
+    <div class="explainer-body">
+      <p>
+        Each day has a limited number of places. After everyone ranks, the site gives each student a day as high
+        on their own list as it can. If more students want a day than it has places, a fair random draw decides.
+      </p>
+      <p>
+        <strong>Put your real favorite first.</strong> Ranking a day higher than you really want it never helps
+        you, and ranking early doesn't help either — when you sent your ranking isn't used at all.
+      </p>
+      <p>
+        <strong>“I really can't do this day”</strong> is for real conflicts. You won't be put on a day you marked —
+        ever. If you mark every day, or every day you can do fills up, your instructor decides where you go —
+        nobody is bumped automatically. Notes are seen only by your instructor.
+      </p>
+      <p><a href="{{ url_for('how_it_works') }}">More about how days are given out →</a></p>
+    </div>
+  </details>
+  {% if sheet.show_preview %}
+  <p class="mini-hint">Heads-up: classmates can see a draft of the schedule, with names, while sign-ups are open.</p>
+  {% endif %}
+  {% endif %}
+
+  {% if bidding_open or has_submitted %}
+  <div id="rank-warning" class="disclaimer disclaimer-yellow" hidden></div>
+  <div class="rank-scale"><span>↑ Favorite</span></div>
+  <ol id="rank-list" class="rank-list"></ol>
+  <div class="rank-scale bottom"><span>↓ Least favorite</span></div>
+  {% endif %}
+
+  {% if bidding_open %}
+  <div class="save-row">
+    <button id="save-btn" class="btn btn-primary btn-large" type="button">{{ 'Save now' if has_submitted else 'Save my ranking' }}</button>
+    <span id="save-status" class="save-status" role="status" aria-live="polite"></span>
+  </div>
+  {% elif has_submitted %}
+  <div class="save-row">
+    <span class="save-status">🔒 This is locked in — no changes possible now.</span>
+  </div>
+  {% endif %}
+
+  {% if sheet.note %}
+  <div class="note-box">
+    <p class="note-box-label">From your instructor</p>
+    <p class="note-text">{{ sheet.note | autolink }}</p>
+  </div>
+  {% endif %}
+</div>
+
+<script id="init-data" type="application/json">{{ init_data | tojson }}</script>
+{% endblock %}
+{% block scripts %}
+{% if bidding_open or has_submitted %}<script src="{{ url_for('static', filename='rank.js') }}"></script>{% endif %}
+{% endblock %}

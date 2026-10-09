@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Instructors: get started or sign in — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="card center-card">
+  <h1>Get started, or sign in</h1>
+  <p class="subtitle">
+    Type your school email and we'll send you a 6-digit code — no password to remember.
+    <strong>First time here?</strong> That's all it takes to make your account.
+  </p>
+  <p class="mini-hint"><strong>Students:</strong> you don't sign in here. Open the link your instructor shared.</p>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="tz" value="" data-timezone>
+    <label for="email" class="field-label">Your school email</label>
+    <input type="email" id="email" name="email" value="{{ email }}" placeholder="you@school.edu"
+           autocomplete="email" maxlength="254" required autofocus>
+    <button class="btn btn-primary" type="submit">Email me a code</button>
+  </form>
+  {% if domains and '*' not in domains %}
+  <p class="hint">Instructor accounts are for school addresses ending in {{ domains | join(', ') }}.</p>
+  {% endif %}
+  <p class="hint">Already made a sheet? Sign in with the same email you used then.</p>
+  <p class="hint">No other instructor or student can see your sheets. <a href="{{ url_for('privacy') }}">Privacy</a></p>
+</div>
+{% endblock %}

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Check the new class list — {{ sheet.title }}{% endblock %}
+{% block content %}
+<div class="card">
+  <p class="eyebrow"><a href="{{ url_for('teach.sheet', sid=sheet.id) }}#class-list" class="link-muted">← {{ sheet.title }}</a></p>
+  <h1>Check the new class list</h1>
+  <p class="subtitle">
+    {% if pending.source %}“{{ pending.source }}”{% else %}The names you pasted{% endif %}:
+    {{ diff.incoming | plural('student') }}. Your list now: {{ diff.current | plural('student') }}. Nothing has changed yet.
+  </p>
+
+  {% for w in warnings %}
+  <div class="warn-box"><p>⚠️ {{ w }}</p></div>
+  {% endfor %}
+
+  <ul class="diff-list">
+    <li><strong>{{ diff.same | length }}</strong> already on your list</li>
+    <li><strong>{{ diff.adding | length }}</strong> new{% if diff.adding %}: {% for s in diff.adding[:12] %}<bdi>{{ s.display_name }}</bdi>{% if not loop.last %}, {% endif %}{% endfor %}{% if diff.adding | length > 12 %} …{% endif %}{% endif %}</li>
+    <li><strong>{{ diff.dropping | length }}</strong> on your list but not in this one{% if diff.dropping %}: {% for r in diff.dropping[:12] %}<bdi>{{ r.display_name }}</bdi>{% if not loop.last %}, {% endif %}{% endfor %}{% if diff.dropping | length > 12 %} …{% endif %}{% endif %}</li>
+    {% if diff.renamed %}<li>Same email, different name: {% for old, new in diff.renamed %}<bdi>{{ old.display_name }}</bdi> → <bdi>{{ new.display_name }}</bdi>{% if not loop.last %}; {% endif %}{% endfor %}</li>{% endif %}
+    {% if diff.new_emails %}<li>New email address for: {% for old, new in diff.new_emails %}<bdi>{{ old.display_name }}</bdi>{% if not loop.last %}, {% endif %}{% endfor %}</li>{% endif %}
+  </ul>
+
+  {% if pending.tips %}
+  <details class="more-options" {{ 'open' if pending.warn }}>
+    <summary>Notes about {{ 'these names' if pending.pasted else 'this file' }} ({{ pending.tips | length }})</summary>
+    <ul class="tips">{% for tip in pending.tips %}<li>{{ tip }}</li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+
+  <form method="post" class="choice-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if diff.adding %}
+    <button type="submit" name="action" value="add" class="btn {{ 'btn-primary' if recommend == 'add' else 'btn-secondary' }} btn-block">
+      Add the {{ diff.adding | length }} new name{{ 's' if diff.adding | length != 1 }} to my list (keep everyone already on it)
+    </button>
+    {% endif %}
+    <button type="submit" name="action" value="replace" class="btn {{ 'btn-primary' if recommend == 'replace' else 'btn-secondary' }} btn-block">
+      Replace my list with this one
+    </button>
+    <button type="submit" name="action" value="cancel" class="btn btn-ghost btn-block">Cancel — keep my current list</button>
+  </form>
+  <p class="mini-hint">Either way, a copy of your current list is saved first, and you can put it back with one click.</p>
+</div>
+{% endblock %}

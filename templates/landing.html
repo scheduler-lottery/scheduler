@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }} — fair presentation-day sign-ups{% endblock %}
+{% block content %}
+<section class="card hero-card">
+  <h1>Fair presentation-day sign-ups, in minutes.</h1>
+  <p class="subtitle">
+    Students rank the days they'd prefer, and everyone gets a day as high on their list as possible. When too many
+    want the same day, a fair random draw decides — not who clicked first. Nothing to install.
+  </p>
+
+  <div class="split">
+    <div class="split-panel">
+      <h2>I'm a student</h2>
+      <p class="muted">
+        Open the link your instructor shared. If you were given a code instead, type it here:
+      </p>
+      <form method="get" action="{{ url_for('join') }}" class="inline-form">
+        <label for="join-code" class="visually-hidden">Sign-up code</label>
+        <input type="text" id="join-code" name="code" placeholder="e.g. k7q2mx9p" required maxlength="300" autocomplete="off" value="{{ code }}">
+        <button class="btn btn-primary" type="submit">Go</button>
+      </form>
+    </div>
+
+    <div class="split-panel">
+      <h2>I'm an instructor</h2>
+      <ol class="mini-steps">
+        <li>List your presentation days.</li>
+        <li>Drag in your class list from Canvas.</li>
+        <li>Share the link. When everyone's ranked, one button makes the schedule.</li>
+      </ol>
+      {% if instructor %}
+        <a class="btn btn-primary" href="{{ url_for('teach.dashboard') }}">Go to my sign-up sheets</a>
+      {% else %}
+        <a class="btn btn-primary" href="{{ url_for('teach.login') }}">Get started — or sign in</a>
+        <p class="mini-hint">Free. First time here? Type your school email and you'll have an account in a minute —
+          no password, we email you a code. Been here before? Use the same email.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endblock %}

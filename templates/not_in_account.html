@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Not in your account — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="card center-card">
+  {% if deleted %}
+  <h1>You deleted this sheet</h1>
+  <p class="subtitle">You deleted it <time datetime="{{ deleted.created_at }}" data-local>{{ deleted.created_at[:10] }}</time>. You can bring it back, exactly as it was:</p>
+  <form method="post" action="{{ url_for('teach.restore_deleted', snap_id=deleted.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-primary">Bring it back</button>
+  </form>
+  {% else %}
+  <h1>This sheet isn't in your account</h1>
+  {% if instructor %}
+  <p class="subtitle">
+    You're signed in as <strong>{{ instructor.email }}</strong>. If you made this sheet with a different email address,
+    sign out and sign in with that one.
+  </p>
+  <form method="post" action="{{ url_for('teach.logout') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="next" value="login">
+    <button type="submit" class="btn btn-primary">Sign out and use another email</button>
+  </form>
+  {% else %}
+  <p class="subtitle">Sign in with the email address you made it with.</p>
+  {% endif %}
+  {% endif %}
+  <p><a class="btn btn-ghost" href="{{ url_for('teach.dashboard') }}">Go to your sheets</a></p>
+</div>
+{% endblock %}

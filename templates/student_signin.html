@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ sheet.title }} — sign in{% endblock %}
+{% block content %}
+<div class="card center-card">
+  <p class="eyebrow">{{ sheet.title }}</p>
+  {% if not_ready %}
+  <h1>Not open yet</h1>
+  <div class="disclaimer disclaimer-yellow">
+    Nothing for you to do yet — your instructor is still setting this up. Come back to this same link later.
+    Signing up early doesn't change anything.
+  </div>
+  {% else %}
+  {% if sheet.bidding_open %}
+  <h1><span aria-hidden="true">👋</span> Welcome!</h1>
+  <p class="subtitle">Type your name to rank the presentation days.</p>
+  {% elif published %}
+  <h1>The schedule is out</h1>
+  <p class="subtitle">Sign in to see your presentation day.</p>
+  {% else %}
+  <h1>Sign-ups are closed</h1>
+  <p class="subtitle">Sign in to see your ranking. Your instructor will publish the schedule soon.</p>
+  {% endif %}
+  {% if sheet.rank_by and sheet.bidding_open %}<p class="deadline">Please rank by <strong>{{ sheet.rank_by }}</strong>.</p>{% endif %}
+
+  <form method="post" action="{{ url_for('student.login', sid=sheet.id) }}" class="stack" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="name-input" class="field-label">Your name</label>
+    <p id="name-help" class="hint hint-tight">
+      {% if not sheet.bidding_open and not counts.roster %}
+      Type the name you signed up with, then your PIN. (Only people who already signed up can sign in now.)
+      {% elif counts.roster_with_email %}
+      Start typing and pick your name from the list. We'll email your school address a 6-digit code to confirm it's you.
+      {% elif counts.roster %}
+      Start typing and pick your name from the list. The first time, you'll choose a PIN (a number only you know).
+      {% else %}
+      Type your first and last name. The first time, you'll choose a PIN (a number only you know).
+      {% endif %}
+    </p>
+    <div class="name-autocomplete">
+      <input type="text" id="name-input" name="name" placeholder="e.g. Alex Johnson" aria-describedby="name-help" value="{{ typed }}"
+             autofocus required maxlength="120" autocomplete="off" readonly data-unlock
+             role="combobox" aria-expanded="false" aria-controls="name-suggestions" aria-autocomplete="list"
+             data-suggest-url="{{ url_for('student.names', sid=sheet.id) }}">
+      <ul id="name-suggestions" class="suggestions-list" role="listbox" hidden></ul>
+    </div>
+    <button type="submit" class="btn btn-primary">Continue</button>
+  </form>
+  {% if counts.roster_with_email and code_sender %}
+  <p class="mini-hint">The email comes from {{ code_sender }}. After that, this browser remembers you.</p>
+  {% endif %}
+  {% endif %}
+
+  {% if sheet.note %}
+  <div class="note-box">
+    <p class="note-box-label">From your instructor</p>
+    <p class="note-text">{{ sheet.note | autolink }}</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='name-autocomplete.js') }}"></script>{% endblock %}

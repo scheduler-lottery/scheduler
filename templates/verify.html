@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Enter your code — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="card center-card">
+  {% if for_student %}<p class="eyebrow">{{ sheet.title }}</p>{% endif %}
+  {% if no_email %}
+  <h1>We couldn't email you a code</h1>
+  {% elif from_instructor %}
+  <h1>Type your sign-in code</h1>
+  {% else %}
+  <h1><span aria-hidden="true">📬</span> Check your email</h1>
+  {% endif %}
+
+  {% if for_student %}
+  <p class="subtitle">Signing in as <strong><bdi>{{ who }}</bdi></strong>{% if who.endswith('.') %}{% else %}.{% endif %}</p>
+  {% else %}
+  <p class="subtitle">We sent a {{ code_length }}-digit code to</p>
+  <p class="big-email">{{ shown_email }}</p>
+  {% endif %}
+
+  {% if no_email %}
+  <div class="disclaimer disclaimer-yellow">{{ no_email | local_times }}</div>
+  <p class="hint">Ask your instructor for a sign-in code — they get one by pressing “Sign-in code” next to your name. When you have it, type it below.</p>
+  {% elif from_instructor %}
+  <p class="hint">Type the code your instructor gave you. It works until
+    <time datetime="{{ expires_at }}" data-local="time">{{ expires_at[11:16] }}</time>.</p>
+  {% elif locked %}
+  <div class="disclaimer disclaimer-yellow">That code was cancelled after too many wrong tries. Press “Send a new code” below.</div>
+  {% elif expired %}
+  <div class="disclaimer disclaimer-yellow">That code has expired. Press “Send a new code” below.{% if for_student %} (The one-click sign-in link in the email works for {{ link_hours }} hours — try that.){% endif %}</div>
+  {% else %}
+  <p class="hint">
+    {% if for_student %}We emailed a {{ code_length }}-digit code to <strong>{{ shown_email }}</strong>. {% endif %}
+    {% if sent_at %}Sent at <time datetime="{{ sent_at }}" data-local="time">{{ sent_at[11:16] }}</time>; it works until
+    <time datetime="{{ expires_at }}" data-local="time">{{ expires_at[11:16] }}</time>.{% endif %}
+    {% if for_student %}Or just click the sign-in link in that email.{% endif %}
+  </p>
+  {% endif %}
+
+  {% if dev_code %}
+  <p class="dev-note">Local test mode — no email was sent. The code is <strong>{{ dev_code }}</strong>.</p>
+  {% endif %}
+
+  <form method="post" action="{{ verify_url }}" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="code" class="field-label">The {{ code_length }}-digit code{% if for_student %} for {{ sheet.title }}{% endif %}</label>
+    <input type="text" id="code" name="code" class="code-input" placeholder="123456"
+           inputmode="numeric" autocomplete="one-time-code" maxlength="{{ code_length + 4 }}" autofocus required>
+    {% if for_student %}
+    <label class="choice choice-small"><input type="checkbox" name="shared" value="1">
+      <span>This is a shared or library computer — sign me out after 20 minutes of not using it.</span></label>
+    {% endif %}
+    <button type="submit" class="btn btn-primary">Continue</button>
+  </form>
+
+  {% if not no_email and not from_instructor %}
+  <ul class="help-list">
+    {% if not for_student %}<li>Check the address above is spelled right.</li>{% endif %}
+    <li>Not there after a minute? Look in your spam or junk folder{% if sender %} for an email from <strong>{{ sender }}</strong>{% endif %}.</li>
+    <li>Asked more than once? Use the code in the <strong>newest</strong> email.</li>
+    {% if for_student %}
+    <li>Is that email address wrong, or not yours? <a href="mailto:{{ sheet.owner_email }}?subject={{ ('My email for ' ~ sheet.title) | urlencode }}">Email your instructor</a> to fix it.</li>
+    <li>Still stuck? Your instructor can give you a sign-in code from their page.</li>
+    {% endif %}
+  </ul>
+  {% endif %}
+
+  <div class="verify-actions">
+    <form method="post" action="{{ resend_url }}" class="resend-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-secondary">{% if no_email %}Try emailing me a code again{% elif from_instructor %}Email me a code instead{% else %}Send a new code{% endif %}</button>
+    </form>
+    <form method="post" action="{{ restart_url }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn-link link-muted">{{ restart_label }}</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

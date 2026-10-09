@@ -1,0 +1,21 @@
+# Local environment and secrets
+.venv/
+.env
+.env.*
+!.env.example
+
+# Local data — real student information never goes in the repository
+local.db
+local.db-*
+*.zip
+roster*.csv
+
+# Tooling
+__pycache__/
+*.pyc
+.pytest_cache/
+.vercel/
+.DS_Store
+
+# Editor/assistant settings
+.claude/

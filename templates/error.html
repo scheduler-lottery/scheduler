@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="card center-card">
+  <h1>{{ title }}</h1>
+  <p class="subtitle">{{ message }}</p>
+  {% if show_join %}
+  <form method="get" action="{{ url_for('join') }}" class="inline-form">
+    <label for="join-code" class="visually-hidden">Sign-up code</label>
+    <input type="text" id="join-code" name="code" placeholder="8-character code, like k7q2mx9p" maxlength="300" autocomplete="off">
+    <button class="btn btn-primary" type="submit">Go</button>
+  </form>
+  {% endif %}
+  <p><a class="btn btn-secondary" href="{{ url_for('landing') }}">Go to the home page</a></p>
+</div>
+{% endblock %}

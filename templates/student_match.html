@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Find your name — {{ sheet.title }}{% endblock %}
+{% block content %}
+<div class="card center-card">
+  <p class="eyebrow">{{ sheet.title }}</p>
+  {% if suggestions %}
+  <h1>Did you mean…?</h1>
+  <p class="subtitle">We couldn't find “<bdi>{{ typed }}</bdi>” exactly on the class list. {{ 'Is this you?' if suggestions | length == 1 else 'Is one of these you?' }}</p>
+  <div class="match-choices">
+    {% for s in suggestions %}
+    <form method="post" action="{{ url_for('student.login', sid=sheet.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="name" value="{{ typed }}">
+      <input type="hidden" name="pick" value="{{ s.name_key }}">
+      <button type="submit" class="btn btn-primary btn-block">Yes, I'm <bdi>{{ s.display_name }}</bdi></button>
+    </form>
+    {% endfor %}
+  </div>
+  {% else %}
+  <h1>We couldn't find that name</h1>
+  <p class="subtitle">“<bdi>{{ typed }}</bdi>” isn't on the class list for this sign-up.</p>
+  {% endif %}
+
+  <a class="btn btn-secondary btn-block" href="{{ url_for('student.signin', sid=sheet.id, name=typed) }}">← Go back and fix my name</a>
+
+  {% if can_add %}
+  <form method="post" action="{{ url_for('student.login', sid=sheet.id) }}" class="match-new">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="name" value="{{ typed }}">
+    <input type="hidden" name="pick" value="{{ new_name }}">
+    <button type="submit" class="btn-link">No — my name really is “<bdi>{{ typed }}</bdi>”. Sign me up as a new person.</button>
+    <p class="mini-hint">You'll choose a PIN instead of getting an email code, and your instructor will see you weren't on the list.</p>
+  </form>
+  {% elif needs_full_name %}
+  <p class="hint">Not on the list? Type your first <em>and</em> last name.</p>
+  {% else %}
+  <p class="hint">
+    If your name is missing from the list,
+    <a href="mailto:{{ sheet.owner_email }}?subject={{ ('Please add me to ' ~ sheet.title) | urlencode }}">email your instructor</a>
+    and ask them to add you.
+  </p>
+  {% endif %}
+</div>
+{% endblock %}

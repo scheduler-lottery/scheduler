@@ -1,0 +1,80 @@
+"""
+Everything you can configure, read once from environment variables.
+
+Locally, put overrides in a .env file next to app.py (copy .env.example).
+On Vercel, set them under Project -> Settings -> Environment Variables.
+Nothing secret belongs in this file — it's going on GitHub.
+"""
+
+import os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+try:  # python-dotenv is only a convenience for local development
+    from dotenv import load_dotenv
+
+    load_dotenv(os.path.join(BASE_DIR, ".env"))
+except ImportError:
+    pass
+
+
+def _env(name, default=""):
+    return (os.environ.get(name) or default).strip()
+
+
+def _int(name, default):
+    try:
+        return int(_env(name, str(default)))
+    except ValueError:
+        return default
+
+
+# Vercel sets VERCEL=1 in every deployment (production and preview alike).
+IS_VERCEL = _env("VERCEL") == "1"
+
+APP_NAME = _env("APP_NAME", "Scheduler")
+
+# Signs the sign-in cookie. Anyone who has it can forge a sign-in, so in
+# production it must be a long random string set as an environment variable.
+SECRET_KEY = _env("SECRET_KEY")
+
+# Postgres connection string — in Supabase: Connect -> Transaction pooler.
+# Leave it unset locally and the app uses a SQLite file next to app.py.
+DATABASE_URL = _env("DATABASE_URL")
+SQLITE_PATH = os.path.join(BASE_DIR, "local.db")
+
+# Outgoing mail for sign-in codes. With a Gmail account: smtp.gmail.com,
+# port 587, the Gmail address, and an app password. Leave SMTP_HOST unset
+# locally and codes are shown on screen instead of emailed.
+SMTP_HOST = _env("SMTP_HOST")
+SMTP_PORT = _int("SMTP_PORT", 587)
+SMTP_USER = _env("SMTP_USER")
+SMTP_PASSWORD = _env("SMTP_PASSWORD")
+SMTP_FROM = _env("SMTP_FROM") or SMTP_USER
+SMTP_FROM_NAME = _env("SMTP_FROM_NAME", APP_NAME)
+
+# The site owner: can always sign in as an instructor, and gets /owner —
+# a page of site-wide totals that never shows anyone else's sheets.
+OWNER_EMAIL = _env("OWNER_EMAIL").lower()
+
+# Who may create an instructor account, by email ending ("*" = anyone).
+# ".edu" matches any address ending in .edu; "myschool.edu" matches
+# that domain and its subdomains.
+INSTRUCTOR_EMAIL_DOMAINS = [
+    d.strip().lower() for d in _env("INSTRUCTOR_EMAIL_DOMAINS", ".edu").split(",") if d.strip()
+]
+
+# Sign-in emails allowed per rolling 24 hours across the whole site. Gmail
+# starts refusing somewhere between 100 and 500 a day, so stay under that.
+EMAIL_DAILY_LIMIT = _int("EMAIL_DAILY_LIMIT", 90)
+
+# Vercel sends "Authorization: Bearer <CRON_SECRET>" with its cron requests.
+CRON_SECRET = _env("CRON_SECRET")
+
+# Where people can reach whoever runs the site (shown on the Privacy page and
+# to switched-off accounts). Optional; leave it unset to show no address.
+CONTACT_EMAIL = _env("CONTACT_EMAIL").lower()
+
+# Times in downloads and emails use the instructor's own time zone, which
+# their browser reports when they sign in. This is the fallback until then.
+DEFAULT_TIMEZONE = _env("DEFAULT_TIMEZONE", "America/Chicago")

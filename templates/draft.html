@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Draft — {{ sheet.title }}{% endblock %}
+{% block page_class %} page-wide{% endblock %}
+{% block content %}
+<div class="card">
+  <p class="eyebrow"><a href="{{ url_for('teach.sheet', sid=sheet.id) }}#schedule" class="link-muted">← {{ sheet.title }}</a></p>
+  <h1>Draft schedule</h1>
+  <p class="subtitle">
+    How the schedule would come out if you closed sign-ups right now. Nothing is saved.
+    {% if sheet.show_preview %}Students can see a draft like this too (without the people who haven't ranked), because you turned that on.{% else %}Students don't see this.{% endif %}
+    {% if counts.roster %}{{ counts.listed_submissions }} of {{ counts.roster }} on your list {{ 'has' if counts.listed_submissions == 1 else 'have' }} ranked so far.{% endif %}
+  </p>
+  {% if needs_day %}
+  <div class="problem-box"><p><strong>Would need your decision:</strong> {% for r in needs_day %}<bdi>{{ r.name }}</bdi>{% if r.reason == 'ruled-out' %} (marked every day as one they can't do){% elif r.cant %} (can't do {{ r.cant | join(' · ') }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %} — every day they can do would be full.</p></div>
+  {% endif %}
+  {% if didnt_rank %}
+  <div class="problem-box"><p><strong>Would get no day ({{ didnt_rank | length }}), because they haven't ranked and there are no open seats left:</strong> {% for r in didnt_rank %}<bdi>{{ r.display_name }}</bdi>{% if not loop.last %}, {% endif %}{% endfor %}.</p></div>
+  {% endif %}
+  {% if cant_do %}
+  <div class="problem-box"><p><strong>On a day they said they can't do</strong>: {% for r in cant_do %}<bdi>{{ r.name }}</bdi> — {{ r.label }}{% if not loop.last %}, {% endif %}{% endfor %}.</p></div>
+  {% endif %}
+  <div class="day-columns">
+    {% for d in days %}
+    <div class="day-column">
+      <h3>{{ d.label }}</h3>
+      <p class="mini-hint">{{ by_day[d.key] | length | plural('person', 'people') }} · {{ sheet.capacity_per_day | plural('seat') }}</p>
+      <ul class="assign-list">
+        {% for a in by_day[d.key] %}
+        <li class="{{ 'flagged' if a.cant or a.over }}"><bdi>{{ a.name }}</bdi>
+          {% if a.choice %}<span class="tag">choice #{{ a.choice }}</span>{% endif %}
+          {% if a.cant %}<span class="tag tag-danger">said they can't do this day</span>{% endif %}
+          {% if a.squeezed %}<span class="tag tag-danger">squeezed onto a full day</span>{% endif %}
+          {% if a.method == 'unranked' %}<span class="tag">didn't rank</span>{% endif %}
+          {% if a.ranked and not a.choice %}<span class="tag tag-warn">day added after they ranked</span>{% endif %}
+          {% if a.unlisted and counts.roster %}<span class="tag tag-warn">not on class list</span>{% endif %}
+          {% if a.is_test %}<span class="tag">test</span>{% endif %}
+        </li>
+        {% else %}
+        <li class="muted">Nobody</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  </div>
+  <p><a class="btn btn-secondary" href="{{ url_for('teach.sheet', sid=sheet.id) }}#schedule">← Back to the sheet</a></p>
+</div>
+{% endblock %}

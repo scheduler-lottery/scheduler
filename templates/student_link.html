@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Sign in — {{ sheet.title }}{% endblock %}
+{% block content %}
+<div class="card center-card">
+  <p class="eyebrow">{{ sheet.title }}</p>
+  <h1>Sign in as <bdi>{{ name }}</bdi>?</h1>
+  <p class="subtitle">You opened the sign-in link from your email. Press the button to finish.</p>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="choice choice-small"><input type="checkbox" name="shared" value="1">
+      <span>This is a shared or library computer — sign me out after 20 minutes of not using it.</span></label>
+    <button type="submit" class="btn btn-primary">Sign me in</button>
+  </form>
+  <p class="hint">Not <bdi>{{ name }}</bdi>? Close this page — someone may have forwarded you their email.</p>
+</div>
+{% endblock %}

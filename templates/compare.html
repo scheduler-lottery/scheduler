@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Compare the options — {{ sheet.title }}{% endblock %}
+{% block page_class %} page-wide{% endblock %}
+{% block content %}
+<div class="card admin-card">
+  <div class="admin-header">
+    <h1><span aria-hidden="true">📊</span> Compare the options</h1>
+    <a href="{{ url_for('teach.sheet', sid=sheet.id) }}#schedule" class="link-muted">← Back to {{ sheet.title }}</a>
+  </div>
+  <p class="lead-line"><strong>{{ verdict }}</strong></p>
+  <p class="subtitle">
+    Each option was tried {{ trials }} time{{ 's' if trials != 1 }} on your {{ num_submissions }} current
+    ranking{{ 's' if num_submissions != 1 }} ({{ capacity }} seat{{ 's' if capacity != 1 }} per day), each time with a
+    different random draw, then averaged — so this shows how an option tends to do, not one lucky draw. Nothing here
+    is saved.
+  </p>
+  {% if trials < requested_trials %}
+  <p class="mini-hint">Stopped at {{ trials }} tries instead of {{ requested_trials }} to keep this quick — plenty to see the pattern.</p>
+  {% endif %}
+
+  <div class="algo-grid">
+    {% for algo_id, s in stats.items() %}
+    <div class="algo-card {{ 'current' if algo_id == current_algorithm }}">
+      <h3>
+        {{ s.short }}
+        {% if algo_id == current_algorithm %}<span class="tag">in use</span>{% endif %}
+      </h3>
+      <div class="algo-stats">
+        <div>
+          <div class="algo-stat-value">{{ s.pct_top1 }}%</div>
+          <div class="algo-stat-label">got their first choice</div>
+        </div>
+        <div>
+          <div class="algo-stat-value">{{ s.pct_top2 }}%</div>
+          <div class="algo-stat-label">got their first or second choice</div>
+        </div>
+        <div>
+          <div class="algo-stat-value">{{ s.avg_rank }}</div>
+          <div class="algo-stat-label">average choice they got (1 = first choice)</div>
+        </div>
+        <div>
+          <div class="algo-stat-value">{{ s.pct_cant }}%</div>
+          <div class="algo-stat-label">put on a day they said they can't do</div>
+        </div>
+        <div>
+          <div class="algo-stat-value">{{ s.pct_left }}%</div>
+          <div class="algo-stat-label">left for you to place (every day they can do was full)</div>
+        </div>
+      </div>
+      <p class="algo-desc">{{ s.description }}</p>
+      {% if s.compare_only %}
+      <p class="mini-hint">For comparison only — it isn't fair to students who rank honestly, so it can't be used for a real schedule.</p>
+      {% else %}
+      <form method="post" action="{{ url_for('teach.set_algorithm', sid=sheet.id) }}" class="algo-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="algorithm" value="{{ algo_id }}">
+        <button type="submit" class="btn {{ 'btn-secondary' if algo_id == current_algorithm else 'btn-primary' }}" {{ 'disabled' if algo_id == current_algorithm }}>
+          {{ 'In use' if algo_id == current_algorithm else 'Use this one' }}
+        </button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  <p class="mini-hint">Differences of a point or two are just chance. When in doubt, keep the recommended option.</p>
+</div>
+{% endblock %}

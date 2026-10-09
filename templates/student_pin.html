@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Choose a PIN' if choosing else 'Enter your PIN' }} — {{ sheet.title }}{% endblock %}
+{% block content %}
+<div class="card center-card">
+  <p class="eyebrow">{{ sheet.title }}</p>
+  {% if choosing %}
+  <h1><span aria-hidden="true">🔒</span> Choose a PIN</h1>
+  {% if reset_note %}<div class="disclaimer disclaimer-yellow">{{ reset_note }}</div>{% endif %}
+  {% if why == 'unlisted' and not has_roster %}
+  <p class="subtitle">Hi <bdi>{{ name }}</bdi>! Choose a PIN to protect your name, so nobody else can sign in as you.</p>
+  {% elif why == 'unlisted' %}
+  <p class="subtitle">
+    Hi <bdi>{{ name }}</bdi>! You're not on the class list, so instead of an email code you'll protect your name with a
+    PIN. Your instructor will see that you signed up this way.
+  </p>
+  {% else %}
+  <p class="subtitle">
+    Hi <bdi>{{ name }}</bdi>! Your instructor's list doesn't have an email for you, so you'll protect your name
+    with a PIN instead.
+  </p>
+  {% endif %}
+  {% if has_ranking and not reset_note %}<p class="hint">Your PIN was reset. Choose a new one — the ranking saved under your name is still there; check it after you sign in.</p>{% endif %}
+  <p class="hint">
+    A PIN is a secret number of {{ min_digits }} to {{ max_digits }} digits, like a phone passcode. Pick one that's
+    not obvious (not 1234 or 0000), and write it down: you'll need it if you sign in on another device.
+  </p>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="mode" value="choose">
+    <label for="pin" class="field-label">Your new PIN</label>
+    <input type="password" id="pin" name="pin" class="code-input" inputmode="numeric" autocomplete="new-password"
+           maxlength="{{ max_digits }}" placeholder="{{ min_digits }}–{{ max_digits }} digits" required autofocus>
+    <label for="pin-again" class="field-label">Type it again</label>
+    <input type="password" id="pin-again" name="pin_again" class="code-input" inputmode="numeric"
+           autocomplete="new-password" maxlength="{{ max_digits }}" placeholder="same PIN again" required>
+    <label class="choice choice-small"><input type="checkbox" name="shared" value="1">
+      <span>This is a shared or library computer — sign me out after 20 minutes of not using it.</span></label>
+    <button class="btn btn-primary" type="submit">Save my PIN and continue</button>
+  </form>
+  {% else %}
+  <h1><span aria-hidden="true">🔒</span> Enter your PIN</h1>
+  <p class="subtitle">Welcome back, <bdi>{{ name }}</bdi>. Enter the PIN you chose the first time you signed in.</p>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="mode" value="enter">
+    <label for="pin" class="field-label">Your PIN</label>
+    <input type="password" id="pin" name="pin" class="code-input" inputmode="numeric" autocomplete="current-password"
+           maxlength="{{ max_digits }}" required autofocus>
+    <label class="choice choice-small"><input type="checkbox" name="shared" value="1">
+      <span>This is a shared or library computer — sign me out after 20 minutes of not using it.</span></label>
+    <button class="btn btn-primary" type="submit">Continue</button>
+  </form>
+  <p class="hint">
+    Forgot it?
+    <a href="mailto:{{ sheet.owner_email }}?subject={{ ('PIN reset for ' ~ name ~ ' — ' ~ sheet.title) | urlencode }}">Email your instructor</a>
+    to reset it; then sign in again and choose a new one.
+  </p>
+  <p class="mini-hint">Never chose a PIN for this class? Someone else may have used your name — tell your instructor.</p>
+  {% endif %}
+  <div class="verify-actions">
+    <form method="post" action="{{ url_for('student.restart', sid=sheet.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn-link link-muted">Not <bdi>{{ name }}</bdi>? Go back and pick a different name</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

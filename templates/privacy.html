@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Privacy — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="card prose">
+  <h1>Privacy</h1>
+  <p class="subtitle">What this site keeps, who can see it, and how it goes away.</p>
+
+  <div class="note-box">
+    <p class="note-box-label">In short</p>
+    <ul>
+      <li><strong>Students:</strong> your instructor sees your ranking and notes. Classmates see names and days only if
+        your instructor turns that on. Nobody else sees anything.</li>
+      <li><strong>Instructors:</strong> only you can open your sheets on this site — other instructors can't, and the site
+        gives the person who runs it no way to either (details below).</li>
+      <li>Only names and email addresses are kept from a class list; everything else in the file is thrown away.</li>
+    </ul>
+  </div>
+
+  <h2>What's stored</h2>
+  <ul>
+    <li><strong>Instructors:</strong> your email address, your time zone (for dates in downloads), and the sign-up sheets you create.</li>
+    <li><strong>Class lists:</strong> each student's name and email address — nothing else. When an
+      instructor uploads a Canvas export, every other column (grades, activity, IDs) is discarded
+      on the spot and never saved.</li>
+    <li><strong>Rankings:</strong> each student's order of days, any day they said they can't do,
+      and any note they wrote for their instructor.</li>
+    <li><strong>The schedule</strong>, once the instructor makes it.</li>
+    <li><strong>Earlier versions of each sheet</strong>, kept so an instructor can undo mistakes.</li>
+  </ul>
+
+  <h2>Who can see it</h2>
+  <ul>
+    <li><strong>Each instructor sees only their own sheets.</strong> No other instructor can open
+      them, and the site has no screen that shows one instructor's sheets to anyone else —
+      including the person who runs the site.</li>
+    <li><strong>Students</strong> see their own ranking, and their own day once the schedule is published. If the
+      instructor turns it on, signed-in students in the same class can also see everyone's names and days — but
+      never anyone's notes, can't-do days, or who hasn't ranked.</li>
+    <li><strong>The person who runs this site</strong> sees only site-wide totals (how many sheets
+      and students, how many emails were sent today). Like anyone operating a database, they could
+      technically read it directly in the hosting provider's console; they don't, and the site
+      itself offers no way to.</li>
+  </ul>
+
+  <h2>Signing in</h2>
+  <p>
+    There are no passwords. You get a one-time code by email; students without an email on the
+    class list choose a PIN instead, which is stored scrambled. A single cookie keeps you signed
+    in on that browser for up to 90 days (or 20 minutes of inactivity, if you tick “shared computer”). There's
+    no tracking, no advertising, and no analytics. Fonts load from Google Fonts.
+  </p>
+  <p>
+    So students can find their own name, after someone with the sign-up's link types three letters,
+    up to five matching names from that class list appear. Email addresses are never shown.
+  </p>
+
+  <h2>Email</h2>
+  <p>
+    Sign-in codes{% if code_sender %} come from {{ code_sender }}{% else %} are sent from a Gmail account{% endif %}.
+    Instructors can also get a backup of a sheet by email (for example, when they close sign-ups); a backup holds
+    the class list, rankings and notes, and goes only to that instructor's own address.
+  </p>
+
+  <h2>How long it's kept</h2>
+  <ul>
+    <li>A sheet stays until its instructor deletes it. A deleted sheet can be brought back for 30
+      days, then it's gone for good.</li>
+    <li>Sign-in codes expire after 30 minutes, and the one-click link in a student's code email works once,
+      within a day. Records used to limit how many emails are sent hold scrambled addresses, not real
+      ones, and are erased after two days.</li>
+    <li>Earlier versions of a sheet are capped per sheet; older ones are removed automatically.</li>
+  </ul>
+
+  <h2>Where it lives</h2>
+  <p>
+    The site runs on Vercel, the data is stored in a Supabase (Postgres) database, and email is sent
+    through Gmail. Everything travels encrypted (HTTPS).
+  </p>
+
+  <h2>Your school's rules</h2>
+  <p>
+    The site keeps only what it needs: names, email addresses, rankings and notes. If your school has rules about
+    student information in outside tools (in the US, for example, FERPA), check with your school before using it.
+  </p>
+
+  <h2>Questions</h2>
+  <p>
+    Students: ask your instructor.
+    {% if contact_email %}Anything about the site itself: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.{% else %}Instructors: ask whoever invited you to use this site.{% endif %}
+  </p>
+</div>
+{% endblock %}
