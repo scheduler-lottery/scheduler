@@ -35,7 +35,7 @@
       <label for="title">Title</label>
       <p class="field-help">What your students will see at the top of the page.</p>
       <input type="text" id="title" name="title" value="{{ form.title }}" maxlength="100" required data-count
-             placeholder="e.g. CS &amp; Law, Fall 2026">
+             placeholder="e.g., CS &amp; Law, Fall 2026">
     </div>
 
     <fieldset class="field" data-day-field data-max="{{ max_days }}">
@@ -73,7 +73,7 @@
     <div class="field">
       <label for="rank_by">Rank by <span class="muted">(optional)</span></label>
       <p class="field-help">A deadline to show students, like “Friday, Oct 10 at 5 PM”. Sign-ups don't close by themselves — you close them.</p>
-      <input type="text" id="rank_by" name="rank_by" value="{{ form.rank_by }}" maxlength="100" placeholder="e.g. Friday, Oct 10 at 5 PM">
+      <input type="text" id="rank_by" name="rank_by" value="{{ form.rank_by }}" maxlength="100" placeholder="e.g., Friday, Oct 10 at 5 PM">
     </div>
 
     <details class="more-options" {% if mode == 'edit' or form.note %}open{% endif %}>
@@ -82,7 +82,7 @@
         <label for="note">Note to students <span class="muted">(optional)</span></label>
         <p class="field-help">Shown when they sign in and rank, and in the message you post. Good for the format and length of presentations.</p>
         <textarea id="note" name="note" rows="6" maxlength="2000" data-count
-                  placeholder="e.g. Each class fits 4 presentations: 20 minutes each — 10–15 presenting, then questions.">{{ form.note }}</textarea>
+                  placeholder="e.g., Each class fits 4 presentations: 20 minutes each — 10–15 presenting, then questions.">{{ form.note }}</textarea>
       </div>
 
       <fieldset class="field">

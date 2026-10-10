@@ -2330,24 +2330,28 @@ h4 { font-size: 1.1rem; line-height: 1.15; font-weight: calc(var(--w-h4) + var(-
   .policy-section h2 { position: static; }
 }
 
-/* The class list's privacy panel on a sheet: a headline and four tiles. */
-.privacy-panel { border-left-width: 1px; padding: 20px 20px 14px; }
+/* The class list's privacy panel on a sheet: plain and calm, a short title
+   and four checked points, in the text font. */
+.privacy-panel {
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 16px 20px 12px; margin: 14px 0; background: var(--card-bg);
+}
 .privacy-title {
-  margin: 0 0 14px; font-family: var(--font-display); font-optical-sizing: auto; color: var(--text);
-  font-size: clamp(1.4rem, 2.7vw, 1.75rem); line-height: 1.06; letter-spacing: var(--track-h2);
-  font-weight: calc(var(--w-h2) + var(--display-boost));
+  display: flex; align-items: center; gap: 8px; margin: 0 0 6px;
+  font-family: var(--font-text); font-size: 1.02rem; font-weight: 700; letter-spacing: 0; color: var(--text);
 }
-.privacy-panel .privacy-tiles {
-  list-style: none; padding: 0; margin: 0 0 10px;
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+.privacy-title svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--success); }
+.privacy-panel .privacy-points { list-style: none; margin: 0 0 8px; padding: 0; }
+.privacy-panel .privacy-points li {
+  position: relative; margin: 0; padding: 9px 0 9px 26px; line-height: 1.5;
+  border-top: 1px solid var(--border);
 }
-.privacy-tiles li { margin: 0; padding: 14px 14px 12px; border-radius: var(--radius-sm); background: var(--surface-soft); }
-.privacy-tiles strong {
-  display: block; margin-bottom: 4px; font-family: var(--font-display); font-optical-sizing: auto;
-  font-size: 1.15rem; line-height: 1.08; letter-spacing: var(--track-h3); color: var(--success);
-  font-weight: calc(var(--w-h3) + var(--display-boost));
+.privacy-panel .privacy-points li:first-child { border-top: 0; }
+.privacy-panel .privacy-points li::before {
+  content: ""; position: absolute; left: 3px; top: 0.95em;
+  width: 11px; height: 6px; border-left: 2px solid var(--success); border-bottom: 2px solid var(--success);
+  transform: rotate(-45deg);
 }
-@media (max-width: 640px) { .privacy-panel .privacy-tiles { grid-template-columns: 1fr; } }
 
 /* Blocks further down rise in as you scroll to them (app.js). */
 .reveal { opacity: 0; transform: translateY(18px); }
@@ -2476,3 +2480,9 @@ summary.card-heading::marker, summary.card-heading::-webkit-details-marker { fon
   [data-mode="dark"] [data-glow].is-lit { --spot: 11%; }
 }
 [data-theme^="contrast"] [data-glow] { background-image: none; }
+
+/* Example text in empty fields ("e.g., ..."): YaleNew italic, in the
+   standard and Old Style looks (the sans and easy-to-read choices keep
+   their own font, in italic). */
+::placeholder { font-family: var(--font-text); font-style: italic; color: var(--muted); opacity: 1; }
+.modal-dialog .privacy-panel { border: 0; padding: 0; margin: 0; background: none; }

@@ -37,7 +37,7 @@
       {% endif %}
     </p>
     <div class="name-autocomplete">
-      <input type="text" id="name-input" name="name" placeholder="e.g. Alex Johnson" aria-describedby="name-help" value="{{ typed }}"
+      <input type="text" id="name-input" name="name" placeholder="e.g., Alex Johnson" aria-describedby="name-help" value="{{ typed }}"
              autofocus required maxlength="120" autocomplete="off" readonly data-unlock
              role="combobox" aria-expanded="false" aria-controls="name-suggestions" aria-autocomplete="list"
              data-suggest-url="{{ url_for('student.names', sid=sheet.id) }}">

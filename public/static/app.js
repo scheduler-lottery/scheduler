@@ -22,10 +22,10 @@
   var heading = choice === "sans" || choice === "readable" ? Promise.resolve(true)
     : want("300 16px Roslindale").then(function (ok) { return ok || want("16px 'Roslindale Display Condensed'"); });
   var text = {
-    oldstyle: ["16px 'Scheduler Text'", "bold 16px 'Scheduler Text'"],
+    oldstyle: ["16px 'Scheduler Text'", "bold 16px 'Scheduler Text'", "italic 16px 'Scheduler Text'"],
     sans: ["16px Inter", "600 16px Inter"],
     readable: ["16px 'Atkinson Hyperlegible'", "bold 16px 'Atkinson Hyperlegible'"],
-  }[choice] || ["16px YaleNew", "bold 16px YaleNew"];
+  }[choice] || ["16px YaleNew", "bold 16px YaleNew", "italic 16px YaleNew"];
   Promise.all([heading].concat(text.map(want))).then(show, show);
 })();
 
