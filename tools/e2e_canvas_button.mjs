@@ -147,6 +147,12 @@ try {
   const code1 = decodeURIComponent(button.slice("javascript:".length));
   check(await evaluate(me.session, `!document.querySelector("[data-quiz-drop]") || document.querySelector("[data-quiz-drop]").hidden`),
     "no box for a downloaded file until the download steps are opened");
+  // In Chrome, no dragging: clicking the button copies it, to paste onto the bookmarks bar.
+  await send("Browser.grantPermissions", { origin: SITE, permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"] });
+  await evaluate(me.session, `document.querySelector("[data-bookmarklet]").click()`);
+  check(await until(me.session, `document.querySelector("[data-bookmarklet-said]").textContent.includes("right-click an empty spot on your bookmarks bar")`),
+    "clicking the button says to paste it onto the bookmarks bar");
+  check((await evaluate(me.session, `navigator.clipboard.readText()`)).startsWith("javascript:"), "having copied itself");
 
   await evaluate(me.session, toFakeCanvas);
   let before = created.length;
@@ -325,7 +331,7 @@ try {
   const safariSteps = await evaluate(safari.session, `[...document.querySelectorAll(".canvas-easy-steps p")].filter((p) => !p.hidden).map((p) => p.textContent).join(" | ")`);
   check(safariSteps.includes("Add Link to Bookmarks") && safariSteps.includes("Show Favorites Bar") && !safariSteps.includes("Drag this button"),
     "in Safari: Show Favorites Bar, then Control-click → Add Link to Bookmarks; no dragging");
-  check(await evaluate(safari.session, `document.querySelector(".drag-pic").hidden`), "and no dragging picture");
+  check(await evaluate(safari.session, `document.querySelector(".drag-pic").hasAttribute("hidden")`), "and no dragging picture");
 } catch (err) {
   console.log("FAIL " + err.message);
   failures++;

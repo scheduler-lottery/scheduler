@@ -620,6 +620,10 @@
     }
     if (isSafari || isFirefox) guide.querySelectorAll("[data-drag-only]").forEach(function (el) { el.hidden = true; });
     if (isFirefox) guide.querySelectorAll("[data-firefox-only]").forEach(function (el) { el.hidden = false; });
+    if (/Edg\//.test(navigator.userAgent)) { // Edge's menus and "favorites"
+      guide.querySelectorAll("[data-edge-only]").forEach(function (el) { el.hidden = false; });
+      guide.querySelectorAll("[data-not-edge]").forEach(function (el) { el.hidden = true; });
+    }
     if (isFirefox) {
       guide.querySelectorAll("[data-copy-how]").forEach(function (el) { el.hidden = true; });
       guide.querySelectorAll("[data-copy-how-firefox]").forEach(function (el) { el.hidden = false; });
@@ -730,15 +734,35 @@
         : "Your browser kept Canvas from opening. Press Open Canvas, then click Send to Scheduler again in Canvas."));
     });
     // Clicked on this page instead of dragged: show how.
+    // Clicked here: in Chrome and Edge it copies itself, to paste onto the
+    // bookmarks bar (right-click the bar, Paste); Safari and Firefox add it
+    // with a right-click on the button.
     guide.querySelectorAll("[data-bookmarklet]").forEach(function (button) {
       button.addEventListener("click", function (e) {
         e.preventDefault();
-        say(isSafari ? "Almost! Don't click it here: Control-click it (or right-click), choose Add Link to Bookmarks…, "
-          + "pick Favorites, and click Add."
-          : isFirefox ? "Almost! Don't click it here: right-click it, choose Bookmark Link…, pick Bookmarks Toolbar, "
-          + "and click Save."
-          : "Almost! Don't click it here: hold the mouse button down on it, move it up onto your bookmarks bar, "
-          + "then let go.");
+        if (isSafari) {
+          say("Almost! Don't click it here: Control-click it (or right-click), choose Add Link to Bookmarks…, "
+            + "pick Favorites, and click Add.");
+          return;
+        }
+        if (isFirefox) {
+          say("Almost! Don't click it here: right-click it, choose Bookmark Link…, pick Bookmarks Toolbar, and "
+            + "click Save.");
+          return;
+        }
+        var copied = function () {
+          say("Copied. Now right-click an empty spot on your bookmarks bar (on a Mac trackpad, click with two "
+            + "fingers) and choose Paste. Then click the new bookmark there to check it works.");
+        };
+        var cannot = function () {
+          say("Right-click the orange button and choose Copy link address. Then right-click an empty spot on your "
+            + "bookmarks bar and choose Paste.");
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(button.href).then(copied, cannot);
+        } else {
+          cannot();
+        }
       });
     });
 

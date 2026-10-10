@@ -60,11 +60,11 @@
     </div>
     <ol class="canvas-easy-steps" data-button-new>
       <li>
-        <p data-not-safari><strong>Find your bookmarks bar</strong>: a thin row of bookmarks just under the address bar. Not there? Press <kbd data-key-mod>Ctrl</kbd> <kbd>Shift</kbd> <kbd>B</kbd>. If a bar you had disappears, it was already showing: press the same keys again.</p>
+        <p data-not-safari><strong>Find your bookmarks bar</strong>: a thin row of bookmarks just under the address bar. Not there? <span data-drag-only data-not-edge>Click the <strong>⋮</strong> menu at the top right of the browser, then <strong>Bookmarks and lists</strong>, then <strong>Show bookmarks bar</strong>.</span><span data-edge-only hidden>Click the <strong>···</strong> menu at the top right of Edge, then <strong>Favorites</strong>, then <strong>Show favorites bar</strong>, then <strong>Always</strong>.</span><span data-firefox-only hidden>Press <kbd data-key-mod>Ctrl</kbd> <kbd>Shift</kbd> <kbd>B</kbd>.</span></p>
         <p data-safari-only hidden><strong>Show your Favorites bar</strong>: in Safari's <strong>View</strong> menu at the top of the screen, choose <strong>Show Favorites Bar</strong>. (Already there? Skip this.)</p>
       </li>
       <li>
-        <p data-drag-only><strong>Drag this button up onto that bar.</strong> Hold the mouse button down on it, move it up, then let go. You only do this once.</p>
+        <p data-drag-only><strong>Click this orange button: it copies itself.</strong> Then right-click an empty spot on your bookmarks bar (on a Mac trackpad, click with two fingers) and choose <strong>Paste</strong>. You only do this once. (Dragging the button up onto the bar works too.)</p>
         <p data-safari-only hidden><strong>Add this button to your Favorites</strong>, once: Control-click it (or right-click), choose <strong>Add Link to Bookmarks…</strong>, pick <strong>Favorites</strong>, then click <strong>Add</strong>.</p>
         <p data-firefox-only hidden><strong>Add this button to your bookmarks toolbar</strong>, once: right-click it, choose <strong>Bookmark Link…</strong>, pick <strong>Bookmarks Toolbar</strong>, then click <strong>Save</strong>.</p>
         <div class="bookmarklet-row">
@@ -72,7 +72,7 @@
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 3.5h10a1 1 0 0 1 1 1V21l-6-4-6 4V4.5a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
             Send to Scheduler</a>
         </div>
-        <svg class="canvas-pic drag-pic" data-drag-only viewBox="0 0 360 96" role="img" aria-label="Dragging the Send to Scheduler button up into the bookmarks bar, just under the address bar">
+        <svg class="canvas-pic drag-pic" hidden viewBox="0 0 360 96" role="img" aria-label="Dragging the Send to Scheduler button up into the bookmarks bar, just under the address bar">
           <rect class="pic-frame" x="0.5" y="0.5" width="359" height="95" rx="10"/>
           <circle class="pic-dot" cx="14" cy="13" r="4"/><circle class="pic-dot" cx="27" cy="13" r="4"/><circle class="pic-dot" cx="40" cy="13" r="4"/>
           <rect class="pic-box" x="56" y="5" width="290" height="16" rx="8"/>
@@ -123,6 +123,31 @@
         <div class="canvas-copy-courses" data-copy-courses hidden></div></li>
     </ol>
     <p class="mini-hint">Only names and email addresses are kept; the rest of what you copy stays on this computer. Best not done while sharing your screen.</p>
+  </details>
+
+  {# Any browser, nothing installed: an access token the professor makes in
+     their own Canvas, used once by this site and then deleted in Canvas
+     (teach.canvas_token). #}
+  <details class="canvas-by-hand canvas-token" data-canvas-token>
+    <summary>Or: use a Canvas access token (any browser, nothing to install)</summary>
+    <ol class="canvas-copy-steps">
+      <li><a class="btn btn-secondary btn-small" href="https://{{ canvas_host }}/profile/settings" target="_blank" rel="noopener">Open my Canvas settings</a>
+        <span class="mini-hint">Canvas opens in a new tab; sign in if it asks.</span></li>
+      <li>Scroll down to <strong>Approved Integrations</strong> and click <strong>+ New Access Token</strong>. For <strong>Purpose</strong>, type <em>Scheduler</em>, then click <strong>Generate Token</strong>.</li>
+      <li>Copy the long token Canvas shows you (select all of it, then <kbd data-key-mod>Ctrl</kbd> <kbd>C</kbd>). Canvas shows it only once.</li>
+      <li>
+        <form method="post" action="{{ url_for('teach.canvas_token', sid=sheet.id) }}" class="token-form" autocomplete="off">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          {% if setup %}<input type="hidden" name="setup" value="1">{% endif %}
+          <label for="canvas-token-{{ sheet.id }}">Paste it here:</label>
+          <div class="inline-form">
+            <input type="password" id="canvas-token-{{ sheet.id }}" name="token" placeholder="Paste the token" autocomplete="off" spellcheck="false" required>
+            <button type="submit" class="btn btn-primary btn-small">Get my class list</button>
+          </div>
+        </form>
+      </li>
+    </ol>
+    <p class="mini-hint">Scheduler uses the token once, to read your courses and that class's names and email addresses, then deletes it in Canvas. It's never kept.</p>
   </details>
 
   {% if guide_download is not defined or guide_download %}

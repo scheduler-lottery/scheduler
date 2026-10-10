@@ -1628,6 +1628,9 @@ CONNECT_TROUBLE = {
     "missing": "Canvas couldn't find that course. Press Connect Canvas and pick it again.",
     "expired": "That took a while, so Canvas's permission ran out. Press Connect Canvas again.",
     "canvas": "Canvas didn't answer just now. Wait a minute, then press Connect Canvas again.",
+    "token": "Canvas didn't accept that access token. Make a new one in Canvas (Account, Settings, New access "
+             "token), copy all of it, and paste it again.",
+    "school": "Choose your school's Canvas first (Change, next to “Your school's Canvas”), then paste the token.",
 }
 
 
@@ -1637,7 +1640,9 @@ def _connect_back(why):
     sealed = pending.get("token")
     token = canvas_oauth.unseal(sealed) if sealed else None
     if token:
-        canvas_oauth.revoke(token)
+        canvas_oauth.revoke(token, pending.get("host"))
+    if pending.get("pasted") and why in ("signin", "expired"):
+        why = "token"  # (a pasted access token: there's no Connect Canvas to press again)
     flash(CONNECT_TROUBLE.get(why, CONNECT_TROUBLE["canvas"]), "error" if why != "denied" else "info")
     sheet = sheets.get_sheet(pending.get("sid")) if pending.get("sid") else None
     if sheet and sheet["owner_id"] == current_instructor()["id"]:
@@ -1659,19 +1664,20 @@ def canvas_connect(sid):
 def _from_connected_canvas(token, course_id, course_name):
     """Read the class list with the key, give the key back, and take the list."""
     pending = session.pop("canvas_connect", None) or {}
+    host = pending.get("host")
     try:
-        people = canvas_oauth.students(token, course_id)
+        people = canvas_oauth.students(token, course_id, host)
     except canvas_oauth.CanvasError as err:
         session["canvas_connect"] = pending
         return _connect_back(err.why)
     finally:
-        canvas_oauth.revoke(token)
+        canvas_oauth.revoke(token, host)
     sheet = owned_sheet(pending.get("sid"))
     if not people:
         flash(f"{course_name} has no students in Canvas yet. If it isn't published, or students just enrolled, Canvas "
               "may not list them for a day or two.", "info")
         return _list_back(sheet, pending.get("setup"))
-    data = {"course": course_name, "course_id": course_id, "host": settings.CANVAS_OAUTH_HOST,
+    data = {"course": course_name, "course_id": course_id, "host": host or settings.CANVAS_OAUTH_HOST,
             "students": [{"name": p["name"][:120], "email": p["email"][:254] if "@" in p["email"] else ""} for p in people],
             "key": "", "v": 2}
     return _take_canvas_list(sheet, data, setup=pending.get("setup"), copied=True)
@@ -1693,22 +1699,49 @@ def canvas_connected():
         token = canvas_oauth.exchange(request.args.get("code", ""), url_for("teach.canvas_connected", _external=True))
     except canvas_oauth.CanvasError as err:
         return _connect_back(err.why)
+    return _courses_or_list(sheet, token, settings.CANVAS_OAUTH_HOST, pending.get("setup"))
+
+
+def _courses_or_list(sheet, token, host, setup, pasted=False):
+    """With a key for Canvas: the sheet's course's list straight away, or the
+    professor's courses to pick from (the key waiting, sealed, in the
+    session). Shared by Connect Canvas and a pasted access token."""
+    session["canvas_connect"] = {"sid": sheet["id"], "setup": setup, "host": host, "pasted": pasted}
     if sheet.get("canvas_course_id"):  # its course from last time: straight to the list
         return _from_connected_canvas(token, sheet["canvas_course_id"], sheet.get("canvas_course") or "your course")
     try:
-        found = canvas_oauth.courses(token)
+        found = canvas_oauth.courses(token, host)
     except canvas_oauth.CanvasError as err:
-        canvas_oauth.revoke(token)
+        canvas_oauth.revoke(token, host)
         return _connect_back(err.why)
     if len(found) == 1:
         c = found[0]
         return _from_connected_canvas(token, c["id"], c["name"] + (f" ({c['term']})" if c["term"] else ""))
-    pending["state"] = None
-    pending["token"] = canvas_oauth.seal(token)
-    session["canvas_connect"] = pending
     if not found:
+        canvas_oauth.revoke(token, host)
         return _connect_back("forbidden")
+    session["canvas_connect"]["token"] = canvas_oauth.seal(token)
     return render_template("canvas_connect.html", sheet=sheet, courses=found)
+
+
+@bp.route("/s/<sid>/canvas/token", methods=["POST"])
+@instructor_required
+def canvas_token(sid):
+    """An access token the professor made in their own Canvas and pasted
+    here: used once, server to server, for their school's Canvas only, then
+    deleted in Canvas. Never stored, never logged."""
+    sheet = owned_sheet(sid)
+    setup = bool(request.form.get("setup"))
+    token = "".join((request.form.get("token") or "").split())
+    school = _canvas_school(current_instructor(), guess=True)
+    host = canvasdir.clean_host(school["domain"]) if school else None
+    if not host:
+        session["canvas_connect"] = {"sid": sheet["id"], "setup": setup}
+        return _connect_back("school")
+    if not re.fullmatch(r"[A-Za-z0-9~._-]{20,200}", token):
+        session["canvas_connect"] = {"sid": sheet["id"], "setup": setup}
+        return _connect_back("token")
+    return _courses_or_list(sheet, token, host, setup, pasted=True)
 
 
 @bp.route("/canvas/oauth/pick", methods=["POST"])
@@ -1721,7 +1754,7 @@ def canvas_connected_pick():
     owned_sheet(pending.get("sid"))
     course_id = request.form.get("course_id", "")
     if not re.fullmatch(r"\d{1,15}", course_id):
-        canvas_oauth.revoke(token)
+        canvas_oauth.revoke(token, pending.get("host"))
         return _connect_back("missing")
     return _from_connected_canvas(token, course_id, " ".join((request.form.get("course_name") or "your course").split())[:200])
 

@@ -2665,7 +2665,7 @@ def test_a_new_sheet_goes_on_to_its_students_and_its_link_with_a_progress_bar(pr
     page = raw(prof.get(f"/teach/s/{sid}/setup"))
     assert "Step 7 of 8" in text(page) and "Add your students" in page
     assert "Do you use Canvas for this class?" in html_lib.unescape(page)
-    assert page.count('name="setup" value="1"') == 3  # the drop box, pasting, and "sign themselves up"
+    assert page.count('name="setup" value="1"') == 4  # the drop box, pasting, a Canvas token, "sign themselves up"
     assert browser().sign_in_instructor("other@school.edu").get(f"/teach/s/{sid}/setup").status_code == 404
 
     # The class list, added from the setup, comes back to the setup and says what it read.
@@ -3293,14 +3293,15 @@ def _connectable_canvas(monkeypatch):
     spec = importlib.util.spec_from_file_location("fake_canvas", "tools/fake_canvas.py")
     fake = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(fake)
-    canvas = fake.app.test_client()
+    canvas = fake.app.test_client()  # the professor's browser at Canvas
+    server = fake.app.test_client(use_cookies=False)  # this site's own requests: no Canvas sign-in of theirs
     monkeypatch.setattr(settings, "CANVAS_OAUTH_HOST", "canvas.test")
     monkeypatch.setattr(settings, "CANVAS_OAUTH_CLIENT_ID", fake.CLIENT_ID)
     monkeypatch.setattr(settings, "CANVAS_OAUTH_CLIENT_SECRET", fake.CLIENT_SECRET)
 
     def http(method, url, headers=None, data=None):
         assert url.startswith("https://canvas.test/")
-        r = canvas.open(url[len("https://canvas.test"):], method=method, headers=headers or {}, data=data,
+        r = server.open(url[len("https://canvas.test"):], method=method, headers=headers or {}, data=data,
                         base_url="https://canvas.test")
         return r.status_code, dict(r.headers), r.get_data(as_text=True)
 
@@ -3365,6 +3366,33 @@ def test_connect_canvas_takes_no_for_an_answer_and_nothing_forged(prof, monkeypa
     prof.post("/teach/logout")
     prof.sign_in_instructor("other@school.edu")
     assert prof.get(f"/teach/s/{other}/canvas/connect").status_code == 404
+
+
+def test_a_canvas_access_token_the_professor_pastes_is_used_once_and_deleted(prof, monkeypatch):
+    sid = prof.create_sheet(allow_unlisted=False)
+    canvas, fake = _connectable_canvas(monkeypatch)
+    monkeypatch.setattr(settings, "CANVAS_OAUTH_HOST", "")  # (no developer key: just the pasted token)
+    page = text(prof.get(f"/teach/s/{sid}"))
+    assert "use a Canvas access token" in page and "Connect Canvas" not in page
+    # No school's Canvas chosen yet: say so.
+    assert "Choose your school's Canvas first" in follow(prof, prof.post(f"/teach/s/{sid}/canvas/token", {"token": "x" * 30}))
+    with prof.app.app_context():
+        db.run("UPDATE instructors SET canvas_host = 'canvas.test' WHERE email = 'prof@school.edu'")
+        db.commit()
+    assert 'href="https://canvas.test/profile/settings"' in raw(prof.get(f"/teach/s/{sid}"))
+    assert "didn't accept that access token" in follow(prof, prof.post(f"/teach/s/{sid}/canvas/token", {"token": "short"}))
+    assert "didn't accept that access token" in follow(prof, prof.post(f"/teach/s/{sid}/canvas/token",
+                                                                       {"token": "1234~" + "n" * 40}))
+    made = "1234~" + "a" * 60  # the professor's token, made in their Canvas
+    fake.TOKENS.add(made)
+    page = text(prof.post(f"/teach/s/{sid}/canvas/token", {"token": f"  {made}\n"}))
+    assert "Which course is" in page and "2026FA_BUSCOM_615_SEC1" in page
+    r = prof.post("/teach/canvas/oauth/pick", {"course_id": "202", "course_name": "2026FA_LAW_540_SEC20 (2026 Fall)"})
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 8
+    assert made not in fake.TOKENS  # deleted in Canvas once used
+    with prof.app.app_context():
+        assert db.scalar("SELECT COUNT(*) FROM error_log") == 0
 
 
 def test_canvas_names_written_last_first_are_turned_round_not_cut(prof):

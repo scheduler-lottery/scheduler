@@ -13,6 +13,10 @@ CANVAS_OAUTH_HOST, CANVAS_OAUTH_CLIENT_ID and CANVAS_OAUTH_CLIENT_SECRET
 (docs/northwestern-canvas-request.md). Between Canvas's answer and the
 professor's pick, the key waits in their own session, sealed (encrypted with
 a key only this site has) and good for ten minutes.
+
+The same reading serves a key the professor makes themselves in Canvas
+(Account > Settings > New access token) and pastes in: used once, for their
+own school's Canvas, then deleted in Canvas the same way.
 """
 
 import base64
@@ -44,8 +48,8 @@ def ready():
     return bool(settings.CANVAS_OAUTH_HOST and settings.CANVAS_OAUTH_CLIENT_ID and settings.CANVAS_OAUTH_CLIENT_SECRET)
 
 
-def base():
-    host = settings.CANVAS_OAUTH_HOST
+def base(host=None):
+    host = host or settings.CANVAS_OAUTH_HOST
     local = re.fullmatch(r"(127\.0\.0\.1|localhost)(:\d+)?", host) and not settings.IS_VERCEL
     return ("http://" if local else "https://") + host
 
@@ -85,8 +89,9 @@ def exchange(code, redirect_uri):
     return token
 
 
-def _get_all(token, path):
-    url, out = base() + path, []
+def _get_all(token, path, host=None):
+    root = base(host)
+    url, out = root + path, []
     for _ in range(MAX_PAGES):
         status, headers, body = _http("GET", url, {"Authorization": "Bearer " + token, "Accept": "application/json"})
         if status == 401:
@@ -105,16 +110,16 @@ def _get_all(token, path):
         out.extend(data)
         link = next((v for k, v in headers.items() if k.lower() == "link"), "")
         found = re.search(r'<([^>]+)>;\s*rel="next"', link)
-        url = found.group(1) if found and found.group(1).startswith(base() + "/") else None
+        url = found.group(1) if found and found.group(1).startswith(root + "/") else None
         if not url:
             return out
     return out
 
 
-def courses(token):
+def courses(token, host=None):
     """The professor's teaching courses: [{id, name, term}], this term's first."""
     found = []
-    for c in _get_all(token, "/api/v1/courses?per_page=100&include[]=term&include[]=total_students"):
+    for c in _get_all(token, "/api/v1/courses?per_page=100&include[]=term&include[]=total_students", host):
         if not isinstance(c, dict) or not c.get("id") or not c.get("name"):
             continue
         roles = [str(e.get("type") or "").lower() for e in c.get("enrollments") or [] if isinstance(e, dict)]
@@ -130,12 +135,13 @@ def courses(token):
     return found
 
 
-def students(token, course_id):
+def students(token, course_id, host=None):
     """A course's students as [{name, email}]."""
     if not re.fullmatch(r"\d{1,15}", str(course_id)):
         raise CanvasError("missing")
     people, seen = [], set()
-    for u in _get_all(token, f"/api/v1/courses/{course_id}/users?enrollment_type[]=student&include[]=email&per_page=100"):
+    for u in _get_all(token, f"/api/v1/courses/{course_id}/users?enrollment_type[]=student&include[]=email&per_page=100",
+                      host):
         if not isinstance(u, dict) or u.get("id") in seen:
             continue
         seen.add(u.get("id"))
@@ -147,10 +153,10 @@ def students(token, course_id):
     return people
 
 
-def revoke(token):
+def revoke(token, host=None):
     """Give the key back: Canvas forgets it. Never raises."""
     try:
-        _http("DELETE", base() + "/login/oauth2/token", {"Authorization": "Bearer " + token})
+        _http("DELETE", base(host) + "/login/oauth2/token", {"Authorization": "Bearer " + token})
     except Exception:  # noqa: BLE001
         pass
 
