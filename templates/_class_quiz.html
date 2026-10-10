@@ -11,7 +11,7 @@
     <div class="quiz-choices">
       <button type="button" class="quiz-choice" data-go="{{ 'canvas' if canvas and canvas.saved else 'school' }}">
         <strong>Yes, my class is in Canvas</strong>
-        <span>We'll bring its class list over from Canvas with you. It takes a minute or two.</span>
+        <span>We'll bring its class list over from Canvas for you.</span>
       </button>
       <button type="button" class="quiz-choice" data-go="other">
         <strong>No, I don't use Canvas</strong>
@@ -55,25 +55,16 @@
     <h3 class="quiz-q" tabindex="-1">Get your class list from Canvas</h3>
     <p class="quiz-school">Your school's Canvas: <strong data-school-name>{{ canvas.name if canvas else 'not chosen yet' }}</strong>
       <button type="button" class="btn-link" data-go="school">Change</button></p>
-    {# Canvas won't show inside another site's page, and this site never
-       signs in to Canvas for anyone. So the list comes over one of three
-       ways, all in the professor's own browser (app.js):
-       - the Send to Scheduler button (canvas_import), kept in the bookmarks
-         bar: clicked here it checks itself and opens Canvas; clicked in
-         Canvas it reads the class list and hands it back to this page;
-       - Canvas's own list, as text, copied and pasted (nothing to install);
-       - a file downloaded from Canvas, dropped in the box. #}
     {% set canvas_host = canvas.domain if canvas else 'canvas.instructure.com' %}
     {% include "_canvas_guide.html" %}
     <details class="quiz-help">
       <summary>Stuck?</summary>
-      <p><strong>Can't drag the button?</strong> It goes on your bookmarks bar, the thin row just under the address bar. No bar? Press <kbd data-key-mod>Ctrl</kbd> <kbd>Shift</kbd> <kbd>B</kbd> (in Safari, View → Show Favorites Bar), then drag it again. In Firefox you can also right-click it and choose Bookmark Link. Or use “Copy and paste instead”.</p>
-      <p><strong>Clicked it in Canvas and nothing happened?</strong> Look for a small Send to Scheduler box at the top right of Canvas. No box? Make sure you're signed in to Canvas, then click the button again.</p>
-      <p><strong>Your course isn't in the list?</strong> Open the course in Canvas, then click Send to Scheduler there.</p>
-      <p><strong>No email addresses came over?</strong> Some schools hide them from instructors. Students then sign in with a PIN instead of an emailed code, which works fine.</p>
+      <p><strong>Not signed in to Canvas?</strong> When Canvas asks, sign in as usual, in the tab that opens. This page carries on by itself.</p>
+      <p><strong>Your course isn't in the list?</strong> Only courses where you're a teacher or TA show. Check you're signed in to Canvas with your own account.</p>
+      <p><strong>No email addresses came over?</strong> Then students sign in with a PIN instead of an emailed code, which works fine.</p>
       <p><strong>Students missing?</strong> Canvas can take a day or two to list new enrollments, and an unpublished course may show none.</p>
-      <p><strong>Can't get the list out of Canvas at all?</strong> Copy the table on <a data-canvas-people href="https://{{ canvas_host }}/courses" target="_blank" rel="noopener">your course's People page</a> and paste it under <button type="button" class="btn-link" data-go="paste">Type or paste your students</button> (names only; students sign in with a PIN).</p>
-      <p><strong>Downloaded a file?</strong> Delete it afterwards: it holds grades and more that this site doesn't keep.</p>
+      <p><strong>No Course Analytics in the course menu?</strong> In Canvas, open the course's <strong>Settings</strong>, then <strong>Navigation</strong>, drag Course Analytics up into the list, and click <strong>Save</strong>.</p>
+      <p><strong>None of this working?</strong> <button type="button" class="btn-link" data-go="paste">Type or paste your students</button> instead.</p>
     </details>
   </section>
 

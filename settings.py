@@ -98,6 +98,9 @@ SOURCE_URL = _env("SOURCE_URL", "https://github.com/scheduler-lottery/scheduler"
 # doesn't offer it.
 CANVAS_HELPER_IDS = [i.strip() for i in _env("CANVAS_HELPER_IDS").split(",") if i.strip()]
 CANVAS_HELPER_STORE_URL = _env("CANVAS_HELPER_STORE_URL")
+# Safari's Scheduler Helper, once it's on the Mac App Store: its page there
+# (and its identifier, "<bundle id> (<team id>)", in CANVAS_HELPER_IDS).
+CANVAS_HELPER_SAFARI_URL = _env("CANVAS_HELPER_SAFARI_URL")
 
 # "Connect Canvas" (canvas_oauth.py): the school's Canvas, and the developer
 # key its admins issue (docs/northwestern-canvas-request.md). Until all three

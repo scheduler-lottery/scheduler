@@ -2,7 +2,8 @@
 // Canvas into Scheduler, when (and only when) Scheduler's page asks.
 //
 // Scheduler's page talks to it through externally_connectable (only the
-// Scheduler site listed in the manifest can). It asks for the professor's
+// Scheduler site listed in the manifest can): over a port in Chrome and
+// Edge, by single messages in Safari. It asks for the professor's
 // courses, then one course's students; the helper reads them from Canvas's
 // own API, signed in as the professor, exactly as Canvas's pages do, and
 // sends back names and emails, nothing else. It never changes anything in
@@ -28,7 +29,11 @@ const COURSES = "/api/v1/courses?per_page=100&include[]=term&include[]=total_stu
 const SIGN_IN_WAIT_MS = 10 * 60 * 1000;
 
 function fromScheduler(sender) {
-  return !!sender && SCHEDULER_ORIGINS.indexOf(sender.origin) >= 0;
+  let origin = sender && sender.origin;
+  if (!origin && sender && sender.url) {
+    try { origin = new URL(sender.url).origin; } catch (err) { origin = ""; }
+  }
+  return !!origin && SCHEDULER_ORIGINS.indexOf(origin) >= 0;
 }
 function canvasOrigin(host) {
   if (CANVAS_HOSTS.indexOf(host) < 0) return null;
@@ -36,9 +41,41 @@ function canvasOrigin(host) {
 }
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
+// One request from the page: the courses, or one course's students. `say`
+// carries word along the way (a sign-in), where the page can hear it.
+async function handle(msg, say, schedulerTab) {
+  const origin = canvasOrigin(String(msg.host || ""));
+  if (!origin) return { type: "problem", why: "host" };
+  try {
+    if (msg.type === "courses") {
+      const courses = await read(origin, [COURSES], say, schedulerTab);
+      return { type: "courses", courses: courses[0].filter(teaches).map(course) };
+    }
+    if (msg.type === "students" && /^\d{1,15}$/.test(String(msg.courseId))) {
+      const id = String(msg.courseId);
+      const [info, users] = await read(origin, [
+        "/api/v1/courses/" + id + "?include[]=term",
+        "/api/v1/courses/" + id + "/users?enrollment_type[]=student&include[]=email&per_page=100",
+      ], say, schedulerTab);
+      return { type: "students", course: course(info), students: people(users) };
+    }
+    return { type: "problem", why: "canvas" };
+  } catch (err) {
+    return { type: "problem", why: err && err.message ? err.message : "canvas" };
+  }
+}
+
 chrome.runtime.onMessageExternal.addListener((msg, sender, reply) => {
-  if (!fromScheduler(sender) || !msg || msg.type !== "hello") return;
-  reply({ ok: true, v: VERSION, hosts: CANVAS_HOSTS });
+  if (!fromScheduler(sender) || !msg) return undefined;
+  if (msg.type === "hello") {
+    reply({ ok: true, v: VERSION, hosts: CANVAS_HOSTS });
+    return undefined;
+  }
+  if (msg.type === "courses" || msg.type === "students") { // (Safari: no ports from pages)
+    handle(msg, () => {}, sender.tab).then(reply);
+    return true; // the answer comes later
+  }
+  return undefined;
 });
 
 chrome.runtime.onConnectExternal.addListener((port) => {
@@ -46,23 +83,7 @@ chrome.runtime.onConnectExternal.addListener((port) => {
   const say = (msg) => { try { port.postMessage(msg); } catch (err) { /* the page went away */ } };
   port.onMessage.addListener(async (msg) => {
     if (!msg || msg.type === "ping") return;
-    const origin = canvasOrigin(String(msg.host || ""));
-    if (!origin) { say({ type: "problem", why: "host" }); return; }
-    try {
-      if (msg.type === "courses") {
-        const courses = await read(origin, [COURSES], say, port.sender.tab);
-        say({ type: "courses", courses: courses[0].filter(teaches).map(course) });
-      } else if (msg.type === "students" && /^\d{1,15}$/.test(String(msg.courseId))) {
-        const id = String(msg.courseId);
-        const [info, users] = await read(origin, [
-          "/api/v1/courses/" + id + "?include[]=term",
-          "/api/v1/courses/" + id + "/users?enrollment_type[]=student&include[]=email&per_page=100",
-        ], say, port.sender.tab);
-        say({ type: "students", course: course(info), students: people(users) });
-      }
-    } catch (err) {
-      say({ type: "problem", why: err && err.message ? err.message : "canvas" });
-    }
+    say(await handle(msg, say, port.sender.tab));
   });
 });
 
@@ -97,6 +118,9 @@ function people(users) {
 // Read these Canvas API paths (each with all its pages), one way or the
 // other (see the top).
 async function read(origin, paths, say, schedulerTab) {
+  // Safari asks the professor to allow each site; until they have, say so.
+  const allowed = await chrome.permissions.contains({ origins: [origin + "/*"] }).catch(() => true);
+  if (!allowed) throw new Error("access");
   try {
     return await Promise.all(paths.map((path) => direct(origin, path)));
   } catch (err) {

@@ -99,7 +99,7 @@ try {
   await loaded(me, `${SITE}/teach/s/${sid}/setup`);
   check(await until(me, `[...document.querySelectorAll("a")].some((a) => a.textContent.trim() === "Connect Canvas" && a.offsetParent !== null)`),
     "the class-list step offers Connect Canvas first");
-  check(await evaluate(me, `!document.querySelector("[data-bookmark-more]").open`), "with the other ways folded under it");
+  check(await evaluate(me, `!document.querySelector("[data-canvas-download]").open`), "with the file upload folded under it");
 
   await press(me, "Connect Canvas");
   check(await loaded(me, `${CANVAS}/login`), "signed out of Canvas: Canvas's own sign-in page");

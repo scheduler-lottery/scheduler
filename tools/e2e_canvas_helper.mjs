@@ -142,8 +142,8 @@ try {
   await evaluate(me.session, `document.querySelector("[data-quiz]").removeAttribute("data-canvas-host")`);
   check(await until(me.session, `document.querySelector("[data-helper-go]").offsetParent !== null`),
     "with the helper installed, the step offers one button: Get my class list from Canvas");
-  check(await evaluate(me.session, `!document.querySelector("[data-bookmark-more]").hidden && !document.querySelector("[data-bookmark-more]").open`),
-    "the bookmark button is folded away as a fallback");
+  check(await evaluate(me.session, `!document.querySelector("[data-canvas-download]").open && document.querySelectorAll(".canvas-guide details").length === 1`),
+    "with only one other way, folded: upload Canvas's student file");
   await shot(me.session, "1-one-button.png", "[data-helper]");
 
   // One click. Not signed in to Canvas: a Canvas tab comes up to sign in.
@@ -177,7 +177,7 @@ try {
   await press(me.session, "2026FA_BUSCOM_615_SEC1");
   check(await until(me.session, `!document.querySelector("[data-canvas-arrived]").hidden`, 10000), "one click on the course, and the list is here");
   await shot(me.session, "3-the-class-list.png", "[data-canvas-arrived]");
-  check(await evaluate(me.session, `!document.querySelector("[data-bookmark-more]").open`), "the bookmark fallback stays folded");
+  check(await evaluate(me.session, `!document.querySelector("[data-canvas-download]").open`), "the upload stays folded");
   const arrived = await evaluate(me.session, `document.querySelector("[data-canvas-arrived]").innerText`);
   check(arrived.includes("57 students from 2026FA_BUSCOM_615_SEC1 (2026 Fall)") && arrived.includes("All with email addresses"),
     "57 students, with their emails");
@@ -199,6 +199,15 @@ try {
   check(await until(me.session, `!document.querySelector("[data-canvas-arrived]").hidden`, 10000), "one click: the list comes straight back");
   const tabsAfter = (await send("Target.getTargets")).targetInfos.filter((t) => t.type === "page").length;
   check(tabsAfter === tabsBefore, "with no Canvas tab at all (read directly, signed in)");
+
+  // Safari's way of asking (single messages, no ports): the same answers.
+  const viaMessage = await evaluate(me.session, `new Promise((done) => chrome.runtime.sendMessage(${JSON.stringify(DEV_ID)},
+    { type: "students", host: "127.0.0.1:5077", courseId: "202" }, (answer) => done(answer)))`);
+  check(viaMessage && viaMessage.type === "students" && viaMessage.students.length === 8
+    && !JSON.stringify(viaMessage).includes("login_id"), "asked by single message (as Safari does), the helper answers the same");
+  const stranger = await newPage(`${CANVAS}/login`);
+  const refused = await evaluate(stranger.session, `typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.sendMessage`);
+  check(refused, "a page on any other site can't even reach the helper");
 } catch (err) {
   console.log("FAIL " + err.message);
   failures++;

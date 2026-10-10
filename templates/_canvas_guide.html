@@ -1,165 +1,68 @@
-{# The Canvas guide: the class list from Canvas, one of three ways (the
-   Send to Scheduler button, copy and paste, or a downloaded file), all in
-   the professor's own browser (app.js). On the class-list questions, and,
-   once a sheet has a list, under "Update from Canvas". #}
+{# The Canvas guide: the class list from Canvas, the simple way (app.js):
+   - Scheduler Helper (extension/), once added to the browser: one click;
+     until then, the button to add it (Chrome and Edge; Safari once
+     Safari's is published);
+   - or Canvas's own student file, downloaded with pictures to follow and
+     dropped in the box;
+   - or, once the school has issued a key, Connect Canvas.
+   On the class-list questions, and, once a sheet has a list, under
+   "Update from Canvas" (guide_download false: the box is the page's own). #}
 {% set canvas_host = canvas.domain if canvas else 'canvas.instructure.com' %}
+{% set connect_here = canvas_connect and (not canvas or canvas.domain == canvas_connect_host) %}
 <div class="canvas-guide" data-canvas-guide data-sheet="{{ sheet.id }}" data-host="{{ canvas_host }}"{% if canvas and canvas.saved %} data-host-saved{% endif %}
      data-list-url="{{ url_for('teach.canvas_list_here', sid=sheet.id) }}"{% if setup %} data-setup="1"{% endif %}
      data-canvas-course-id="{{ sheet.canvas_course_id or '' }}"
-     data-button-key="{{ canvas_button_key() }}" data-button-v="{{ canvas_button_version() }}"
-     data-helper-ids="{{ helper_ids }}" data-helper-store="{{ helper_store_url }}">
-  {# Connect Canvas (canvas_oauth): with the school's developer key, the
-     simplest of all, in every browser. #}
-  {# (only for the school whose key it is) #}
-  {% set connect_here = canvas_connect and (not canvas or canvas.domain == canvas_connect_host) %}
+     data-helper-ids="{{ helper_ids }}" data-helper-store="{{ helper_store_url }}" data-helper-safari="{{ helper_safari_url }}">
   {% if connect_here %}
   <section class="canvas-easy canvas-connect" data-connect aria-labelledby="canvas-connect-title-{{ sheet.id }}">
-    <h4 class="canvas-easy-title" id="canvas-connect-title-{{ sheet.id }}">The easy way: connect Canvas</h4>
+    <h4 class="canvas-easy-title" id="canvas-connect-title-{{ sheet.id }}">Get your class list in one step</h4>
     <a class="btn btn-primary btn-large" href="{{ url_for('teach.canvas_connect', sid=sheet.id, setup=1 if setup else None) }}">Connect Canvas</a>
-    <p class="mini-hint">Canvas opens; sign in if it asks, then press <strong>Authorize</strong>. {% if sheet.canvas_course %}{{ sheet.canvas_course }}'s{% else %}Pick the course, and its{% endif %} students' names and email addresses come right back here. Nothing else is read, and nothing in Canvas changes.</p>
+    <p class="mini-hint">Canvas opens. Sign in if it asks, then press <strong>Authorize</strong>. Your students' names and email addresses come right back here.</p>
   </section>
-  {% endif %}
-  {# Scheduler Helper (extension/): with it, one click here fetches the list
-     from Canvas. Shown by app.js once it's installed, or (in Chrome and
-     Edge) with how to add it. #}
-  {% if helper_ids and not connect_here %}
+  {% elif helper_ids %}
   <section class="canvas-easy canvas-helper" data-helper hidden aria-labelledby="canvas-helper-title-{{ sheet.id }}">
-    <h4 class="canvas-easy-title" id="canvas-helper-title-{{ sheet.id }}">The easy way: one click</h4>
+    <h4 class="canvas-easy-title" id="canvas-helper-title-{{ sheet.id }}">Get your class list in one click</h4>
     <div data-helper-ready hidden>
       <button type="button" class="btn btn-primary btn-large" data-helper-go>Get my class list from Canvas</button>
-      <p class="mini-hint">Scheduler Helper fetches it from your Canvas{% if sheet.canvas_course %} ({{ sheet.canvas_course }}){% endif %}: names and email addresses only. If Canvas wants you to sign in, it opens for that, and this page carries on after.</p>
+      <p class="mini-hint">Your students' names and email addresses come right here, to check before anything is added. If Canvas wants you to sign in, a Canvas tab opens for that, and this page carries on after.</p>
     </div>
     <div data-helper-install hidden>
-      <p class="canvas-easy-lead"><strong>Once:</strong> add the free Scheduler Helper to <span data-browser-name>Chrome</span>. A couple of clicks, and after that your class list comes over with one.</p>
-      <a class="btn btn-primary btn-large" href="{{ helper_store_url or '#' }}" target="_blank" rel="noopener" data-helper-add>Add Scheduler Helper to <span data-browser-name>Chrome</span></a>
-      <ol class="helper-install-steps" data-not-edge>
-        <li>On the page that opens, click <strong>Add to Chrome</strong>.</li>
-        <li>Click <strong>Add extension</strong>. (Chrome says it can “read and change your data on canvas.northwestern.edu”: it only reads your students' names and emails, and only when you click here.)</li>
-        <li>Come back to this tab. It carries on by itself.</li>
+      <p class="canvas-easy-lead">First, add the free <strong>Scheduler Helper</strong> to <span data-browser-name>Chrome</span>. You only do this once.</p>
+      <a class="btn btn-primary btn-large" href="#" target="_blank" rel="noopener" data-helper-add>Add Scheduler Helper to <span data-browser-name>Chrome</span></a>
+      <ol class="helper-install-steps" data-steps-for="chrome">
+        <li>In the tab that opens, click <strong>Add to Chrome</strong>.</li>
+        <li>Click <strong>Add extension</strong>.</li>
+        <li>Come back to this tab. Your class list is next.</li>
       </ol>
-      <ol class="helper-install-steps" data-edge-only hidden>
-        <li>On the page that opens, click <strong>Allow extensions from other stores</strong> at the top, then <strong>Allow</strong>. (It's Chrome's store; Edge uses the same extensions.)</li>
-        <li>Click <strong>Get</strong>, then <strong>Add extension</strong>. (Edge says it can “read and change your data on canvas.northwestern.edu”: it only reads your students' names and emails, and only when you click here.)</li>
-        <li>Come back to this tab. It carries on by itself.</li>
+      <ol class="helper-install-steps" data-steps-for="edge" hidden>
+        <li>In the tab that opens, click <strong>Allow extensions from other stores</strong> at the top, then <strong>Allow</strong>.</li>
+        <li>Click <strong>Get</strong>, then <strong>Add extension</strong>.</li>
+        <li>Come back to this tab. Your class list is next.</li>
       </ol>
+      <ol class="helper-install-steps" data-steps-for="safari" hidden>
+        <li>In the App Store, click <strong>Get</strong>, then <strong>Install</strong>, then <strong>Open</strong>.</li>
+        <li>Click <strong>Open Safari Settings</strong>, and tick <strong>Scheduler Helper</strong>.</li>
+        <li>Come back to this tab. Your class list is next.</li>
+      </ol>
+      <p class="mini-hint">It reads only your students' names and email addresses, and only when you click here. <a href="{{ url_for('helper') }}" target="_blank" rel="noopener">More about it</a></p>
     </div>
-    <p class="bookmarklet-said" data-helper-said role="status" hidden></p>
+    <p class="helper-said" data-helper-said role="status" hidden></p>
     <div class="canvas-copy-courses" data-helper-courses hidden></div>
   </section>
   {% endif %}
-  {% if helper_ids or connect_here %}
-  <details class="canvas-by-hand" data-bookmark-more hidden>
-    <summary>Or: a button for your bookmarks bar</summary>
-  </details>
-  {% endif %}
-  <section class="canvas-easy" data-bookmark-section aria-labelledby="canvas-easy-title-{{ sheet.id }}">
-    <h4 class="canvas-easy-title" id="canvas-easy-title-{{ sheet.id }}">The easy way: one button</h4>
-    <div class="canvas-easy-known" data-button-known hidden>
-      <p class="canvas-easy-lead"><strong>Click Send to Scheduler in your bookmarks bar.</strong> Canvas opens in a new tab: click it again there{% if sheet.canvas_course %}, on {{ sheet.canvas_course }}{% else %} and pick this class{% endif %}. You'll come right back here with the list.<span data-safari-only hidden> (In Safari, clicking it here does nothing: press Open Canvas, then click Send to Scheduler in Canvas.)</span></p>
-      <button type="button" class="btn btn-secondary btn-small" data-canvas-tab>Open Canvas</button>
-    </div>
-    <ol class="canvas-easy-steps" data-button-new>
-      <li>
-        <p data-not-safari><strong>Find your bookmarks bar</strong>: a thin row of bookmarks just under the address bar. Not there? <span data-drag-only data-not-edge>Click the <strong>⋮</strong> menu at the top right of the browser, then <strong>Bookmarks and lists</strong>, then <strong>Show bookmarks bar</strong>.</span><span data-edge-only hidden>Click the <strong>···</strong> menu at the top right of Edge, then <strong>Favorites</strong>, then <strong>Show favorites bar</strong>, then <strong>Always</strong>.</span><span data-firefox-only hidden>Press <kbd data-key-mod>Ctrl</kbd> <kbd>Shift</kbd> <kbd>B</kbd>.</span></p>
-        <p data-safari-only hidden><strong>Show your Favorites bar</strong>: in Safari's <strong>View</strong> menu at the top of the screen, choose <strong>Show Favorites Bar</strong>. (Already there? Skip this.)</p>
-      </li>
-      <li>
-        <p data-drag-only><strong>Click this orange button: it copies itself.</strong> Then right-click an empty spot on your bookmarks bar (on a Mac trackpad, click with two fingers) and choose <strong>Paste</strong>. You only do this once. (Dragging the button up onto the bar works too.)</p>
-        <p data-safari-only hidden><strong>Add this button to your Favorites</strong>, once: Control-click it (or right-click), choose <strong>Add Link to Bookmarks…</strong>, pick <strong>Favorites</strong>, then click <strong>Add</strong>.</p>
-        <p data-firefox-only hidden><strong>Add this button to your bookmarks toolbar</strong>, once: right-click it, choose <strong>Bookmark Link…</strong>, pick <strong>Bookmarks Toolbar</strong>, then click <strong>Save</strong>.</p>
-        <div class="bookmarklet-row">
-          <a class="bookmarklet" href="{{ canvas_button() }}" data-bookmarklet>
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 3.5h10a1 1 0 0 1 1 1V21l-6-4-6 4V4.5a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
-            Send to Scheduler</a>
-        </div>
-        <svg class="canvas-pic drag-pic" hidden viewBox="0 0 360 96" role="img" aria-label="Dragging the Send to Scheduler button up into the bookmarks bar, just under the address bar">
-          <rect class="pic-frame" x="0.5" y="0.5" width="359" height="95" rx="10"/>
-          <circle class="pic-dot" cx="14" cy="13" r="4"/><circle class="pic-dot" cx="27" cy="13" r="4"/><circle class="pic-dot" cx="40" cy="13" r="4"/>
-          <rect class="pic-box" x="56" y="5" width="290" height="16" rx="8"/>
-          <rect class="pic-line" x="0.5" y="26" width="359" height="20"/>
-          <text class="pic-tiny" x="12" y="40">Bookmarks bar</text>
-          <rect class="pic-target" x="104" y="28" width="92" height="16" rx="8"/>
-          <text class="pic-tiny is-strong" x="112" y="40">Send to Scheduler</text>
-          <path class="pic-arrow" d="M200 80 C 230 76, 236 60, 206 44"/>
-          <path class="pic-arrow" d="M200 48 l6 -5 l2 8"/>
-          <rect class="pic-box is-dashed" x="196" y="70" width="120" height="20" rx="10"/>
-          <text class="pic-tiny is-strong" x="208" y="84">Send to Scheduler</text>
-          <path class="pic-pointer" d="M300 78 l0 16 l4.5 -4.5 l3.8 8 l3 -1.4 l-3.8 -8 l6 0 z"/>
-        </svg>
-      </li>
-      <li>
-        <p><strong>Click it there, in the bookmarks bar, now.</strong> This page says “It works”, and Canvas opens in a new tab.
-          <span data-safari-only hidden>(Safari skips this check: press Open Canvas instead.)</span></p>
-        <button type="button" class="btn btn-secondary btn-small" data-canvas-tab>Open Canvas</button>
-      </li>
-      <li><p><strong>In Canvas, click Send to Scheduler again</strong>{% if not sheet.canvas_course %} and pick this class{% endif %}. Sign in first if Canvas asks. You'll come right back here with the list.</p></li>
-    </ol>
-    <p class="bookmarklet-said" data-bookmarklet-said role="status" hidden></p>
-    <p class="canvas-easy-safe">The button reads only your students' names and email addresses, and changes nothing in Canvas. A small Send to Scheduler box shows at the top right of Canvas while it works.</p>
-    <details class="canvas-readd" data-button-known hidden>
-      <summary>Lost the button? Add it again</summary>
-      <p class="mini-hint">Drag this up onto your bookmarks bar, the thin row just under the address bar. (No bar? Press <kbd data-key-mod>Ctrl</kbd> <kbd>Shift</kbd> <kbd>B</kbd>.)</p>
-      <a class="bookmarklet" href="{{ canvas_button() }}" data-bookmarklet>
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 3.5h10a1 1 0 0 1 1 1V21l-6-4-6 4V4.5a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
-        Send to Scheduler</a>
-    </details>
-  </section>
-  {# Where a class list from Canvas shows, whichever way it came. #}
+
+  {# Where a class list from Canvas shows, to look over before it's added. #}
   <div class="canvas-arrived-here" data-canvas-arrived hidden></div>
 
-  {# Nothing to install: Canvas's own list, as text (its API, which the
-     browser shows to whoever is signed in), copied over. app.js reads
-     the paste here, keeping only names and emails. #}
-  <details class="canvas-by-hand canvas-copy" data-canvas-copy>
-    <summary>Rather not add a bookmark? Copy and paste instead</summary>
-    <ol class="canvas-copy-steps">
-      <li><button type="button" class="btn btn-secondary btn-small" data-copy-open>Show my Canvas courses</button>
-        <span class="mini-hint">Canvas opens in a window beside this one. Signed out of Canvas? <button type="button" class="btn-link" data-copy-signin>Sign in there first</button>, then press Show my Canvas courses again.</span></li>
-      <li data-copy-how>Click inside that window, press <kbd data-key-mod>Ctrl</kbd> <kbd>A</kbd> to select everything, then <kbd data-key-mod>Ctrl</kbd> <kbd>C</kbd> to copy it. <span class="mini-hint">It looks like computer code. That's normal: it's the list Canvas itself uses.</span></li>
-      <li data-copy-how-firefox hidden>In that window, click <strong>Copy</strong> at the top (Firefox's own button).</li>
-      <li><label for="canvas-paste-{{ sheet.id }}">Then click this box and press <kbd data-key-mod>Ctrl</kbd> <kbd>V</kbd>:</label>
-        <textarea id="canvas-paste-{{ sheet.id }}" class="canvas-paste" rows="2" data-copy-paste placeholder="Paste here" autocomplete="off" spellcheck="false"></textarea>
-        <p class="mini-hint canvas-copy-said" data-copy-said role="status"></p>
-        <div class="canvas-copy-courses" data-copy-courses hidden></div></li>
-    </ol>
-    <p class="mini-hint">Only names and email addresses are kept; the rest of what you copy stays on this computer. Best not done while sharing your screen.</p>
-  </details>
-
-  {# Any browser, nothing installed: an access token the professor makes in
-     their own Canvas, used once by this site and then deleted in Canvas
-     (teach.canvas_token). #}
-  <details class="canvas-by-hand canvas-token" data-canvas-token>
-    <summary>Or: use a Canvas access token (any browser, nothing to install)</summary>
-    <ol class="canvas-copy-steps">
-      <li><a class="btn btn-secondary btn-small" href="https://{{ canvas_host }}/profile/settings" target="_blank" rel="noopener">Open my Canvas settings</a>
-        <span class="mini-hint">Canvas opens in a new tab; sign in if it asks.</span></li>
-      <li>Scroll down to <strong>Approved Integrations</strong> and click <strong>+ New Access Token</strong>. For <strong>Purpose</strong>, type <em>Scheduler</em>, then click <strong>Generate Token</strong>.</li>
-      <li>Copy the long token Canvas shows you (select all of it, then <kbd data-key-mod>Ctrl</kbd> <kbd>C</kbd>). Canvas shows it only once.</li>
-      <li>
-        <form method="post" action="{{ url_for('teach.canvas_token', sid=sheet.id) }}" class="token-form" autocomplete="off">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          {% if setup %}<input type="hidden" name="setup" value="1">{% endif %}
-          <label for="canvas-token-{{ sheet.id }}">Paste it here:</label>
-          <div class="inline-form">
-            <input type="password" id="canvas-token-{{ sheet.id }}" name="token" placeholder="Paste the token" autocomplete="off" spellcheck="false" required>
-            <button type="submit" class="btn btn-primary btn-small">Get my class list</button>
-          </div>
-        </form>
-      </li>
-    </ol>
-    <p class="mini-hint">Scheduler uses the token once, to read your courses and that class's names and email addresses, then deletes it in Canvas. It's never kept.</p>
-  </details>
-
-  {% if guide_download is not defined or guide_download %}
-  <details class="canvas-by-hand" data-canvas-download>
-    <summary>Or download a file from Canvas</summary>
+  <details class="canvas-by-hand canvas-upload" data-canvas-download>
+    <summary><span data-upload-title="Upload Canvas's student file">Or upload Canvas's student file instead</span></summary>
     <div class="canvas-guide-top">
       <button type="button" class="btn btn-secondary" data-canvas-beside data-canvas-went="signin">Open Canvas beside this page</button>
       <button type="button" class="btn btn-secondary btn-small canvas-guide-done" data-canvas-close hidden>Done with Canvas</button>
     </div>
-  <ol class="canvas-steps" data-canvas-steps>
+    <ol class="canvas-steps" data-canvas-steps>
     <li class="canvas-step" data-canvas-step="signin">
-      <p><strong>Sign in, then click your course.</strong> If Canvas asks, sign in. You'll land on your Dashboard: click the card for this class.</p>
+      <p><strong>Sign in, then click your course.</strong> If Canvas asks, sign in as usual. On your Dashboard, click this class's card.</p>
       <svg class="canvas-pic" viewBox="0 0 360 132" role="img" aria-label="Canvas's Dashboard: the card for your course, to click">
         <rect class="pic-frame" x="0.5" y="0.5" width="359" height="131" rx="10"/>
         <rect class="pic-nav" x="0.5" y="0.5" width="38" height="131" rx="10"/>
@@ -173,7 +76,7 @@
       </svg>
     </li>
     <li class="canvas-step" data-canvas-step="analytics">
-      <p><strong>Click Course Analytics</strong> in the course's menu on the left. (Some schools call it New Analytics. No menu? Click the three-line menu button at the top left.)</p>
+      <p><strong>Click Course Analytics</strong> in the course's menu on the left.</p>
       <svg class="canvas-pic" viewBox="0 0 360 150" role="img" aria-label="The course menu, with Course Analytics near the bottom, to click">
         <rect class="pic-frame" x="0.5" y="0.5" width="359" height="149" rx="10"/>
         <rect class="pic-nav" x="0.5" y="0.5" width="38" height="149" rx="10"/>
@@ -189,7 +92,7 @@
       </svg>
     </li>
     <li class="canvas-step" data-canvas-step="list">
-      <p><strong>Click the Students tab, then the download button</strong>: an arrow pointing down, next to Chart Options. A file downloads, <code>students.csv</code> or a <code>.zip</code>. Either one works.</p>
+      <p><strong>Click Students, then the download button</strong> (the arrow pointing down, next to Chart Options). A file downloads.</p>
       <svg class="canvas-pic" viewBox="0 0 360 120" role="img" aria-label="Course Analytics: first the Students tab, then the download button next to Chart Options">
         <rect class="pic-frame" x="0.5" y="0.5" width="359" height="119" rx="10"/>
         <text class="pic-heading" x="14" y="27">Course Analytics</text>
@@ -206,18 +109,14 @@
       </svg>
     </li>
     <li class="canvas-step" data-canvas-step="drop">
+      {% if guide_download is not defined or guide_download %}
       <p><strong>Drag that file into the box below</strong>, or click the box and choose it from your Downloads folder.</p>
+      {% else %}
+      <p><strong>Drag that file into the box under “Replace it with a new file”</strong>, below. You'll see what changes before anything is replaced.</p>
+      {% endif %}
     </li>
-  </ol>
-    <p class="mini-hint">No download button? In Course Analytics, open <strong>Reports</strong> and click <strong>Run Report</strong> next to <strong>Class Roster</strong>: that file works too. Course Analytics can be a day or two behind.</p>
-    <details class="canvas-more">
-      <summary>Faster next time: your course's address</summary>
-      <p class="mini-hint">On any page of your course in Canvas, copy the address from the top of the browser and paste it here. Then “Open Canvas beside this page” goes straight to your course.</p>
-      <label for="canvas-course" class="visually-hidden">Your Canvas course address</label>
-      <input type="text" id="canvas-course" placeholder="e.g., https://canvas.myschool.edu/courses/123456" autocomplete="off" spellcheck="false">
-      <p class="mini-hint" data-canvas-status>We'll remember it on this computer for this sheet.</p>
-    </details>
+    </ol>
+    <p class="mini-hint">No download button? Click <strong>Reports</strong> instead, then <strong>Run Report</strong> next to <strong>Class Roster</strong>. Afterwards, delete the downloaded file: it holds more than this site keeps.</p>
   </details>
-  {% endif %}
   <p class="canvas-welcome" data-canvas-welcome role="status" hidden></p>
 </div>

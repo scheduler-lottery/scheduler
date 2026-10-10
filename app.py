@@ -107,19 +107,6 @@ def local_times(text):
 
 
 # The "Send to Scheduler" bookmark, made for the address this site is on.
-@app.template_global("canvas_button")
-def canvas_button():
-    me = auth.current_instructor()
-    return canvas_import.bookmarklet(request.url_root, canvas_import.button_key(me["id"]) if me else "")
-
-
-@app.template_global("canvas_button_key")
-def canvas_button_key():
-    me = auth.current_instructor()
-    return canvas_import.button_key(me["id"]) if me else ""
-
-
-app.add_template_global(lambda: canvas_import.VERSION, "canvas_button_version")
 app.add_template_filter(initials, "initials")
 app.add_template_filter(local_times, "local_times")
 app.add_template_filter(autolink, "autolink")
@@ -166,10 +153,7 @@ def before_every_request():
     missing = missing_settings()
     if missing:
         return render_template("setup_needed.html", missing=missing), 503
-    # The one post that comes from another site: a class list sent from
-    # Canvas (canvas_import), which on its own can only be stored for a
-    # signed-in instructor to look over.
-    if request.method == "POST" and request.endpoint != "receive_canvas_list" and not auth.csrf_ok():
+    if request.method == "POST" and not auth.csrf_ok():
         if request.is_json:
             return jsonify(ok=False, error="This page expired. Refresh it and try again."), 400
         return render_template(
@@ -257,6 +241,7 @@ def template_globals():
         "canvas_connect": canvas_oauth.ready(),
         "canvas_connect_host": settings.CANVAS_OAUTH_HOST,
         "helper_store_url": settings.CANVAS_HELPER_STORE_URL,
+        "helper_safari_url": settings.CANVAS_HELPER_SAFARI_URL,
         "mail_by_gmail": signin.smtp_ready(),
         # On the general pages a student might wander to (Privacy, How it
         # works), a way back to their class.
@@ -403,67 +388,6 @@ def site_font(name):
 @app.route("/how-it-works")
 def how_it_works():
     return render_template("how_it_works.html", algorithms=ALGORITHMS, examples=example_views())
-
-
-CANVAS_IMPORTS_PER_HOUR = 30
-CANVAS_IMPORT_PROBLEMS = {
-    "list": ("That wasn't a class list", "Open your course in Canvas and click Send to Scheduler again."),
-    "busy": ("Too many class lists at once", "Wait a few minutes, then click Send to Scheduler in Canvas again. Or, on "
-             "your sheet's Class list page, use “Copy and paste instead”."),
-}
-
-
-def _sender_host():
-    """The site a cross-site post really came from (its Origin header, which
-    the browser sets), or "" if the browser didn't say."""
-    origin = request.headers.get("Origin") or ""
-    if origin in ("", "null"):
-        origin = request.headers.get("Referer") or ""
-    found = re.match(r"https?://([^/?#]+)", origin)
-    return found.group(1).lower()[:200] if found else ""
-
-
-def _network(address):
-    """Who to count posts by: the address, or for IPv6 its /64 (one home or
-    office gets a whole /64, so a single address means little)."""
-    try:
-        ip = ipaddress.ip_address(address or "")
-    except ValueError:
-        return address or "unknown"
-    return str(ipaddress.ip_network(f"{ip}/64", strict=False)) if ip.version == 6 else str(ip)
-
-
-@app.route("/canvas-import", methods=["POST"])
-def receive_canvas_list():
-    """A class list from the "Send to Scheduler" button in Canvas (a post
-    from Canvas's site). It waits under an unguessable id, and the
-    instructor (signed in here as usual) looks it over and picks the sheet
-    it goes to: nothing is added until they do. This post carries no
-    sign-in, so the answer never touches the session (a trouble page would
-    sign them out): it's always a redirect to a page here."""
-    try:
-        data = canvas_import.read(request.form.get("list"))
-    except RequestEntityTooLarge:
-        data = None
-    if not data:
-        return redirect(url_for("canvas_import_problem", why="list"), code=303)
-    network = "n:" + signin.keyed_hash("ip|" + _network(signin.client_ip()))
-    # Counted first, then checked, so posts at the same moment can't all slip under the limit.
-    db.run("INSERT INTO auth_failures (id, scope, subject, client, at) VALUES (:id, 'canvas-import', '', :c, :at)",
-           id=new_id(16), c=network, at=iso())
-    db.commit()
-    recent = db.scalar("SELECT COUNT(*) FROM auth_failures WHERE scope = 'canvas-import' AND client = :c AND at > :t",
-                       c=network, t=iso(now() - timedelta(hours=1))) or 0
-    iid = canvas_import.store(data, _sender_host()) if recent <= CANVAS_IMPORTS_PER_HOUR else None
-    if not iid:
-        return redirect(url_for("canvas_import_problem", why="busy"), code=303)
-    return redirect(url_for("teach.canvas_list", iid=iid), code=303)
-
-
-@app.route("/canvas-import/trouble")
-def canvas_import_problem():
-    title, message = CANVAS_IMPORT_PROBLEMS.get(request.args.get("why"), CANVAS_IMPORT_PROBLEMS["list"])
-    return render_template("error.html", code=400, title=title, message=message), 400
 
 
 @app.route("/invite", methods=["GET", "POST"])

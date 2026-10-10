@@ -13,10 +13,6 @@ CANVAS_OAUTH_HOST, CANVAS_OAUTH_CLIENT_ID and CANVAS_OAUTH_CLIENT_SECRET
 (docs/northwestern-canvas-request.md). Between Canvas's answer and the
 professor's pick, the key waits in their own session, sealed (encrypted with
 a key only this site has) and good for ten minutes.
-
-The same reading serves a key the professor makes themselves in Canvas
-(Account > Settings > New access token) and pastes in: used once, for their
-own school's Canvas, then deleted in Canvas the same way.
 """
 
 import base64

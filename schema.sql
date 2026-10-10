@@ -266,11 +266,9 @@ CREATE TABLE IF NOT EXISTS invitations (
     PRIMARY KEY (id, sheet_id)
 );
 
--- A class list on its way from Canvas ("Send to Scheduler", the button
--- that runs in Canvas): it arrives without a sign-in (a post from another
--- site), so it waits here under an unguessable id until a signed-in
--- instructor picks the sheet it goes to; the first to open it claims it.
--- Only names and emails. Gone once used, or when it expires.
+-- Class lists sent by the retired "Send to Scheduler" bookmark, which
+-- waited here for the instructor. Nothing writes it now; the daily job
+-- clears anything left (canvas_import.sweep).
 CREATE TABLE IF NOT EXISTS canvas_imports (
     id         TEXT PRIMARY KEY,
     data       TEXT NOT NULL,

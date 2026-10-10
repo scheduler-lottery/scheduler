@@ -1194,7 +1194,6 @@ body.is-dragging .rank-item:not(.dragging) { pointer-events: none; }
 .danger-zone .btn-danger:disabled { opacity: 0.5; cursor: default; transform: none; }
 .danger-zone .mini-hint { margin-top: 8px; }
 
-
 /* =============================================================
    Added for the multi-instructor version
    ============================================================= */
@@ -3057,30 +3056,18 @@ details.guide:not([open]) { padding-bottom: 20px; }
   }
 }
 
-/* Canvas, the easy way: the Send to Scheduler button to drag to the
-   bookmarks bar, then a list that arrives right here. */
+/* Canvas, the easy way: Scheduler Helper's one button (or Connect Canvas),
+   then a list that arrives right here to look over. */
 .canvas-easy {
   margin: 6px 0 16px; padding: 16px 18px; border: 1.5px solid var(--accent); border-radius: 14px;
   background: var(--accent-soft);
 }
 .canvas-easy-title { margin: 0 0 10px; font-size: 1.2rem; }
-.canvas-easy-steps { margin: 0; padding-left: 1.3em; display: grid; gap: 10px; }
-.canvas-easy-steps > li > p { margin: 0 0 6px; line-height: 1.5; }
 .canvas-easy .canvas-guide-top { margin: 0; }
-.bookmarklet-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
-.bookmarklet {
-  display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px;
-  border: 2px dashed var(--accent); background: var(--card-bg); color: var(--accent-strong);
-  font-weight: 700; text-decoration: none; cursor: grab; box-shadow: var(--shadow-sm);
-}
-.bookmarklet:active { cursor: grabbing; }
-.bookmarklet svg { width: 18px; height: 18px; }
-.bookmarklet-tip { font-family: var(--font-small); font-size: 0.88rem; color: var(--muted); }
-.bookmarklet-tip kbd, .canvas-easy kbd {
+.canvas-easy kbd {
   display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px solid var(--border-strong); border-bottom-width: 2px;
   border-radius: 6px; background: var(--card-bg); font-family: var(--font-small); font-size: 0.85em; text-align: center;
 }
-.bookmarklet-said { margin: 6px 0 0; color: var(--accent-strong); }
 .canvas-arrived-here, .canvas-arrived {
   margin-top: 14px; padding: 16px 18px; border: 1.5px solid var(--success); border-radius: 14px; background: var(--card-bg);
 }
@@ -3094,33 +3081,12 @@ details.guide:not([open]) { padding-bottom: 20px; }
 .canvas-by-hand { margin: 4px 0 12px; }
 .canvas-by-hand > summary { cursor: pointer; font-weight: 650; color: var(--accent-strong); }
 .canvas-by-hand[open] > summary { margin-bottom: 12px; }
-.canvas-waiting {
-  margin: 0 0 14px; padding: 10px 14px; border-radius: 12px; border: 1.5px solid var(--success);
-  background: var(--success-bg); color: var(--success); font-weight: 600;
-}
 .canvas-arrived .arrived-form .field { margin: 6px 0 14px; }
-.canvas-copy-steps { margin: 0; padding-left: 1.3em; display: grid; gap: 10px; line-height: 1.5; }
-.canvas-copy-steps .mini-hint { display: block; margin-top: 4px; }
-.canvas-paste { width: 100%; margin-top: 6px; font-family: ui-monospace, Menlo, monospace; font-size: 0.85rem; }
 .canvas-copy-courses { display: grid; gap: 8px; margin-top: 8px; }
 .canvas-copy-courses[hidden] { display: none; }
 .canvas-copy-courses > p { margin: 0; font-weight: 650; }
-.drag-pic { max-width: 380px; margin: 4px 0 10px; }
-.pic-arrow { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .pic-box.is-dashed { stroke: var(--accent); stroke-dasharray: 4 3; }
-.drag-pic[hidden], .button-known[hidden], .canvas-easy-known[hidden], .canvas-easy-steps[hidden],
-.canvas-readd[hidden], .bookmarklet-said[hidden], .canvas-copy-steps li[hidden] { display: none; }
 .canvas-easy-lead { margin: 0 0 10px; font-size: 1.05rem; line-height: 1.5; }
-.canvas-easy-safe { margin: 12px 0 0; font-family: var(--font-small); font-size: 0.88rem; color: var(--muted); line-height: 1.45; }
-.canvas-easy .bookmarklet-said { font-weight: 650; }
-.canvas-readd { margin: 10px 0 0; }
-.canvas-readd > summary { cursor: pointer; font-family: var(--font-small); font-size: 0.9rem; color: var(--accent-strong); }
-.canvas-readd .bookmarklet { margin-top: 4px; }
-.canvas-copy-said .btn-link { font-weight: 650; }
-.canvas-paste { resize: vertical; min-height: 3.2em; }
-.arrived-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
-.callout-warn { border-color: var(--danger); background: var(--danger-bg); }
-.callout-warn p:last-child { margin-bottom: 0; }
 
 /* Who a class list just added, by name (_roster_people.html). */
 .report-people { margin: 10px 0 12px; }
@@ -3133,9 +3099,21 @@ details.guide:not([open]) { padding-bottom: 20px; }
 .report-people .mini-hint { margin: 4px 0 0; }
 
 /* Scheduler Helper, the one-click way (extension/). */
-.canvas-helper[hidden], [data-helper-ready][hidden], [data-helper-install][hidden], [data-bookmark-more][hidden] { display: none; }
+.canvas-helper[hidden], [data-helper-ready][hidden], [data-helper-install][hidden]{ display: none; }
 .canvas-helper .btn-large { margin: 2px 0 8px; }
 .helper-install-steps { margin: 10px 0 0; padding-left: 1.3em; display: grid; gap: 6px; line-height: 1.5; font-size: 0.95rem; }
-[data-bookmark-more] > .canvas-easy { margin-top: 8px; }
-[data-drag-only][hidden], [data-not-safari][hidden], [data-safari-only][hidden], [data-firefox-only][hidden] { display: none; }
-[data-edge-only][hidden], [data-not-edge][hidden] { display: none; }
+
+/* The Canvas step, simplified: the helper's one button, or Canvas's file. */
+.helper-said { margin: 8px 0 0; font-weight: 650; color: var(--accent-strong); line-height: 1.5; }
+.helper-said[hidden] { display: none; }
+.canvas-upload.is-first {
+  margin: 6px 0 16px; padding: 16px 18px; border: 1.5px solid var(--accent); border-radius: 14px;
+  background: var(--accent-soft);
+}
+.canvas-upload.is-first > summary {
+  list-style: none; cursor: default; pointer-events: none; font-size: 1.2rem; font-weight: 600;
+  color: var(--text); margin-bottom: 10px;
+}
+.canvas-upload.is-first > summary::-webkit-details-marker { display: none; }
+.canvas-upload .canvas-guide-top { margin: 0 0 10px; }
+.helper-install-steps[hidden] { display: none; }
