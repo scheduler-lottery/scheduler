@@ -21,7 +21,7 @@ import secrets
 from datetime import timedelta
 from functools import wraps
 
-from flask import abort, flash, g, redirect, request, session, url_for
+from flask import abort, current_app, flash, g, redirect, request, session, url_for
 
 import db
 import settings
@@ -224,6 +224,11 @@ def end_student_sessions(sheet_id, name_keys, reason="", email=""):
 def csrf_token():
     token = session.get("csrf")
     if not token:
+        if request.method == "POST" and current_app.config["SESSION_COOKIE_NAME"] not in request.cookies:
+            # A post that came with no session (from another site): a page
+            # answering it mustn't start one, or it would replace (sign out)
+            # the session this browser has for this site.
+            return secrets.token_urlsafe(32)
         token = session["csrf"] = secrets.token_urlsafe(32)
     return token
 

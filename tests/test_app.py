@@ -2893,50 +2893,103 @@ def test_class_page_cards_fold_away_with_only_the_first_two_open(prof, browser):
 
 # -- "Send to Scheduler": class lists straight from Canvas --------------------
 
-def _canvas_list(course="2026FA_BUSCOM_615_SEC1", n=3):
-    people = [{"name": f"Student {i}", "email": f"s{i}@u.school.edu"} for i in range(n)]
-    return json.dumps({"type": "scheduler-class-list", "v": 1, "host": "canvas.school.edu", "course": course,
-                       "students": people})
+def _canvas_list(course="2026FA_BUSCOM_615_SEC1", n=3, key="", names=None, course_id="4242"):
+    people = [{"name": names[i] if names else f"Student {i}", "email": f"s{i}@u.school.edu"} for i in range(n)]
+    return json.dumps({"type": "scheduler-class-list", "v": 2, "key": key, "courseId": course_id,
+                       "host": "canvas.school.edu", "course": course, "students": people})
 
 
-def test_the_send_to_scheduler_button_is_made_for_this_site(prof):
+def _button_key(who, email="prof@school.edu"):
+    """The key in this instructor's own Send to Scheduler button."""
     import canvas_import
 
-    button = canvas_import.bookmarklet("https://scheduler.example.edu/")
+    with who.app.test_request_context():
+        return canvas_import.button_key(db.scalar("SELECT id FROM instructors WHERE email = :e", e=email))
+
+
+def _from_canvas(client, listed, origin="https://canvas.school.edu"):
+    """The button's post, from Canvas's site: no sign-in here, no form token."""
+    return client.post("/canvas-import", data={"list": listed}, headers={"Origin": origin})
+
+
+def test_the_send_to_scheduler_button_is_made_for_this_site_and_instructor(prof):
+    import canvas_import
     from urllib.parse import unquote
+
+    button = canvas_import.bookmarklet("https://scheduler.example.edu/", "abc123")
     code = unquote(button[len("javascript:"):])
-    assert button.startswith("javascript:") and "__SITE__" not in code
-    assert 'var SITE = "https://scheduler.example.edu";' in code and "/canvas-import" in code
+    assert button.startswith("javascript:") and "__SITE__" not in code and "__KEY__" not in code
+    assert 'var SITE = "https://scheduler.example.edu";' in code and 'var KEY = "abc123";' in code
+    assert "/canvas-import" in code and "scheduler-button-check" in code
     assert not any(line.startswith("//") for line in code.splitlines())  # comments out
+    assert "/profile" not in code and "<script" not in code  # reads one list; loads nothing
+    assert len(button) < 20000
+    odd = unquote(canvas_import.bookmarklet('https://x.edu/"+alert(1)+"', 'k"+x')[len("javascript:"):])
+    assert '"+alert' not in odd and 'var KEY = "kx";' in odd
     sid = prof.create_sheet(allow_unlisted=False)
     page = raw(prof.get(f"/teach/s/{sid}"))
-    assert 'class="bookmarklet" href="javascript:' in page and "Send to Scheduler" in page
+    href = re.search(r'class="bookmarklet" href="(javascript:[^"]+)"', page).group(1)
+    assert f'var KEY = "{_button_key(prof)}";' in unquote(href.replace("&amp;", "&"))
+    assert "Send to Scheduler" in page and "Cross-Origin-Opener-Policy" not in prof.get(f"/teach/s/{sid}").headers
 
 
-def test_a_list_sent_from_canvas_waits_for_the_instructor_to_pick_its_sheet(prof, browser):
+def test_a_list_from_the_instructors_own_button_waits_for_them_to_pick_its_sheet(prof, browser):
     sid = prof.create_sheet(title="Seminar", allow_unlisted=False)
-    canvas = browser()  # Canvas's site: no sign-in here, and no form token
-    r = canvas.client.post("/canvas-import", data={"list": _canvas_list()})
+    canvas = browser()
+    r = _from_canvas(canvas.client, _canvas_list(key=_button_key(prof)))
     assert r.status_code == 303 and "/teach/canvas-import/" in r.headers["Location"]
+    assert not r.headers.getlist("Set-Cookie")  # never touches this browser's session here
     waiting = r.headers["Location"]
     assert canvas.get(waiting).headers["Location"].endswith("/teach/login")  # only a signed-in instructor
     page = text(prof.get(waiting))
-    assert "3 students from 2026FA_BUSCOM_615_SEC1" in page and "Seminar" in page and "A new sign-up sheet" in page
-    assert "All with email addresses" in page
+    assert "3 students from 2026FA_BUSCOM_615_SEC1" in page and "From Canvas · canvas.school.edu" in page
+    assert "Seminar" in page and "A new sign-up sheet" in page and "Don't add them" in page
+    assert "All with email addresses" in page and "Did you just click" not in page
+    assert re.search(rf'value="{sid}" required checked', raw(prof.get(waiting)))  # their only sheet
     r = prof.post(waiting, {"sheet": sid})
     assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")
     assert "Added 3 students" in html(prof.get(r.headers["Location"]))
     assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 3
-    assert "expired" in follow(prof, prof.get(waiting))  # used up
-    # Someone else's sheet can't be the target.
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :sid", sid=sid) == "4242"
+    assert "already added" in follow(prof, prof.get(waiting))  # used up
+    # The sheet now opens Canvas on its course.
+    assert 'data-canvas-course-id="4242"' in raw(prof.get(f"/teach/s/{sid}"))
+    # A list belongs to the first instructor who opens it.
     other = browser().sign_in_instructor("other@school.edu")
-    r = canvas.client.post("/canvas-import", data={"list": _canvas_list()})
-    assert other.post(r.headers["Location"], {"sheet": sid}).status_code == 404
+    waiting = _from_canvas(canvas.client, _canvas_list(key=_button_key(prof))).headers["Location"]
+    assert "students from" in text(prof.get(waiting))
+    assert "already added" in follow(other, other.get(waiting))
+    # And someone else's sheet can't be the target.
+    waiting = _from_canvas(canvas.client, _canvas_list()).headers["Location"]
+    assert other.post(waiting, {"sheet": sid}).status_code == 404
+
+
+def test_a_list_any_other_site_sends_is_flagged_and_looked_over_first(prof, browser):
+    sid = prof.create_sheet(title="Seminar", allow_unlisted=False)
+    canvas = browser()
+    # Any site can post a list, saying it's from Canvas; the post's Origin says where it really came from.
+    waiting = _from_canvas(canvas.client, _canvas_list(), origin="https://evil.example").headers["Location"]
+    page = raw(prof.get(waiting))
+    assert "Did you just click Send to Scheduler" in page and "Sent from evil.example" in page
+    assert "canvas.school.edu" not in page
+    assert " checked" not in page.split('<fieldset')[1].split("</fieldset>")[0]  # nothing picked for them
+    r = prof.post(waiting, {"sheet": sid})
+    assert "/roster/review/" in r.headers["Location"]  # a second look, though the sheet has no list yet
+    review = text(prof.get(r.headers["Location"]))
+    assert "come from your own Send to Scheduler button" in review and "evil.example" in review
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 0
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :sid", sid=sid) is None
+    # Or simply thrown away.
+    waiting = _from_canvas(canvas.client, _canvas_list(), origin="null").headers["Location"]
+    assert "a site that didn't say which" in text(prof.get(waiting))
+    said = follow(prof, prof.post(waiting, {"action": "discard"}))
+    assert "Nothing was added" in said
+    assert q(prof.app, "SELECT COUNT(*) FROM canvas_imports") == 0
 
 
 def test_a_list_from_canvas_can_start_a_new_sheet(prof, browser):
-    r = browser().client.post("/canvas-import", data={"list": _canvas_list(n=4)})
-    waiting = r.headers["Location"]
+    canvas = browser()
+    waiting = _from_canvas(canvas.client, _canvas_list(n=4, key=_button_key(prof))).headers["Location"]
     assert prof.post(waiting, {"sheet": "new"}).headers["Location"].endswith("/teach/new")
     assert "goes into this sheet as soon as it's made" in html(prof.get("/teach/new"))
     r = prof.post("/teach/new", {"title": "From Canvas", "day_date": [a_date("Mon", 0), a_date("Tue", 1)],
@@ -2944,31 +2997,75 @@ def test_a_list_from_canvas_can_start_a_new_sheet(prof, browser):
     sid = re.search(r"/teach/s/([^/#?]+)", r.headers["Location"]).group(1)
     assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students")
     assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 4
+    # Signed out before making the sheet, the list never goes to whoever signs in next on that computer.
+    waiting = _from_canvas(canvas.client, _canvas_list(n=2, key=_button_key(prof))).headers["Location"]
+    prof.post(waiting, {"sheet": "new"})
+    prof.post("/teach/logout")
+    prof.sign_in_instructor("next@school.edu")
+    assert "from Canvas" not in html(prof.get("/teach/new"))
+    r = prof.post("/teach/new", {"title": "Mine", "day_date": [a_date("Mon", 0), a_date("Tue", 1)],
+                                 "day_key": ["", ""], "capacity": "2"})
+    sid = re.search(r"/teach/s/([^/#?]+)", r.headers["Location"]).group(1)
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 0
 
 
-def test_lists_from_canvas_are_checked_limited_and_kept_an_hour(prof, browser, monkeypatch):
+def test_lists_from_canvas_are_checked_limited_and_swept(prof, browser, monkeypatch):
     import app as app_module
+    import canvas_import
 
     canvas = browser()
-    for bad in ("", "nope", json.dumps({"type": "other"}), json.dumps({"type": "scheduler-class-list", "students": []})):
-        assert canvas.client.post("/canvas-import", data={"list": bad}).status_code == 400
-    assert canvas.client.post("/teach/s/x/canvas-list", data={"list": _canvas_list()}).status_code == 400  # needs the token
+    for bad in ("", "nope", json.dumps({"type": "other"}), json.dumps({"type": "scheduler-class-list", "students": []}),
+                json.dumps({"type": "scheduler-class-list", "students": [{"name": "x"}] * 3001})):
+        r = _from_canvas(canvas.client, bad)
+        assert r.headers["Location"].endswith("/canvas-import/trouble?why=list") and not r.headers.getlist("Set-Cookie")
+    assert "That wasn't a class list" in text(canvas.get("/canvas-import/trouble?why=list"))
+    assert canvas.client.post("/teach/s/x/canvas-list", data={"list": _canvas_list()}).status_code == 400  # token
     monkeypatch.setattr(app_module, "CANVAS_IMPORTS_PER_HOUR", 2)
-    assert canvas.client.post("/canvas-import", data={"list": _canvas_list()}).status_code == 303
-    assert canvas.client.post("/canvas-import", data={"list": _canvas_list()}).status_code == 303
-    assert canvas.client.post("/canvas-import", data={"list": _canvas_list()}).status_code == 429
-    # An hour on, it's gone.
+    assert "/teach/canvas-import/" in _from_canvas(canvas.client, _canvas_list()).headers["Location"]
+    assert "/teach/canvas-import/" in _from_canvas(canvas.client, _canvas_list()).headers["Location"]
+    r = _from_canvas(canvas.client, _canvas_list())
+    assert r.headers["Location"].endswith("why=busy") and not r.headers.getlist("Set-Cookie")
+    # However many networks send them, only so many wait at once.
+    monkeypatch.setattr(app_module, "CANVAS_IMPORTS_PER_HOUR", 100)
+    monkeypatch.setattr(canvas_import, "MAX_WAITING", 2)  # the two above
+    assert _from_canvas(canvas.client, _canvas_list()).headers["Location"].endswith("why=busy")
+    # Old lists go as soon as another arrives, and an old one can't be opened.
     with prof.app.app_context():
+        iid = db.scalar("SELECT id FROM canvas_imports LIMIT 1")
         db.run("UPDATE canvas_imports SET created_at = :old", old=PASSED)
         db.commit()
-        iid = db.scalar("SELECT id FROM canvas_imports LIMIT 1")
-    assert "expired" in follow(prof, prof.get(f"/teach/canvas-import/{iid}"))
+    assert "waited too long" in follow(prof, prof.get(f"/teach/canvas-import/{iid}"))
+    _from_canvas(canvas.client, _canvas_list())
+    assert q(prof.app, "SELECT COUNT(*) FROM canvas_imports") == 1
+    # Kept small: names and emails only, as written.
+    emoji = json.dumps({"type": "scheduler-class-list", "course": "Ω", "students": [{"name": "😀" * 50, "email": "x"}]})
+    _from_canvas(canvas.client, emoji)
+    kept = q(prof.app, "SELECT data FROM canvas_imports WHERE data LIKE :c", c="%Ω%")
+    assert len(kept) < 400 and '"email":""' in kept and "\\u" not in kept
 
 
 def test_a_list_handed_to_the_page_by_the_canvas_window_goes_in(prof):
     sid = prof.create_sheet(allow_unlisted=False)
-    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=5), "setup": "1"})
+    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=5, key=_button_key(prof)), "setup": "1"})
     assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students")
     assert "Added 5 students" in html(prof.get(r.headers["Location"]))
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :sid", sid=sid) == "4242"
     said = follow(prof, prof.post(f"/teach/s/{sid}/canvas-list", {"list": "{}"}))
     assert "didn't come through" in said
+    # Without the button's key (a page that found its way into that tab), a second look first.
+    other = prof.create_sheet(title="Other", allow_unlisted=False)
+    r = prof.post(f"/teach/s/{other}/canvas-list", {"list": _canvas_list(n=2)})
+    assert "/roster/review/" in r.headers["Location"]
+    # Copied and pasted on this page: theirs.
+    r = prof.post(f"/teach/s/{other}/canvas-list", {"list": _canvas_list(n=2), "how": "copied"})
+    assert r.headers["Location"].endswith(f"/teach/s/{other}#class-list")
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=other) == 2
+
+
+def test_canvas_names_written_last_first_are_turned_round_not_cut(prof):
+    sid = prof.create_sheet(allow_unlisted=False)
+    names = ["Kim, Alex", "Lee, Sam", "Diaz, Maria", "Kim, Jordan"]
+    prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=4, names=names, key=_button_key(prof))})
+    with prof.app.app_context():
+        got = sorted(r["display_name"] for r in db.rows("SELECT display_name FROM roster WHERE sheet_id = :s", s=sid))
+    assert got == ["Alex Kim", "Jordan Kim", "Maria Diaz", "Sam Lee"]

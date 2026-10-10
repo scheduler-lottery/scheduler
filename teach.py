@@ -35,7 +35,7 @@ from matching_engine import (
     ALGORITHMS, CHOOSABLE, COMPARE_TRIALS, DEFAULT_ALGORITHM, MANUAL, compare_algorithms,
     compute_assignment, fill_open_seats, verdict,
 )
-from roster import describe, find_email, flip_last_first, parse_roster, _is_last_first
+from roster import describe, find_email, flip_last_first, parse_people, parse_roster, _is_last_first
 from util import (
     clean_name, clean_text, date_label, fold, in_zone, iso, mask_email, new_id, normalize_name, now, parse_iso,
     plural, read_date, slugify, valid_email,
@@ -218,6 +218,8 @@ def _sign_in(email):
             id=instructor_id, e=email, tz=zone, at=at,
         )
     db.commit()
+    for key in ("canvas_list", "canvas_for"):  # left by whoever used this browser before
+        session.pop(key, None)
     session["instructor_id"] = instructor_id
     session.permanent = True
     g.pop("instructor", None)
@@ -297,7 +299,8 @@ def restart():
 
 @bp.route("/logout", methods=["POST"])
 def logout():
-    for key in ("instructor_id", "pending_teach", "dev_code", "teach_next", "roster_report", "undo"):
+    for key in ("instructor_id", "pending_teach", "dev_code", "teach_next", "roster_report", "undo", "canvas_list",
+                "canvas_for"):
         session.pop(key, None)
     auth.sign_out_all_students()  # including "see it as a student" sign-ins
     if request.form.get("next") == "login":
@@ -552,16 +555,29 @@ def new_sheet():
             flash("You already have a sheet with this title — the link code under each title on your list "
                   "tells them apart.", "info")
         # A class list sent from Canvas for "a new sign-up sheet": it goes in now.
-        waiting = session.pop("canvas_list", None)
-        listed = canvas_import.load(waiting) if waiting else None
+        waiting, listed = _waiting_canvas_list()
+        session.pop("canvas_list", None)
         if listed:
             canvas_import.forget(waiting)
             db.commit()
             return _take_canvas_list(sheets.get_sheet(sid), listed, setup=True)
         return redirect(url_for("teach.setup", sid=sid))
-    waiting = canvas_import.load(session.get("canvas_list")) if session.get("canvas_list") else None
     return render_template("sheet_form.html", form=_blank_form(), mode="new", max_days=sheets.MAX_DAYS,
-                           canvas_waiting=waiting)
+                           canvas_waiting=_waiting_canvas_list()[1])
+
+
+def _waiting_canvas_list():
+    """The list from Canvas this instructor chose to start a new sheet with
+    (its id, and the list), if it's still there."""
+    waiting = session.get("canvas_list")
+    me = current_instructor()
+    if not isinstance(waiting, dict) or waiting.get("owner") != me["id"]:
+        session.pop("canvas_list", None)
+        return None, None
+    listed = canvas_import.load(waiting.get("iid"), me["id"])
+    if not listed:
+        session.pop("canvas_list", None)
+    return waiting.get("iid"), listed
 
 
 def _warn_past_days(days):
@@ -1022,6 +1038,7 @@ def setup(sid):
     me = current_instructor()
     # Before anything below writes: these may save a lookup on their own connection.
     canvas = _canvas_school(me, guess=not counts["roster"])
+    session["canvas_for"] = sid  # a list Canvas then sends goes to this sheet unless they say otherwise
     mail_default = compose.service_for(me["email"])
     step = request.args.get("step")
     if step not in ("students", "share"):
@@ -1067,6 +1084,7 @@ def _sheet_page(sid, tab):
     # Before anything below writes: these may save a lookup on their own connection.
     me = current_instructor()
     canvas = _canvas_school(me, guess=not counts["roster"])
+    session["canvas_for"] = sid  # a list Canvas then sends goes to this sheet unless they say otherwise
     mail_default = compose.service_for(me["email"])
     roster_rows = sheets.get_roster(sid)
     roster_keys = {r["name_key"] for r in roster_rows}
@@ -1470,11 +1488,13 @@ def upload_roster(sid):
     return _take_list(sheet, data, source, source_label, pasted=not source, setup=bool(request.form.get("setup")))
 
 
-def _take_list(sheet, data, source, source_label, pasted=False, setup=False):
+def _take_list(sheet, data, source, source_label, pasted=False, setup=False, parsed=None, unverified=None):
     """A class list (a file, pasted names, or one sent from Canvas), read and
     checked the same way: the first list goes straight in, with a report;
-    one that would change an existing list is shown for review first."""
-    result = parse_roster(data)
+    one that would change an existing list is shown for review first. So is
+    any list from Canvas that the instructor's own button didn't send
+    (`unverified`: where it came from, if known)."""
+    result = parsed or parse_roster(data)
     if result.error:
         flash(result.error, "error")
         return _list_back(sheet, setup)
@@ -1488,60 +1508,92 @@ def _take_list(sheet, data, source, source_label, pasted=False, setup=False):
     sections = dict(result.sections)
 
     current = [r for r in sheets.get_roster(sheet["id"]) if not r["is_test"]]
-    if not current:
+    if not current and unverified is None:
         _apply_roster(sheet, result.students, "replace", message, tips, warn, source_label, sections)
         return _list_back(sheet, setup)
     pid = _store_pending(sheet, "roster", {
         "students": result.students, "message": message, "tips": tips, "warn": warn,
         "source": source, "source_label": source_label, "pasted": pasted, "sections": sections,
-        "setup": setup,
+        "setup": setup, "unverified": unverified,
     })
     return redirect(url_for("teach.review_roster", sid=sheet["id"], pid=pid))
 
 
-def _take_canvas_list(sheet, data, setup=False):
+def _take_canvas_list(sheet, data, setup=False, copied=False):
+    """A class list from Canvas: by the instructor's own Send to Scheduler
+    button (its key), or copied from Canvas on this site's own page. Any
+    other is shown for a second look before it goes in, whatever the sheet
+    has. The sheet remembers its Canvas course, so Canvas can open right on
+    it next time."""
     course = data["course"]
-    return _take_list(sheet, canvas_import.lines(data).encode("utf-8"), f"Canvas: {course}",
-                      f"sent from Canvas ({course})", setup=setup)
+    trusted = copied or canvas_import.sent_by(data, sheet["owner_id"])
+    if trusted and data.get("course_id"):
+        db.run("UPDATE sheets SET canvas_course_id = :cid, canvas_course = :name WHERE id = :sid",
+               cid=data["course_id"], name=course, sid=sheet["id"])
+        db.commit()
+    return _take_list(sheet, None, f"Canvas: {course}", f"sent from Canvas ({course})", setup=setup,
+                      parsed=parse_people(canvas_import.people(data)),
+                      unverified=None if trusted else (data.get("host") or ""))
 
 
 @bp.route("/s/<sid>/canvas-list", methods=["POST"])
 @instructor_required
 def canvas_list_here(sid):
-    """A class list the "Send to Scheduler" button handed to this page
-    (from the Canvas window it opened), which the instructor then added."""
+    """A class list that came to this page from Canvas (the Send to
+    Scheduler button, in the Canvas window this page opened, or copied
+    and pasted), which the instructor then added."""
     sheet = owned_sheet(sid)
     data = canvas_import.read(request.form.get("list"))
     if not data:
         flash("That class list from Canvas didn't come through. Click Send to Scheduler in Canvas again.", "error")
         return _list_back(sheet)
-    return _take_canvas_list(sheet, data, setup=bool(request.form.get("setup")))
+    return _take_canvas_list(sheet, data, setup=bool(request.form.get("setup")),
+                             copied=request.form.get("how") == "copied")
 
 
 @bp.route("/canvas-import/<iid>", methods=["GET", "POST"])
 @instructor_required
 def canvas_list(iid):
-    """A class list sent from Canvas in a new tab, waiting for the
-    instructor to look it over and pick the sheet it goes to."""
-    data = canvas_import.load(iid)
-    if not data:
-        flash("That class list from Canvas has expired (each waits an hour). In Canvas, click Send to Scheduler "
-              "again.", "error")
-        return redirect(url_for("teach.dashboard"))
+    """A class list sent from Canvas in a tab of its own, waiting for the
+    instructor to look it over and pick the sheet it goes to (or not)."""
     me = current_instructor()
+    data = canvas_import.load(iid, me["id"])
+    if not data:
+        flash("That class list from Canvas was already added, or it waited too long. In Canvas, click Send to "
+              "Scheduler again.", "error")
+        return redirect(url_for("teach.dashboard"))
     mine = db.rows("SELECT id, title FROM sheets WHERE owner_id = :me AND archived_at IS NULL ORDER BY created_at DESC",
                    me=me["id"])
     if request.method == "POST":
+        if request.form.get("action") == "discard":
+            canvas_import.forget(iid)
+            db.commit()
+            flash("Deleted. Nothing was added.", "success")
+            return redirect(url_for("teach.dashboard"))
         choice = request.form.get("sheet", "")
         if choice == "new":
-            session["canvas_list"] = iid  # added once the new sheet exists
+            session["canvas_list"] = {"iid": iid, "owner": me["id"]}  # added once the new sheet exists
             return redirect(url_for("teach.new_sheet"))
+        if not choice:
+            flash("Pick the sign-up sheet these students are for.", "error")
+            return redirect(url_for("teach.canvas_list", iid=iid))
         sheet = owned_sheet(choice)
         canvas_import.forget(iid)
         db.commit()
         return _take_canvas_list(sheet, data)
+    titles = Counter(fold(s["title"]) for s in mine)
+    for s in mine:
+        s["same_title"] = titles[fold(s["title"])] > 1
+    trusted = canvas_import.sent_by(data, me["id"])
+    # The sheet whose Canvas step was opened last, if it's one of theirs; or
+    # their only sheet, for a list their own button sent.
+    chosen = None
+    if trusted:
+        chosen = session.get("canvas_for") if any(s["id"] == session.get("canvas_for") for s in mine) else None
+        if not chosen and len(mine) == 1:
+            chosen = mine[0]["id"]
     return render_template(
-        "canvas_import.html", data=data, iid=iid, sheets=mine,
+        "canvas_import.html", data=data, iid=iid, sheets=mine, chosen=chosen, trusted=trusted,
         with_email=sum(1 for s in data["students"] if s["email"]),
     )
 
@@ -1665,6 +1717,11 @@ def review_roster(sid, pid):
     mismatch = _section_mismatch(sheet, pending.get("sections") or {})
     if mismatch:
         warnings.append(mismatch)
+    if pending.get("unverified") is not None:
+        warnings.insert(0, (
+            f"This list didn't come from your own Send to Scheduler button. It was sent from "
+            f"{pending['unverified'] or 'a site that didn’t say which'}. Only add it if you just sent it from "
+            "Canvas yourself."))
     if diff["keeps_email"]:
         warnings.append(
             f"The new list has no email for {plural(len(diff['keeps_email']), 'student')} who already "

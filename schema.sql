@@ -55,6 +55,8 @@ CREATE TABLE IF NOT EXISTS sheets (
     archived_at        TEXT,  -- tucked away on the dashboard (still works for students)
     theme              TEXT,  -- the class's look, set by its instructor (NULL = the standard look)
     font               TEXT,
+    canvas_course_id   TEXT,  -- the Canvas course its class list came from, if it did
+    canvas_course      TEXT,
     -- The deadline: sign-ups close by themselves at closes_at (UTC). at_close
     -- says what then: 'ask' (close and make the schedule if everyone ranked,
     -- otherwise ask the instructor), 'schedule' or 'publish'.
@@ -267,10 +269,13 @@ CREATE TABLE IF NOT EXISTS invitations (
 -- A class list on its way from Canvas ("Send to Scheduler", the button
 -- that runs in Canvas): it arrives without a sign-in (a post from another
 -- site), so it waits here under an unguessable id until a signed-in
--- instructor picks the sheet it goes to. Gone once used, or after an hour.
+-- instructor picks the sheet it goes to; the first to open it claims it.
+-- Only names and emails. Gone once used, or after half an hour.
 CREATE TABLE IF NOT EXISTS canvas_imports (
     id         TEXT PRIMARY KEY,
     data       TEXT NOT NULL,
+    origin     TEXT,  -- the site that really sent it (the post's Origin header)
+    claimed_by TEXT,  -- the instructor who opened it
     created_at TEXT NOT NULL
 );
 

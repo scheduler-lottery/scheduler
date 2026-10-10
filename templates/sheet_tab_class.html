@@ -102,6 +102,12 @@
       <button type="submit" class="btn btn-ghost btn-small">Delete this list and start over</button>
     </form>
   </div>
+  <details class="replace-list canvas-update">
+    <summary>Class changed in Canvas? Update from Canvas</summary>
+    {% set canvas_host = canvas.domain if canvas else 'canvas.instructure.com' %}
+    {% with guide_download=False %}{% include "_canvas_guide.html" %}{% endwith %}
+    <p class="mini-hint">You'll see who's new and who's gone before anything changes.</p>
+  </details>
   <details class="replace-list">
     <summary>Replace it with a new file</summary>
     {% include "_roster_upload.html" %}

@@ -3108,4 +3108,16 @@ details.guide:not([open]) { padding-bottom: 20px; }
 .drag-pic { max-width: 380px; margin: 4px 0 10px; }
 .pic-arrow { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .pic-box.is-dashed { stroke: var(--accent); stroke-dasharray: 4 3; }
-.drag-pic[hidden], .button-known[hidden] { display: none; }
+.drag-pic[hidden], .button-known[hidden], .canvas-easy-known[hidden], .canvas-easy-steps[hidden],
+.canvas-readd[hidden], .bookmarklet-said[hidden], .canvas-copy-steps li[hidden] { display: none; }
+.canvas-easy-lead { margin: 0 0 10px; font-size: 1.05rem; line-height: 1.5; }
+.canvas-easy-safe { margin: 12px 0 0; font-family: var(--font-small); font-size: 0.88rem; color: var(--muted); line-height: 1.45; }
+.canvas-easy .bookmarklet-said { font-weight: 650; }
+.canvas-readd { margin: 10px 0 0; }
+.canvas-readd > summary { cursor: pointer; font-family: var(--font-small); font-size: 0.9rem; color: var(--accent-strong); }
+.canvas-readd .bookmarklet { margin-top: 4px; }
+.canvas-copy-said .btn-link { font-weight: 650; }
+.canvas-paste { resize: vertical; min-height: 3.2em; }
+.arrived-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.callout-warn { border-color: var(--danger); background: var(--danger-bg); }
+.callout-warn p:last-child { margin-bottom: 0; }

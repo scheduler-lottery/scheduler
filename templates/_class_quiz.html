@@ -11,7 +11,7 @@
     <div class="quiz-choices">
       <button type="button" class="quiz-choice" data-go="{{ 'canvas' if canvas and canvas.saved else 'school' }}">
         <strong>Yes, my class is in Canvas</strong>
-        <span>We'll walk you through downloading its class list. It takes about a minute.</span>
+        <span>We'll bring its class list over from Canvas with you. It takes a minute or two.</span>
       </button>
       <button type="button" class="quiz-choice" data-go="other">
         <strong>No, I don't use Canvas</strong>
@@ -55,144 +55,25 @@
     <h3 class="quiz-q" tabindex="-1">Get your class list from Canvas</h3>
     <p class="quiz-school">Your school's Canvas: <strong data-school-name>{{ canvas.name if canvas else 'not chosen yet' }}</strong>
       <button type="button" class="btn-link" data-go="school">Change</button></p>
-    {# Canvas won't show inside another site's page, so it opens in a window
-       of its own beside this one, and these steps (with pictures of where to
-       click) stay in view on the left (app.js). Signing in there often ends
-       on Canvas's Dashboard instead of where a link pointed, so the steps
-       start from the Dashboard. #}
+    {# Canvas won't show inside another site's page, and this site never
+       signs in to Canvas for anyone. So the list comes over one of three
+       ways, all in the professor's own browser (app.js):
+       - the Send to Scheduler button (canvas_import), kept in the bookmarks
+         bar: clicked here it checks itself and opens Canvas; clicked in
+         Canvas it reads the class list and hands it back to this page;
+       - Canvas's own list, as text, copied and pasted (nothing to install);
+       - a file downloaded from Canvas, dropped in the box. #}
     {% set canvas_host = canvas.domain if canvas else 'canvas.instructure.com' %}
-    <div class="canvas-guide" data-canvas-guide data-sheet="{{ sheet.id }}" data-host="{{ canvas_host }}"
-         data-list-url="{{ url_for('teach.canvas_list_here', sid=sheet.id) }}"{% if setup %} data-setup="1"{% endif %}>
-      {# The easy way: the Send to Scheduler button (canvas_import), kept in
-         the bookmarks bar, reads the list in Canvas and hands it back to this
-         page. #}
-      <section class="canvas-easy" aria-labelledby="canvas-easy-title-{{ sheet.id }}">
-        <h4 class="canvas-easy-title" id="canvas-easy-title-{{ sheet.id }}">The easy way: one button, in Canvas</h4>
-        <ol class="canvas-easy-steps">
-          <li data-button-step>
-            <p class="button-known" data-button-known hidden><strong>You have the Send to Scheduler button</strong> in your bookmarks bar. (Lost it? Drag this one up again.)</p>
-            <p data-button-new><strong>Drag this button up to your bookmarks bar.</strong> You only do this once.</p>
-            <svg class="canvas-pic drag-pic" viewBox="0 0 360 96" role="img" aria-label="Dragging the Send to Scheduler button up into the bookmarks bar, just under the address bar" data-button-new>
-              <rect class="pic-frame" x="0.5" y="0.5" width="359" height="95" rx="10"/>
-              <circle class="pic-dot" cx="14" cy="13" r="4"/><circle class="pic-dot" cx="27" cy="13" r="4"/><circle class="pic-dot" cx="40" cy="13" r="4"/>
-              <rect class="pic-box" x="56" y="5" width="290" height="16" rx="8"/>
-              <rect class="pic-line" x="0.5" y="26" width="359" height="20"/>
-              <text class="pic-tiny" x="12" y="40">Bookmarks bar</text>
-              <rect class="pic-target" x="104" y="28" width="92" height="16" rx="8"/>
-              <text class="pic-tiny is-strong" x="112" y="40">Send to Scheduler</text>
-              <path class="pic-arrow" d="M200 80 C 230 76, 236 60, 206 44"/>
-              <path class="pic-arrow" d="M200 48 l6 -5 l2 8"/>
-              <rect class="pic-box is-dashed" x="196" y="70" width="120" height="20" rx="10"/>
-              <text class="pic-tiny is-strong" x="208" y="84">Send to Scheduler</text>
-              <path class="pic-pointer" d="M300 78 l0 16 l4.5 -4.5 l3.8 8 l3 -1.4 l-3.8 -8 l6 0 z"/>
-            </svg>
-            <div class="bookmarklet-row">
-              <a class="bookmarklet" href="{{ canvas_button() }}" data-bookmarklet>
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 3.5h10a1 1 0 0 1 1 1V21l-6-4-6 4V4.5a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
-                Send to Scheduler</a>
-              <span class="bookmarklet-tip" data-bookmarks-tip>No bookmarks bar? Press <kbd data-key-mod>Ctrl</kbd> <kbd>Shift</kbd> <kbd>B</kbd> to show it.</span>
-            </div>
-            <p class="mini-hint bookmarklet-said" data-bookmarklet-said role="status" hidden></p>
-          </li>
-          <li>
-            <p><strong>Open Canvas</strong>, in a new tab. Sign in if it asks.</p>
-            <button type="button" class="btn btn-primary" data-canvas-tab>Open Canvas</button>
-          </li>
-          <li><p><strong>In Canvas, click Send to Scheduler</strong> in your bookmarks bar, on any page, and pick this class. You'll come right back here, with the list.</p></li>
-        </ol>
-        <div class="canvas-arrived-here" data-canvas-arrived hidden></div>
-      </section>
-
-      {# No bookmarks: Canvas's own list, as text, copied over (app.js reads
-         it here, keeping only names and emails). #}
-      <details class="canvas-by-hand canvas-copy" data-canvas-copy>
-        <summary>No bookmarks? Copy the list straight from Canvas</summary>
-        <ol class="canvas-copy-steps">
-          <li><button type="button" class="btn btn-secondary btn-small" data-copy-open>Show my Canvas courses</button>
-            <span class="mini-hint">It opens beside this page. If Canvas asks you to sign in and then shows its Dashboard, press the button again.</span></li>
-          <li>In that window, press <kbd data-key-mod>Ctrl</kbd> <kbd>A</kbd> to select everything, then <kbd data-key-mod>Ctrl</kbd> <kbd>C</kbd> to copy it. <span class="mini-hint">It looks like code. That's fine.</span></li>
-          <li><label for="canvas-paste-{{ sheet.id }}">Paste it here:</label>
-            <textarea id="canvas-paste-{{ sheet.id }}" class="canvas-paste" rows="3" data-copy-paste placeholder="Paste here"></textarea>
-            <p class="mini-hint" data-copy-said role="status"></p>
-            <div class="canvas-copy-courses" data-copy-courses hidden></div></li>
-        </ol>
-      </details>
-
-      <details class="canvas-by-hand">
-        <summary>Or download it from Course Analytics, with pictures</summary>
-        <div class="canvas-guide-top">
-          <button type="button" class="btn btn-secondary" data-canvas-beside data-canvas-went="signin">Open Canvas beside this page</button>
-          <button type="button" class="btn btn-secondary btn-small canvas-guide-done" data-canvas-close hidden>Done with Canvas</button>
-        </div>
-      <ol class="canvas-steps" data-canvas-steps>
-        <li class="canvas-step" data-canvas-step="signin">
-          <p><strong>Sign in, then click your course.</strong> If Canvas asks, sign in. You'll land on your Dashboard: click the card for this class.</p>
-          <svg class="canvas-pic" viewBox="0 0 360 132" role="img" aria-label="Canvas's Dashboard: the card for your course, to click">
-            <rect class="pic-frame" x="0.5" y="0.5" width="359" height="131" rx="10"/>
-            <rect class="pic-nav" x="0.5" y="0.5" width="38" height="131" rx="10"/>
-            <circle class="pic-dot" cx="19.5" cy="22" r="7"/><circle class="pic-dot" cx="19.5" cy="48" r="7"/><circle class="pic-dot" cx="19.5" cy="74" r="7"/><circle class="pic-dot" cx="19.5" cy="100" r="7"/>
-            <text class="pic-heading" x="54" y="27">Dashboard</text>
-            <rect class="pic-card" x="54" y="40" width="88" height="78" rx="7"/><rect class="pic-card-top" x="54" y="40" width="88" height="38" rx="7"/>
-            <rect class="pic-card is-target" x="152" y="40" width="88" height="78" rx="7"/><rect class="pic-card-top is-target-top" x="152" y="40" width="88" height="38" rx="7"/>
-            <text class="pic-small" x="160" y="96">Your course</text>
-            <rect class="pic-card" x="250" y="40" width="88" height="78" rx="7"/><rect class="pic-card-top" x="250" y="40" width="88" height="38" rx="7"/>
-            <path class="pic-pointer" d="M222 92 l0 22 l6 -6 l5 11 l4 -2 l-5 -11 l8 0 z"/>
-          </svg>
-        </li>
-        <li class="canvas-step" data-canvas-step="analytics">
-          <p><strong>Click Course Analytics</strong> in the course's menu on the left. (Some schools call it New Analytics. No menu? Click the three-line menu button at the top left.)</p>
-          <svg class="canvas-pic" viewBox="0 0 360 150" role="img" aria-label="The course menu, with Course Analytics near the bottom, to click">
-            <rect class="pic-frame" x="0.5" y="0.5" width="359" height="149" rx="10"/>
-            <rect class="pic-nav" x="0.5" y="0.5" width="38" height="149" rx="10"/>
-            <circle class="pic-dot" cx="19.5" cy="22" r="7"/><circle class="pic-dot" cx="19.5" cy="48" r="7"/><circle class="pic-dot" cx="19.5" cy="74" r="7"/>
-            <text class="pic-small" x="54" y="22">Home</text><text class="pic-small" x="54" y="39">Announcements</text>
-            <text class="pic-small" x="54" y="56">Assignments</text><text class="pic-small" x="54" y="73">Grades</text>
-            <text class="pic-small" x="54" y="90">People</text><text class="pic-small" x="54" y="107">Files</text>
-            <rect class="pic-target" x="48" y="114" width="112" height="22" rx="6"/>
-            <text class="pic-small is-strong" x="54" y="129">Course Analytics</text>
-            <path class="pic-pointer" d="M142 124 l0 22 l6 -6 l5 11 l4 -2 l-5 -11 l8 0 z"/>
-            <rect class="pic-line" x="186" y="20" width="150" height="9" rx="4"/><rect class="pic-line" x="186" y="40" width="120" height="7" rx="3"/>
-            <rect class="pic-line" x="186" y="56" width="140" height="7" rx="3"/><rect class="pic-line" x="186" y="72" width="96" height="7" rx="3"/>
-          </svg>
-        </li>
-        <li class="canvas-step" data-canvas-step="list">
-          <p><strong>Click the Students tab, then the download button</strong>: an arrow pointing down, next to Chart Options. A file downloads, <code>students.csv</code> or a <code>.zip</code>. Either one works.</p>
-          <svg class="canvas-pic" viewBox="0 0 360 120" role="img" aria-label="Course Analytics: first the Students tab, then the download button next to Chart Options">
-            <rect class="pic-frame" x="0.5" y="0.5" width="359" height="119" rx="10"/>
-            <text class="pic-heading" x="14" y="27">Course Analytics</text>
-            <text class="pic-tiny" x="14" y="52">Course Grade</text><text class="pic-tiny" x="80" y="52">Weekly Online Activity</text>
-            <text class="pic-tiny is-strong" x="190" y="52">Students</text><text class="pic-tiny" x="244" y="52">Reports</text>
-            <rect class="pic-underline" x="188" y="57" width="44" height="3" rx="1.5"/>
-            <circle class="pic-badge" cx="238" cy="38" r="8"/><text class="pic-badge-text" x="238" y="41.5">1</text>
-            <rect class="pic-box" x="14" y="76" width="168" height="24" rx="5"/><text class="pic-tiny" x="22" y="92">All Sections</text>
-            <rect class="pic-box" x="190" y="76" width="26" height="24" rx="5"/><path class="pic-icon" d="M196 83 h14 v10 h-14 z M196 83 l7 6 l7 -6"/>
-            <rect class="pic-target" x="222" y="74" width="30" height="28" rx="6"/>
-            <path class="pic-icon is-strong" d="M237 81 v10 M233 87 l4 4 l4 -4 M231 95 h12"/>
-            <rect class="pic-box" x="260" y="76" width="86" height="24" rx="5"/><text class="pic-tiny" x="268" y="92">Chart Options</text>
-            <circle class="pic-badge" cx="252" cy="70" r="8"/><text class="pic-badge-text" x="252" y="73.5">2</text>
-          </svg>
-        </li>
-        <li class="canvas-step" data-canvas-step="drop">
-          <p><strong>Drag that file into the box below</strong>, or click the box and choose it from your Downloads folder.</p>
-        </li>
-      </ol>
-      </details>
-      <p class="canvas-welcome" data-canvas-welcome role="status" hidden></p>
-      <details class="canvas-more">
-        <summary>Faster next time: your course's address</summary>
-        <p class="mini-hint">On any page of your course in Canvas, copy the address from the top of the browser and paste it here. Then the Canvas button opens your course directly.</p>
-        <label for="canvas-course" class="visually-hidden">Your Canvas course address</label>
-        <input type="text" id="canvas-course" placeholder="e.g., https://canvas.myschool.edu/courses/123456" autocomplete="off" spellcheck="false">
-        <p class="mini-hint" data-canvas-status>We'll remember it on this computer for this sheet.</p>
-      </details>
-    </div>
+    {% include "_canvas_guide.html" %}
     <details class="quiz-help">
       <summary>Stuck?</summary>
-      <p><strong>No download button?</strong> In Course Analytics, open the <strong>Reports</strong> tab and click <strong>Run Report</strong> next to <strong>Class Roster</strong>. That file works too.</p>
-      <p><strong>No Course Analytics in the course menu?</strong> Go to <strong>Settings → Navigation</strong>, drag it into the visible list, and click <strong>Save</strong>.</p>
-      <p><strong>Can't download the list at all?</strong> Copy it from <a data-canvas-people href="https://{{ canvas_host }}/courses" target="_blank" rel="noopener">your course's People page</a> instead: select the whole table, copy it, and paste it under <button type="button" class="btn-link" data-go="paste">Type or paste your students</button>.</p>
-      <p><strong>Students missing?</strong> The course has to be published, and Canvas can take a day or two to add new enrollments.</p>
-      <p><strong>Afterwards</strong>, delete the downloaded file: it holds grades and more that this site doesn't keep.</p>
+      <p><strong>Can't drag the button?</strong> Show your bookmarks bar first (<kbd data-key-mod>Ctrl</kbd> <kbd>Shift</kbd> <kbd>B</kbd>; in Safari, View → Show Favorites Bar), then drag it again. In Firefox you can also right-click it and choose Bookmark Link. Or use “Copy and paste instead”.</p>
+      <p><strong>Clicked it in Canvas and nothing happened?</strong> Look for a small Send to Scheduler box at the top right of Canvas. No box? Make sure you're signed in to Canvas, then click the button again.</p>
+      <p><strong>Your course isn't in the list?</strong> Open the course in Canvas, then click Send to Scheduler there.</p>
+      <p><strong>No email addresses came over?</strong> Some schools hide them from instructors. Students then sign in with a PIN instead of an emailed code, which works fine.</p>
+      <p><strong>Students missing?</strong> Canvas can take a day or two to list new enrollments, and an unpublished course may show none.</p>
+      <p><strong>Can't get the list out of Canvas at all?</strong> Copy the table on <a data-canvas-people href="https://{{ canvas_host }}/courses" target="_blank" rel="noopener">your course's People page</a> and paste it under <button type="button" class="btn-link" data-go="paste">Type or paste your students</button> (names only; students sign in with a PIN).</p>
+      <p><strong>Downloaded a file?</strong> Delete it afterwards: it holds grades and more that this site doesn't keep.</p>
     </details>
   </section>
 

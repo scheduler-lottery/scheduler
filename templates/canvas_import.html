@@ -2,10 +2,18 @@
 {% block title %}Your class list from Canvas — {{ app_name }}{% endblock %}
 {% block content %}
 {# A class list the "Send to Scheduler" button sent from Canvas, waiting for
-   the instructor to look it over and pick its sheet (teach.canvas_list). #}
+   the instructor to look it over and pick its sheet (teach.canvas_list).
+   `trusted`: their own button sent it (its key). Any other list says so
+   loudly, has no sheet picked, and is shown for a second look before it
+   goes in. #}
 <div class="card canvas-arrived">
-  <p class="eyebrow">From Canvas{% if data.host %} · {{ data.host }}{% endif %}</p>
+  <p class="eyebrow">{% if trusted %}From Canvas{% if data.host %} · {{ data.host }}{% endif %}{% else %}Sent from {{ data.host or "a site that didn't say which" }}{% endif %}</p>
   <h1>{{ data.students | length | plural('student') }} from {{ data.course }}</h1>
+  {% if not trusted %}
+  <div class="callout callout-warn" role="alert">
+    <p><strong>Did you just click Send to Scheduler in Canvas?</strong> This list didn't come from your own button. It was sent from <strong>{{ data.host or "a site that didn't say which" }}</strong>. If you didn't send it, press <em>Don't add them</em>.</p>
+  </div>
+  {% endif %}
   <p class="subtitle">{% if with_email == data.students | length %}All with email addresses, so each can sign in with an emailed code.{% elif with_email %}{{ with_email }} with email addresses; the rest sign in with a PIN.{% else %}Canvas didn't share their email addresses, so they'll sign in with a PIN.{% endif %}</p>
 
   <details class="arrived-names">
@@ -18,14 +26,17 @@
   <form method="post" class="arrived-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <fieldset class="field">
-      <legend>Add them to</legend>
+      <legend>Which sign-up sheet are these students for?</legend>
       {% for sheet in sheets %}
-      <label class="choice"><input type="radio" name="sheet" value="{{ sheet.id }}"{{ ' checked' if loop.first }}> <span><strong>{{ sheet.title }}</strong></span></label>
+      <label class="choice"><input type="radio" name="sheet" value="{{ sheet.id }}" required{{ ' checked' if sheet.id == chosen }}> <span><strong>{{ sheet.title }}</strong>{% if sheet.same_title %} <span class="muted">· link code <code>{{ sheet.id }}</code></span>{% endif %}</span></label>
       {% endfor %}
-      <label class="choice"><input type="radio" name="sheet" value="new"{{ ' checked' if not sheets }}> <span><strong>A new sign-up sheet</strong> <span class="muted">(you'll make it next, and they go right in)</span></span></label>
+      <label class="choice"><input type="radio" name="sheet" value="new" required{{ ' checked' if not sheets and trusted }}> <span><strong>A new sign-up sheet</strong> <span class="muted">(you'll make it next, and they go right in)</span></span></label>
     </fieldset>
-    <button type="submit" class="btn btn-primary btn-large">Add {{ data.students | length | plural('student') }}</button>
+    <div class="arrived-actions">
+      <button type="submit" class="btn btn-primary btn-large">Add {{ data.students | length | plural('student') }}</button>
+      <button type="submit" class="btn btn-secondary" name="action" value="discard" formnovalidate>Don't add them</button>
+    </div>
   </form>
-  <p class="mini-hint">If the sheet already has a class list, you'll see what changes before anything is replaced. This list is only kept for an hour.</p>
+  <p class="mini-hint">Only names and email addresses came over from Canvas. If the sheet already has a class list, you'll see every change before anything is replaced. Not added in half an hour, this list is deleted.</p>
 </div>
 {% endblock %}

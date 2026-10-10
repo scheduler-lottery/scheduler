@@ -10,13 +10,20 @@ emails) from Canvas's own API, and hands them to this site, either
 - by a post from Canvas to /canvas-import. That post comes from another
   site, so it carries no sign-in and can't be trusted to do anything by
   itself: the list waits in canvas_imports, under an unguessable id, until
-  a signed-in instructor looks it over and picks the sheet it goes to.
-  Lists wait an hour at most, and go once they're used.
+  a signed-in instructor looks it over and picks the sheet it goes to. The
+  first instructor to open it is the only one who can (claimed_by).
 
-Either way the list then goes through the same reading and checks as a
-pasted one (roster.parse_roster), as "Name, email" lines.
+Each instructor's button carries a key made for them (button_key), so a
+list their own button sent can be told from one any other site posted:
+only a list with the key goes in without a second look. Waiting lists go
+once they're used, or once they're old (KEEP), swept away whenever another
+arrives and by the daily job.
+
+Either way only names and emails are kept, and they go through the same
+checks as any class list (roster.parse_people).
 """
 
+import functools
 import json
 import os
 import re
@@ -26,9 +33,11 @@ from urllib.parse import quote
 import db
 from util import iso, new_id, now, parse_iso
 
-KEEP = timedelta(hours=1)
-MAX_BYTES = 400 * 1024
+KEEP = timedelta(minutes=30)
+MAX_BYTES = 300 * 1024
 MAX_STUDENTS = 3000
+MAX_WAITING = 200  # lists waiting at once, from everyone: a ceiling no flood gets past
+VERSION = 2
 SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bookmarklet", "send_to_scheduler.js")
 
 
@@ -37,14 +46,19 @@ def _text(value, limit):
 
 
 def read(raw):
-    """The list from a post or a message: {course, host, students: [{name,
-    email}]}, or None if it isn't one."""
-    if not raw or len(raw) > MAX_BYTES:
+    """The list from a post or a message: {course, course_id, host, key, v,
+    students: [{name, email}]}, or None if it isn't one."""
+    if not raw:
         return None
-    try:
-        data = json.loads(raw) if isinstance(raw, str) else raw
-    except ValueError:
-        return None
+    if isinstance(raw, str):
+        if len(raw.encode("utf-8")) > MAX_BYTES:
+            return None
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            return None
+    else:
+        data = raw
     if not isinstance(data, dict) or data.get("type") != "scheduler-class-list":
         return None
     people = data.get("students")
@@ -54,49 +68,112 @@ def read(raw):
     for person in people:
         if not isinstance(person, dict):
             return None
-        name, email = _text(person.get("name"), 200), _text(person.get("email"), 254)
+        name, email = _text(person.get("name"), 120), _text(person.get("email"), 254)
+        if "@" not in email:
+            email = ""
         if name or email:
             students.append({"name": name, "email": email})
     if not students:
         return None
+    course_id = str(data.get("courseId") or "")
+    version = data.get("v")
     return {"course": _text(data.get("course"), 200) or "your Canvas course",
-            "host": _text(data.get("host"), 200).lower(), "students": students}
+            "course_id": course_id if re.fullmatch(r"\d{1,15}", course_id) else "",
+            "host": _text(data.get("host"), 200).lower(),
+            "key": _text(data.get("key"), 64),
+            "v": version if isinstance(version, int) else 1,
+            "students": students}
+
+
+def people(data):
+    """The list as (name, email) pairs, for roster.parse_people."""
+    return [(s["name"], s["email"]) for s in data["students"]]
 
 
 def lines(data):
-    """The list as a pasted one would be: "Name, email" a line."""
-    return "\n".join(f"{s['name']}, {s['email']}" if s["name"] and s["email"] else s["name"] or s["email"]
+    """The list as a pasted one would be: "Name, email" a line, with a name
+    that has a comma in it ("Kim, Alex") in quotes."""
+    def name(value):
+        return '"' + value.replace('"', '""') + '"' if "," in value or '"' in value else value
+    return "\n".join(f"{name(s['name'])}, {s['email']}" if s["name"] and s["email"] else s["name"] or s["email"]
                      for s in data["students"])
 
 
-def store(data):
-    """Keep it for a signed-in instructor to pick up. Returns its id. Commits."""
+def button_key(instructor_id):
+    """The key in this instructor's own Send to Scheduler button."""
+    from signin import keyed_hash  # (signin imports a lot; only needed here)
+    return keyed_hash("canvas-button|" + instructor_id)[:24] if instructor_id else ""
+
+
+def sent_by(data, instructor_id):
+    """Did this instructor's own button send this list?"""
+    import hmac
+    expected = button_key(instructor_id)
+    return bool(expected) and hmac.compare_digest(data.get("key") or "", expected)
+
+
+def sweep():
+    db.run("DELETE FROM canvas_imports WHERE created_at < :t", t=iso(now() - KEEP))
+
+
+def store(data, origin):
+    """Keep it for a signed-in instructor to pick up, with the site that
+    really sent it (the post's Origin, not what the list says). Returns its
+    id, or None when too many are waiting already. Commits."""
+    sweep()
+    if (db.scalar("SELECT COUNT(*) FROM canvas_imports") or 0) >= MAX_WAITING:
+        db.commit()
+        return None
     iid = new_id(22)
-    db.run("INSERT INTO canvas_imports (id, data, created_at) VALUES (:id, :data, :at)",
-           id=iid, data=json.dumps(data), at=iso())
+    kept = {k: data[k] for k in ("course", "course_id", "key", "v", "students")}
+    db.run("INSERT INTO canvas_imports (id, data, origin, created_at) VALUES (:id, :data, :origin, :at)",
+           id=iid, data=json.dumps(kept, ensure_ascii=False, separators=(",", ":")), origin=origin or "", at=iso())
     db.commit()
     return iid
 
 
-def load(iid):
-    """The waiting list, or None if there's none (or it's over an hour old)."""
+def load(iid, instructor_id):
+    """The waiting list, for this instructor: the first to open it claims
+    it. None if there's none, it's someone else's, or it's too old."""
     if not re.fullmatch(r"[A-Za-z0-9_-]{10,40}", iid or ""):
         return None
-    row = db.row("SELECT data, created_at FROM canvas_imports WHERE id = :id", id=iid)
-    if not row or parse_iso(row["created_at"]) < now() - KEEP:
+    row = db.row("SELECT data, origin, claimed_by, created_at FROM canvas_imports WHERE id = :id", id=iid)
+    if not row:
         return None
-    return json.loads(row["data"])
+    if parse_iso(row["created_at"]) < now() - KEEP:
+        forget(iid)
+        db.commit()
+        return None
+    if row["claimed_by"] and row["claimed_by"] != instructor_id:
+        return None
+    if not row["claimed_by"]:
+        db.run("UPDATE canvas_imports SET claimed_by = :me WHERE id = :id AND claimed_by IS NULL",
+               me=instructor_id, id=iid)
+        db.commit()
+        if db.scalar("SELECT claimed_by FROM canvas_imports WHERE id = :id", id=iid) != instructor_id:
+            return None
+    data = json.loads(row["data"])
+    data["host"] = row["origin"] or ""
+    return data
 
 
 def forget(iid):
     db.run("DELETE FROM canvas_imports WHERE id = :id", id=iid)
 
 
-def bookmarklet(site):
-    """The "Send to Scheduler" bookmark, for this site: the script with its
-    comments and indentation taken out, as a javascript: address."""
+@functools.lru_cache(maxsize=1)
+def _source():
+    """The button's script, with its comments and indentation taken out."""
     with open(SOURCE, encoding="utf-8") as handle:
         code = handle.read()
-    kept = [line.strip() for line in code.splitlines() if line.strip() and not line.strip().startswith("//")]
-    code = "\n".join(kept).replace("__SITE__", site.rstrip("/"))
+    return "\n".join(line.strip() for line in code.splitlines()
+                     if line.strip() and not line.strip().startswith("//"))
+
+
+def bookmarklet(site, key=""):
+    """The "Send to Scheduler" bookmark, for this site and this instructor,
+    as a javascript: address."""
+    site = re.sub(r"[^A-Za-z0-9.:/_-]", "", site).rstrip("/")
+    key = re.sub(r"[^A-Za-z0-9]", "", key or "")
+    code = _source().replace("__SITE__", site).replace("__KEY__", key)
     return "javascript:" + quote(code, safe="(){}[];,.:=!+-*/&|?'$_")

@@ -397,24 +397,43 @@ def parse_roster(data):
     if "\x00" in text or sum(1 for ch in text[:2000] if unicodedata.category(ch) == "Cc"
                              and ch not in "\n\r\t") > 20:
         return RosterResult(error=f"That doesn't look like a class list. {SAVE_AS_CSV} {PASTE_INSTEAD}")
-    from_canvas = _canvas_api_lines(text)
+    from_canvas = _canvas_api_people(text)
+    if isinstance(from_canvas, str):
+        return RosterResult(error=from_canvas)
     if from_canvas is not None:
-        return _parse_rows(*_rows_from_text(from_canvas)) if from_canvas else RosterResult(
+        return parse_people(from_canvas) if from_canvas else RosterResult(
             error="That's from Canvas, but it has no students in it. Is it the right course's list?")
     rows, lines = _rows_from_text(text)
     return _parse_rows(rows, lines)
 
 
-def _canvas_api_lines(text):
+CANVAS_SIGNED_OUT = ("That's Canvas saying you're signed out. Sign in to Canvas, open the page again, then copy and "
+                     "paste it here.")
+CANVAS_NOT_ALLOWED = "That's Canvas saying you can't see that course's class list. Is it a course you teach?"
+
+
+def _canvas_api_people(text):
     """A copy of what Canvas's API shows in the browser (a course's users, as
-    JSON, starting "while(1);"): its people as "Name, email" lines, keeping
-    nothing else. None if it isn't that."""
+    JSON; once it started "while(1);", and a copy may carry a little text
+    around it): its people as (name, email) pairs, keeping nothing else. A
+    message, if it's Canvas saying no; None if it isn't from Canvas."""
     body = text.strip()
     if body.startswith("while(1);"):
         body = body[len("while(1);"):].strip()
+    if body.startswith("{") and '"errors"' in body[:500]:
+        lowered = body[:500].lower()
+        if "authorization required" in lowered or "unauthenticated" in lowered:
+            return CANVAS_SIGNED_OUT
+        if "not authorized" in lowered or "unauthorized" in lowered:
+            return CANVAS_NOT_ALLOWED
+        return None
+    start, end = body.find("["), body.rfind("]")
+    if start < 0 or end < start or start > 200:
+        return None
+    body = body[start:end + 1]
     if body.replace(" ", "") == "[]":
-        return ""
-    if not body.startswith("[") or '"name"' not in body[:2000]:
+        return []
+    if '"name"' not in body[:2000]:
         return None
     try:
         people = json.loads(body)
@@ -428,8 +447,28 @@ def _canvas_api_lines(text):
         login = str(person.get("login_id") or "")
         email = str(person.get("email") or person.get("primary_email") or (login if "@" in login else "")).strip()
         if name or email:
-            out.append(f"{name}, {email}" if name and email else name or email)
-    return "\n".join(out)
+            out.append((name, email))
+    return out
+
+
+def parse_people(pairs):
+    """Students whose names and emails came already apart (a list from
+    Canvas): read as a table headed Name and Email, so a name written
+    "Kim, Alex" is turned round, never split at its comma."""
+    result = RosterResult()
+    rows = [[" ".join(str(name or "").split()), str(email or "").strip()] for name, email in pairs]
+    if not rows:
+        result.error = "That list is empty."
+        return result
+    _parse_table(["Name", "Email"], rows, ("full", (0,)), result)
+    result.name_column = result.email_column = ""
+    if result.error:
+        return result
+    _number_same_names(result)
+    _check_emails(result)
+    if not result.students:
+        result.error = "We found where the names should be, but no student names under it."
+    return result
 
 
 def _parse_rows(rows, lines):

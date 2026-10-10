@@ -393,7 +393,8 @@
       if (!quiz.querySelector('[data-step="' + name + '"]')) name = "start";
       current = name;
       steps.forEach(function (step) { step.hidden = step.getAttribute("data-step") !== name; });
-      if (drop) drop.hidden = !(name === "canvas" || name === "file");
+      // On the Canvas step, only with its download steps open.
+      if (drop) drop.hidden = !(name === "file" || (name === "canvas" && !!quiz.querySelector("[data-canvas-download][open]")));
       try { sessionStorage.setItem(key, name); } catch (e) { /* fine */ }
       var question = quiz.querySelector('[data-step="' + name + '"] .quiz-q');
       if (focus && question) question.focus({ preventScroll: false });
@@ -490,18 +491,57 @@
     }
   });
 
-  // The Canvas step. Canvas won't show inside another site's page, so
-  // "Open Canvas beside this page" opens it in a window of its own on the
-  // right of the screen, and the steps (with pictures) move to a panel on
-  // the left, with the box to drop the file in. A course address, if one was
-  // pasted (remembered on this computer per sheet), opens the course itself.
+  // The Send to Scheduler button clicked on a page with no class-list
+  // step: say where it does something.
+  if (!document.querySelector("[data-canvas-guide]")) {
+    document.addEventListener("scheduler-button-check", function () {
+      var note = document.createElement("div");
+      note.className = "undo-banner";
+      note.setAttribute("role", "status");
+      var words = document.createElement("span");
+      words.textContent = "Your Send to Scheduler button works. Click it in Canvas, or open a sign-up sheet's Class "
+        + "list here and click it there.";
+      var shut = document.createElement("button");
+      shut.type = "button";
+      shut.className = "btn btn-ghost btn-small";
+      shut.setAttribute("data-dismiss-toast", "");
+      shut.textContent = "OK";
+      note.appendChild(words);
+      note.appendChild(shut);
+      var dock = document.querySelector(".toast-dock");
+      if (!dock) {
+        dock = document.createElement("div");
+        dock.className = "toast-dock";
+        document.body.appendChild(dock);
+      }
+      dock.appendChild(note);
+    });
+  }
+
+  // The Canvas step. Canvas won't show inside another site's page, and this
+  // site never signs in to Canvas for anyone, so the class list comes over
+  // in the professor's own browser, one of three ways:
+  // - the Send to Scheduler button (bookmarklet/send_to_scheduler.js):
+  //   clicked here, it only says it's there, and Canvas opens in a tab;
+  //   clicked in that Canvas tab, it hands the list back to this page;
+  // - Canvas's own list, as text, copied in a window beside this page and
+  //   pasted here (nothing to install);
+  // - a file downloaded from Canvas (Course Analytics, with pictures).
+  // Whichever way, the list shows here first; nothing is added until the
+  // professor presses Add.
   var guide = document.querySelector("[data-canvas-guide]");
   if (guide) {
     var quizBox = guide.closest("[data-quiz]");
-    var courseInput = document.getElementById("canvas-course");
+    var stepBox = guide.closest(".quiz-step") || guide.parentNode;
+    // The course address and the download steps (not there when updating a list).
+    var courseInput = document.getElementById("canvas-course") || document.createElement("input");
     var status = guide.querySelector("[data-canvas-status]");
     var people = document.querySelector("[data-canvas-people]");
     var courseKey = "canvas-course-" + guide.getAttribute("data-sheet");
+    var savedCourse = guide.getAttribute("data-canvas-course-id") || "";
+    var isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+    var isSafari = /Safari\//.test(navigator.userAgent) && !/Chrome\/|Chromium\/|Edg\/|Firefox\//.test(navigator.userAgent);
+    var isFirefox = /Firefox\//.test(navigator.userAgent);
     // Course Analytics' tool number at schools we know of. Pasting a Course
     // Analytics address teaches this computer the number for that school.
     var KNOWN_TOOLS = { "canvas.northwestern.edu": "48685" };
@@ -515,17 +555,26 @@
     var host = function () {
       return (quizBox && quizBox.getAttribute("data-canvas-host")) || store("canvas-host") || guide.getAttribute("data-host");
     };
-    // Where Canvas should open: Course Analytics, the course, or the list
-    // of courses.
-    var canvasUrl = function () {
+    // Where Canvas should open for the download: Course Analytics, the
+    // course, or the list of courses.
+    var analyticsUrl = function () {
       var found = readCourse(courseInput.value);
       if (!found) return "https://" + host() + "/courses";
       var tool = found.tool || learned[found.host] || KNOWN_TOOLS[found.host];
       return "https://" + found.host + "/courses/" + found.course
         + (tool ? "/external_tools/" + tool + "?launch_type=course_navigation" : "");
     };
+    // Where Canvas should open for the button: this sheet's course, if its
+    // list came from Canvas before, else the list of courses.
+    var buttonUrl = function () {
+      var found = readCourse(courseInput.value);
+      if (savedCourse) return "https://" + host() + "/courses/" + savedCourse;
+      if (found) return "https://" + found.host + "/courses/" + found.course;
+      return "https://" + host() + "/courses";
+    };
     var applyCourse = function (save) {
       var found = readCourse(courseInput.value);
+      if (!status) return;
       if (!found) {
         status.textContent = courseInput.value.trim()
           ? "That doesn't look like a course address. It should have /courses/ and a number in it."
@@ -537,7 +586,7 @@
         store("canvas-tools", JSON.stringify(learned));
       }
       if (people) people.href = "https://" + found.host + "/courses/" + found.course + "/users";
-      status.textContent = "Got it: course " + found.course + ". The Canvas button opens it directly now.";
+      status.textContent = "Got it: course " + found.course + ". Open Canvas beside this page goes straight to it now.";
       if (save) {
         store(courseKey, courseInput.value.trim());
         store("canvas-host", found.host);
@@ -547,19 +596,26 @@
     applyCourse(false);
     courseInput.addEventListener("input", function () { applyCourse(true); });
 
-    // Canvas beside this page: a window on the right, sized so the steps
-    // fit on the left (or, if asked, a tab). The Send to Scheduler button,
-    // clicked in that window, hands the class list back to this page, which
-    // is why the window keeps its way back here (window.opener); this page
-    // takes a list only from the window it opened.
-    var beside = guide.querySelector("[data-canvas-beside]");
-    var asTab = guide.querySelector("[data-canvas-tab]");
-    var done = guide.querySelector("[data-canvas-close]");
-    var helper = null;
+    if (isMac) stepBox.querySelectorAll("[data-key-mod]").forEach(function (key) { key.textContent = "⌘"; });
+    if (isSafari) guide.querySelectorAll("[data-safari-only]").forEach(function (el) { el.hidden = false; });
+    if (isFirefox) {
+      guide.querySelectorAll("[data-copy-how]").forEach(function (el) { el.hidden = true; });
+      guide.querySelectorAll("[data-copy-how-firefox]").forEach(function (el) { el.hidden = false; });
+    }
+
+    // The windows this page opens on Canvas. A window beside this page (for
+    // copying, or downloading) is cut off from it (no window.opener): it
+    // only needs to be pointed at Canvas pages. The tab for the button keeps
+    // its way back here, since that's how the list comes back; this page
+    // only takes a list from that tab, and only from a Canvas address.
+    var helper = null;      // the window beside this page
+    var buttonTab = null;   // the tab where the button is clicked
     var watching = null;
+    var download = guide.querySelector("[data-canvas-download]");
+    var done = guide.querySelector("[data-canvas-close]");
     var guideOn = function (on) {
       document.documentElement.classList.toggle("canvas-beside", on);
-      done.hidden = !on;
+      if (done) done.hidden = !on;
     };
     var watch = function () {
       clearInterval(watching);
@@ -567,84 +623,125 @@
         if (!helper || helper.closed) { clearInterval(watching); guideOn(false); }
       }, 1000);
     };
-    beside.addEventListener("click", function () {
-      var url = canvasUrl();
-      var width = Math.min(screen.availWidth - 380, Math.max(760, Math.round(screen.availWidth * 0.6)));
-      var left = (screen.availLeft || 0) + screen.availWidth - width;
-      helper = window.open(url, "scheduler-canvas", "popup=yes,width=" + width + ",height=" + screen.availHeight
-        + ",left=" + left + ",top=" + (screen.availTop || 0));
-      if (!helper) { // pop-up windows blocked: a tab will do
-        helper = window.open(url, "scheduler-canvas");
-        if (!helper) return;
-        watch();
-        return;
+    var openBeside = function (url, side) {
+      if (helper && !helper.closed) {
+        try { helper.location.href = url; helper.focus(); return helper; } catch (err) { /* opened again below */ }
       }
-      guideOn(true);
+      var width = Math.min(screen.availWidth - 380, Math.max(760, Math.round(screen.availWidth * 0.6)));
+      helper = window.open("", "scheduler-canvas", "popup=yes,width=" + width + ",height=" + screen.availHeight
+        + ",left=" + ((screen.availLeft || 0) + screen.availWidth - width) + ",top=" + (screen.availTop || 0))
+        || window.open("", "scheduler-canvas");
+      if (!helper) return null;
+      try { helper.opener = null; } catch (err) { /* fine */ }
+      helper.location.href = url;
+      if (side) guideOn(true);
       watch();
-    });
-    // The easy way opens Canvas in an ordinary tab: a pop-up window has no
-    // bookmarks bar, so the Send to Scheduler button couldn't be clicked.
-    asTab.addEventListener("click", function () {
-      helper = window.open(canvasUrl(), "scheduler-canvas");
-      if (helper) watch();
-    });
-    done.addEventListener("click", function () {
-      guideOn(false);
-      if (helper && !helper.closed) helper.close();
+      return helper;
+    };
+    var openTab = function () {
+      if (helper && !helper.closed) { try { helper.close(); } catch (err) { /* fine */ } guideOn(false); }
+      buttonTab = window.open(buttonUrl(), "scheduler-canvas-tab");
+      return buttonTab;
+    };
+    if (download) {
+      guide.querySelector("[data-canvas-beside]").addEventListener("click", function () {
+        openBeside(analyticsUrl(), true);
+      });
+      done.addEventListener("click", function () {
+        guideOn(false);
+        if (helper && !helper.closed) helper.close();
+      });
+    }
+    guide.querySelectorAll("[data-canvas-tab]").forEach(function (b) {
+      b.addEventListener("click", function () { openTab(); });
     });
 
-    // A class list from the Send to Scheduler button, in the Canvas window
-    // this page opened: say thanks (so the button knows), close that
-    // window, and show the list here, to add with one press.
-    var arrived = guide.querySelector("[data-canvas-arrived]");
-    window.addEventListener("message", function (e) {
-      var list = e.data;
-      if (!helper || e.source !== helper || !list || list.type !== "scheduler-class-list"
-          || !Array.isArray(list.students) || !list.students.length) return;
-      try { e.source.postMessage({ type: "scheduler-thanks" }, e.origin); } catch (err) { /* fine */ }
-      // Back here: the Canvas tab closes, and this one has the list.
-      setTimeout(function () {
-        try { helper.close(); } catch (err) { /* fine */ }
-        window.focus();
-      }, 1200);
-      guideOn(false);
-      store("canvas-button-used", "1"); // next time, no need to show how to add it
-      showArrived(list, e.origin);
-    });
-    // Used the button before, on this computer: fold away how to add it.
-    if (store("canvas-button-used") === "1") {
+    // Used the button before, on this computer: just "click it".
+    var knownButton = function () {
       guide.querySelectorAll("[data-button-new]").forEach(function (el) { el.hidden = true; });
       guide.querySelectorAll("[data-button-known]").forEach(function (el) { el.hidden = false; });
-    }
-    var showArrived = function (list, origin) {
-      var people = list.students.filter(function (p) { return p && (p.name || p.email); });
+    };
+    if (store("canvas-button-installed") === "1" || store("canvas-button-used") === "1") knownButton();
+
+    // The button, clicked here (from the bookmarks bar): it works. Then
+    // Canvas, where it's clicked once more.
+    var said = guide.querySelector("[data-bookmarklet-said]");
+    var unfold = function (el) {
+      for (var d = el.closest("details"); d; d = d.parentElement && d.parentElement.closest("details")) d.open = true;
+    };
+    var say = function (text) { said.textContent = text; said.hidden = false; unfold(said); };
+    document.addEventListener("scheduler-button-check", function () {
+      var first = store("canvas-button-installed") !== "1";
+      store("canvas-button-installed", "1");
+      knownButton();
+      var tab = openTab();
+      say((first ? "It works! " : "") + (tab
+        ? "Canvas is opening in a new tab: sign in if it asks, then click Send to Scheduler again there."
+        : "Your browser kept Canvas from opening. Press Open Canvas, then click Send to Scheduler again in Canvas."));
+    });
+    // Clicked on this page instead of dragged: show how.
+    guide.querySelectorAll("[data-bookmarklet]").forEach(function (button) {
+      button.addEventListener("click", function (e) {
+        e.preventDefault();
+        say("Almost! Don't click it here: hold the mouse button down on it, move it up onto your bookmarks bar, "
+          + "then let go.");
+      });
+    });
+
+    // A message from the Canvas tab: the button asking which course this
+    // sheet's is, or bringing the class list. Only from the tab this page
+    // opened, and only from a Canvas address (https).
+    var fromCanvas = function (origin) {
+      return /^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(origin) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+    };
+    window.addEventListener("message", function (e) {
+      var msg = e.data;
+      if (!buttonTab || e.source !== buttonTab || !fromCanvas(e.origin) || !msg || typeof msg !== "object") return;
+      if (msg.type === "scheduler-hello") {
+        try { e.source.postMessage({ type: "scheduler-course", id: savedCourse }, e.origin); } catch (err) { /* fine */ }
+        return;
+      }
+      if (msg.type !== "scheduler-class-list" || !Array.isArray(msg.students) || !msg.students.length
+          || msg.students.length > 3000) return;
+      try { e.source.postMessage({ type: "scheduler-thanks" }, e.origin); } catch (err) { /* fine */ }
+      var tab = buttonTab;
+      buttonTab = null;
+      // Back here: the Canvas tab closes, and this one has the list.
+      setTimeout(function () {
+        try { tab.close(); } catch (err) { /* fine */ }
+        window.focus();
+      }, 1200);
+      store("canvas-button-used", "1");
+      showArrived(msg, e.origin, "button");
+    });
+
+    var arrived = guide.querySelector("[data-canvas-arrived]");
+    var showArrived = function (list, origin, how, note) {
+      var people = list.students.filter(function (p) { return p && typeof p === "object" && (p.name || p.email); })
+        .map(function (p) { return { name: String(p.name || "").slice(0, 120), email: String(p.email || "").slice(0, 254) }; });
       var emails = people.filter(function (p) { return p.email; }).length;
       var count = people.length + (people.length === 1 ? " student" : " students");
+      var course = String(list.course || "your Canvas course").slice(0, 200);
       arrived.textContent = "";
-      var add = function (tag, text, cls) {
+      var add = function (tag, text, cls, into) {
         var el = document.createElement(tag);
         if (text) el.textContent = text;
         if (cls) el.className = cls;
-        arrived.appendChild(el);
+        (into || arrived).appendChild(el);
         return el;
       };
       add("p", "From Canvas · " + origin.replace(/^https?:\/\//, ""), "eyebrow");
-      add("h4", count + " from " + (list.course || "your Canvas course"), "canvas-arrived-title");
+      add("h4", count + " from " + course, "canvas-arrived-title");
       add("p", emails === people.length ? "All with email addresses, so each can sign in with an emailed code."
-        : emails ? emails + " with email addresses; the rest sign in with a PIN."
+        : emails ? emails + " with email addresses. The rest sign in with a PIN (usually students who haven't "
+          + "accepted Canvas's invitation yet)."
         : "Canvas didn't share their email addresses, so they'll sign in with a PIN.", "mini-hint");
       var names = add("details", "", "arrived-names");
-      var summary = document.createElement("summary");
-      summary.textContent = "See the names";
-      names.appendChild(summary);
-      var ol = document.createElement("ol");
-      ol.className = "arrived-list";
+      add("summary", "See the names", "", names);
+      var ol = add("ol", "", "arrived-list", names);
       people.forEach(function (p) {
-        var li = document.createElement("li");
-        li.textContent = (p.name || p.email) + (p.name && p.email ? " · " + p.email : "");
-        ol.appendChild(li);
+        add("li", (p.name || p.email) + (p.name && p.email ? " · " + p.email : ""), "", ol);
       });
-      names.appendChild(ol);
       var form = add("form", "", "arrived-form");
       form.method = "post";
       form.action = guide.getAttribute("data-list-url");
@@ -656,122 +753,243 @@
         form.appendChild(input);
       };
       field("csrf_token", CSRF);
-      field("list", JSON.stringify({ type: "scheduler-class-list", course: list.course, host: origin.replace(/^https?:\/\//, ""),
-                                     students: people }));
+      field("list", JSON.stringify({ type: "scheduler-class-list", v: 2, key: String(list.key || ""),
+                                     courseId: String(list.courseId || ""), course: course,
+                                     host: origin.replace(/^https?:\/\//, ""), students: people }));
+      if (how === "copied") field("how", "copied");
       if (guide.hasAttribute("data-setup")) field("setup", "1");
       var go = document.createElement("button");
       go.type = "submit";
       go.className = "btn btn-primary btn-large";
       go.textContent = "Add " + count;
       form.appendChild(go);
+      if (note) add("p", note, "mini-hint");
+      form.addEventListener("submit", function () {
+        if (helper && !helper.closed) { try { helper.close(); } catch (err) { /* fine */ } }
+      });
       arrived.hidden = false;
+      unfold(arrived);
       arrived.scrollIntoView({ block: "center", behavior: "smooth" });
       go.focus({ preventScroll: true });
     };
 
-    // No bookmarks: Canvas's own lists, as text (its API, which the browser
-    // shows to whoever is signed in), copied over. First the courses, to
-    // pick one; then that course's students. Only names and emails are kept.
+    // Copy and paste: Canvas's own lists, as text (its API, which the
+    // browser shows to whoever is signed in). First the courses, to pick
+    // one; then that course's students, 100 at a time. The paste is read
+    // right here and never lands in the box: only names and emails are kept.
     var copyBox = guide.querySelector("[data-copy-paste]");
     var copySaid = guide.querySelector("[data-copy-said]");
     var copyCourses = guide.querySelector("[data-copy-courses]");
     var picked = null;
     var gathered = [];
+    var seenIds = {};
+    var pageNo = 1;
     var apiUrl = function (path) { return "https://" + host() + path; };
-    var openCanvas = function (url) {
-      if (helper && !helper.closed) { helper.location.href = url; helper.focus(); return; }
-      var width = Math.min(screen.availWidth - 380, Math.max(760, Math.round(screen.availWidth * 0.6)));
-      helper = window.open(url, "scheduler-canvas", "popup=yes,width=" + width + ",height=" + screen.availHeight
-        + ",left=" + ((screen.availLeft || 0) + screen.availWidth - width) + ",top=" + (screen.availTop || 0))
-        || window.open(url, "scheduler-canvas");
-      if (helper) watch();
-    };
-    var readJson = function (text) {
-      var body = (text || "").trim().replace(/^while\(1\);/, "");
-      try { var data = JSON.parse(body); return Array.isArray(data) ? data : null; } catch (err) { return null; }
-    };
+    var coursesUrl = function () { return apiUrl("/api/v1/courses?per_page=100&include[]=term&include[]=total_students"); };
     var studentsUrl = function (course, page) {
       return apiUrl("/api/v1/courses/" + course.id + "/users?enrollment_type[]=student&include[]=email&per_page=100"
         + (page > 1 ? "&page=" + page : ""));
     };
+    var key = isMac ? "⌘" : "Ctrl";
+    var copyAgain = isFirefox ? "click Copy at the top of that window" : "click inside it, press " + key + " A, then " + key + " C";
+    var tell = function (text, buttons) {
+      copySaid.textContent = text;
+      (buttons || []).forEach(function (b) {
+        var button = document.createElement("button");
+        button.type = "button";
+        button.className = "btn-link";
+        button.textContent = b.label;
+        button.addEventListener("click", b.go);
+        copySaid.appendChild(document.createTextNode(" "));
+        copySaid.appendChild(button);
+      });
+    };
+    var openCopy = function (url) {
+      if (!openBeside(url, false)) {
+        tell("Your browser blocked the Canvas window. Allow pop-ups for this site (the icon at the right of the address "
+          + "bar), then try again.");
+        return false;
+      }
+      return true;
+    };
+    var termOf = function (c) {
+      return c.term && c.term.name && !/default term/i.test(c.term.name) ? c.term.name : "";
+    };
+    var courseLabel = function (c) {
+      return c.name + (termOf(c) ? " · " + termOf(c) : "")
+        + (typeof c.total_students === "number" ? " · " + c.total_students + (c.total_students === 1 ? " student" : " students") : "");
+    };
     guide.querySelector("[data-copy-open]").addEventListener("click", function () {
       picked = null;
       gathered = [];
+      seenIds = {};
       copyCourses.hidden = true;
-      copySaid.textContent = "";
-      openCanvas(apiUrl("/api/v1/courses?enrollment_type=teacher&per_page=100"));
-    });
-    copyBox.addEventListener("input", function () {
-      var data = readJson(copyBox.value);
-      if (!copyBox.value.trim()) return;
-      if (!data) {
-        copySaid.textContent = "That isn't the whole list. In the Canvas window, select everything first, then copy.";
-        return;
+      if (openCopy(coursesUrl())) {
+        tell("Canvas shows your courses in the window beside this one. Copy it (" + copyAgain + "), then paste here.");
       }
-      copyBox.value = "";
-      if (data.length && data[0].course_code !== undefined) { // the courses: pick one
+      copyBox.focus({ preventScroll: true });
+    });
+    guide.querySelector("[data-copy-signin]").addEventListener("click", function () {
+      if (openCopy("https://" + host() + "/")) {
+        tell("Sign in to Canvas in the window beside this one (Duo too). Then press Show my Canvas courses again.");
+      }
+    });
+    // What was pasted: Canvas's courses, its students, Canvas saying no, or
+    // something else.
+    var readCanvas = function (text) {
+      var body = (text || "").trim().replace(/^while\(1\);/, "");
+      if (/^\{/.test(body) && /"errors"/.test(body.slice(0, 500))) {
+        if (/authorization required|unauthenticated/i.test(body)) return { kind: "signin" };
+        if (/not authorized|unauthorized/i.test(body)) return { kind: "forbidden" };
+        if (/does not exist|not found/i.test(body)) return { kind: "missing" };
+      }
+      var start = body.indexOf("["), end = body.lastIndexOf("]");
+      if (start >= 0 && start < 200 && end > start) {
+        try {
+          var data = JSON.parse(body.slice(start, end + 1));
+          if (Array.isArray(data)) {
+            if (!data.length) return { kind: "empty" };
+            var items = data.filter(function (x) { return x && typeof x === "object"; });
+            if (items.some(function (x) { return x.course_code !== undefined || x.enrollment_term_id !== undefined; })) {
+              return { kind: "courses", courses: items };
+            }
+            if (items.some(function (x) { return x.sortable_name !== undefined || x.login_id !== undefined || x.email !== undefined; })) {
+              return { kind: "students", students: items };
+            }
+          }
+        } catch (err) { /* below */ }
+      }
+      if (/Raw Data|Collapse All|Expand All/.test(body)) return { kind: "firefox" };
+      if (/Send to Scheduler|Show my Canvas courses/.test(body)) return { kind: "own" };
+      if (/^\[|^\{/.test(body)) return { kind: "partial" };
+      return { kind: "unknown" };
+    };
+    var finish = function () {
+      var list = { course: picked ? picked.label : "your Canvas course", courseId: picked ? String(picked.id) : "",
+                   students: gathered };
+      copyBox.blur();
+      tell("");
+      var cleared = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText("") : Promise.reject();
+      cleared.then(function () { return "We cleared your clipboard, which held their details."; },
+                   function () { return "Your clipboard still holds their details: copy something else to clear it."; })
+        .then(function (note) { showArrived(list, "https://" + host(), "copied", note); });
+    };
+    var pickCourse = function (c) {
+      picked = { id: c.id, label: c.name + (termOf(c) ? " (" + termOf(c) + ")" : "") };
+      gathered = [];
+      seenIds = {};
+      pageNo = 1;
+      copyCourses.hidden = true;
+      if (openCopy(studentsUrl(c, 1))) {
+        tell("The window beside this one shows " + c.name + "'s students now. Copy it the same way (" + copyAgain
+          + "), then paste here again.");
+      }
+      copyBox.focus({ preventScroll: true });
+    };
+    var takePaste = function (text) {
+      if (!text || !text.trim()) return;
+      var got = readCanvas(text);
+      if (got.kind === "signin") {
+        tell("That's Canvas saying you're signed out.", [{ label: "Sign in to Canvas", go: function () {
+          guide.querySelector("[data-copy-signin]").click();
+        } }]);
+      } else if (got.kind === "forbidden") {
+        tell("Canvas won't show that course's students to you. Is it a course you teach? Press Show my Canvas courses "
+          + "and choose another.");
+      } else if (got.kind === "missing") {
+        tell("Canvas couldn't find that course. Press Show my Canvas courses and choose it again.");
+      } else if (got.kind === "own") {
+        tell("That's this page, not Canvas. In the Canvas window, " + copyAgain + ", then paste here.");
+      } else if (got.kind === "firefox") {
+        tell("Firefox copied its own buttons too. In the Canvas window, click Copy at the top, then paste here again.");
+      } else if (got.kind === "partial") {
+        tell("Only part of the page came across. In the Canvas window, " + copyAgain + " (all of it), then paste here.");
+      } else if (got.kind === "courses") {
+        var mine = got.courses.filter(function (c) {
+          return c.id && c.name && (!c.enrollments || c.enrollments.some(function (e) {
+            return /^(teacher|ta|designer)$/i.test(e.type || "");
+          }));
+        });
+        if (!mine.length) { tell("Canvas doesn't list you as a teacher of any course."); return; }
+        if (mine.length === 1) { pickCourse(mine[0]); return; }
         copyCourses.textContent = "";
         var ask = document.createElement("p");
-        ask.textContent = "Which course?";
+        ask.textContent = "Which course is this sign-up sheet for?";
         copyCourses.appendChild(ask);
-        data.filter(function (c) { return c && c.id && c.name; }).forEach(function (c) {
+        mine.forEach(function (c) {
           var b = document.createElement("button");
           b.type = "button";
           b.className = "quiz-choice";
-          b.textContent = c.name;
-          b.addEventListener("click", function () {
-            picked = c;
-            gathered = [];
-            copyCourses.hidden = true;
-            openCanvas(studentsUrl(c, 1));
-            copySaid.textContent = "The Canvas window shows " + c.name + "'s class list now. Select everything, copy it, "
-              + "and paste it here again.";
-            copyBox.focus();
-          });
+          b.textContent = courseLabel(c);
+          b.addEventListener("click", function () { pickCourse(c); });
           copyCourses.appendChild(b);
         });
         copyCourses.hidden = false;
-        copySaid.textContent = "Got your courses. Pick this class's course:";
-        return;
-      }
-      var people = data.filter(function (p) { return p && (p.sortable_name !== undefined || p.login_id !== undefined || p.email); })
-        .map(function (p) {
-          var login = p.login_id || "";
-          return { name: p.name || p.sortable_name || "", email: p.email || (login.indexOf("@") > 0 ? login : "") };
+        tell("Got your courses.");
+      } else if (got.kind === "students" || got.kind === "empty") {
+        var page = got.students || [];
+        var fresh = [];
+        page.forEach(function (p) {
+          var id = p.id !== undefined ? String(p.id) : (p.email || p.name || "");
+          if (seenIds[id]) return;
+          seenIds[id] = true;
+          var login = String(p.login_id || "");
+          var email = String(p.email || (login.indexOf("@") > 0 ? login : ""));
+          if (p.name || p.sortable_name || email) fresh.push({ name: p.name || p.sortable_name || "", email: email });
         });
-      if (!people.length) {
-        copySaid.textContent = "That list has no students in it. Is it the right course?";
-        return;
+        if (!fresh.length) {
+          if (gathered.length && page.length) {
+            tell("That's the part you pasted before. In the Canvas window, " + copyAgain + ", then paste here again.");
+          } else if (gathered.length) {
+            finish();
+          } else {
+            tell((picked ? picked.label : "That course") + " has no students in Canvas yet. If it isn't published, or "
+              + "students just enrolled, Canvas may not list them for a day or two.");
+          }
+          return;
+        }
+        gathered = gathered.concat(fresh);
+        if (page.length >= 100 && picked) { // there may be more: the next hundred
+          pageNo += 1;
+          if (openCopy(studentsUrl(picked, pageNo))) {
+            tell("Got " + gathered.length + " so far. Canvas shows 100 at a time, so the window now shows the next ones. "
+              + "Copy and paste again (if it shows only [ ], that's everyone).", [{ label: "That's everyone", go: finish }]);
+          }
+          return;
+        }
+        finish();
+      } else {
+        tell("That doesn't look like Canvas's list. Copy it from the Canvas window beside this one (" + copyAgain + ").");
       }
-      gathered = gathered.concat(people);
-      if (people.length === 100 && picked) { // there may be more: the next hundred
-        var page = Math.round(gathered.length / 100) + 1;
-        openCanvas(studentsUrl(picked, page));
-        copySaid.textContent = "Got " + gathered.length + " so far. The Canvas window shows the next ones now: select "
-          + "everything, copy, and paste here again.";
-        return;
-      }
-      copySaid.textContent = "";
-      showArrived({ course: picked ? picked.name : "your Canvas course", students: gathered },
-                  "https://" + host());
+    };
+    copyBox.addEventListener("paste", function (e) {
+      var data = e.clipboardData || window.clipboardData;
+      if (!data) return; // the box gets it; "input" below reads it
+      e.preventDefault();
+      takePaste(data.getData("text/plain") || data.getData("text"));
+    });
+    copyBox.addEventListener("drop", function (e) {
+      if (!e.dataTransfer) return;
+      e.preventDefault();
+      takePaste(e.dataTransfer.getData("text/plain"));
+    });
+    copyBox.addEventListener("input", function () {
+      var text = copyBox.value;
+      copyBox.value = "";
+      takePaste(text);
     });
 
-    // The button itself: dragged to the bookmarks bar, not clicked here.
-    var button = guide.querySelector("[data-bookmarklet]");
-    var said = guide.querySelector("[data-bookmarklet-said]");
-    if (button) {
-      button.addEventListener("click", function (e) {
-        e.preventDefault();
-        said.textContent = "Drag it up to your bookmarks bar instead: it works on Canvas pages, not here.";
-        said.hidden = false;
+    // The drop box (for a downloaded file) shows on this step only with the
+    // download steps open.
+    var drop = quizBox && quizBox.querySelector("[data-quiz-drop]");
+    if (drop && download) {
+      download.addEventListener("toggle", function () {
+        if (!stepBox.hidden) drop.hidden = !download.open;
       });
     }
-    if (/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) {
-      guide.querySelectorAll("[data-key-mod]").forEach(function (key) { key.textContent = "⌘"; });
-    }
 
-    // Back from Canvas in a tab (this tab looked at again): point at the
-    // last step, the box for the file.
+    // Back from Canvas in a tab (this tab looked at again) after the
+    // download steps: point at the last step, the box for the file.
     var canvasSteps = document.querySelector("[data-canvas-steps]");
     var welcome = document.querySelector("[data-canvas-welcome]");
     var went = false;
@@ -784,7 +1002,7 @@
       welcome.textContent = "Welcome back. Downloaded the student list? Drag the file into the box below. "
         + "Not there yet? The pictures above show where to click in Canvas.";
       welcome.hidden = false;
-      canvasSteps.querySelectorAll("[data-canvas-step]").forEach(function (li) {
+      if (canvasSteps) canvasSteps.querySelectorAll("[data-canvas-step]").forEach(function (li) {
         li.classList.toggle("is-next", li.getAttribute("data-canvas-step") === "drop");
       });
       var box = document.querySelector("[data-quiz-drop]");

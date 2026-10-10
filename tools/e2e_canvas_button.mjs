@@ -1,19 +1,25 @@
-// End to end, in a real (headless) Chrome: the "Send to Scheduler" button,
-// against the stand-in Canvas (tools/fake_canvas.py on :5077) and this site
-// running locally (app.py on :5050, dev mode, so sign-in codes show on
-// screen). Run both, then:
+// End to end, in a real (headless) Chrome: the "Send to Scheduler" button
+// and copy-and-paste, against the stand-in Canvas (tools/fake_canvas.py on
+// :5077, run with no FAKE_CANVAS_* settings) and this site running locally
+// (app.py on :5050, dev mode, so sign-in codes show on screen). Run both,
+// then:
 //
 //     node tools/e2e_canvas_button.mjs
 //
-// 1. Beside: a signed-in instructor's setup page opens Canvas in its own
-//    window; there, after signing in (it lands on the Dashboard), the button
-//    is clicked and a class picked; the list must show up on the setup page,
-//    and Add must put it on the sheet.
-// 2. In a tab of its own (no Scheduler page behind it): the button on a
-//    course page must open Scheduler in a new tab, where the instructor
-//    picks the sheet and adds the list.
+// 1. The button, clicked on the setup page, says it works and opens Canvas
+//    in a tab; there (after signing in, on the Dashboard) it's clicked again
+//    and a course picked; the list shows up on the setup page, and Add puts
+//    it on the sheet, which remembers the course.
+// 2. Later, "Update from Canvas": the button opens Canvas right on that
+//    course, and the list comes back for a look at what changes.
+// 3. A Canvas tab of its own (no Scheduler page behind it): the button takes
+//    that tab to Scheduler, which asks which sheet it's for.
+// 4. A list some other page posts, without the instructor's key: flagged,
+//    and can be thrown away.
+// 5. Copy and paste, 100 at a time: a 230-student course and a course of
+//    exactly 100.
 // The button is run the way a bookmark runs: its javascript: address,
-// decoded, evaluated in the Canvas page.
+// decoded, evaluated in the page.
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -108,100 +114,178 @@ try {
   await until(me.session, `location.pathname.startsWith("/teach") && location.pathname !== "/teach/verify" && document.readyState === "complete"`);
   check(await evaluate(me.session, `location.pathname`) !== "/teach/login", "signed in as an instructor");
 
-  // A sheet, made the way the form makes one.
-  const sid = await evaluate(me.session, `(async () => {
+  const newSheet = (title) => evaluate(me.session, `(async () => {
     const csrf = document.querySelector('meta[name=csrf-token]').content;
     const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
-    const body = new URLSearchParams([["csrf_token", csrf], ["title", "E2E Seminar"], ["capacity", "30"],
+    const body = new URLSearchParams([["csrf_token", csrf], ["title", ${JSON.stringify(title)}], ["capacity", "30"],
       ["day_date", day(30)], ["day_key", ""], ["day_date", day(31)], ["day_key", ""]]);
     const r = await fetch("/teach/new", { method: "POST", body, redirect: "follow" });
     return (r.url.match(/\\/teach\\/s\\/([^/?#]+)/) || [])[1];
   })()`);
+  // Canvas's address comes from the school picked; here, the stand-in's.
+  const toFakeCanvas = `(() => { const open = window.open.bind(window);
+    window.open = (url, name, features) => open(String(url).replace(/^https:\\/\\/[^/]+/, ${JSON.stringify(CANVAS)}), name, features); })()`;
+  const opened = async (before, ms = 6000) => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const t = created.slice(before).find((x) => x.type === "page" && x.openerId);
+      if (t) return t;
+      await sleep(100);
+    }
+    return null;
+  };
+
+  const sid = await newSheet("E2E Seminar");
   check(!!sid, "made a sheet (" + sid + ")");
 
-  // ---- 1. Beside: the setup page opens Canvas; the list comes back to it.
+  // ---- 1. The button: checked here, then clicked in Canvas.
   await go(me.session, `${SITE}/teach/s/${sid}/setup?step=students`);
   await evaluate(me.session, `sessionStorage.setItem("quiz-step-${sid}", "canvas"); location.reload()`);
   await until(me.session, `!!document.querySelector("[data-bookmarklet]") && document.readyState === "complete"`);
   const button = await evaluate(me.session, `document.querySelector("[data-bookmarklet]").getAttribute("href")`);
   check(button.startsWith("javascript:") && decodeURIComponent(button).includes(SITE), "the button is made for this site");
   const code1 = decodeURIComponent(button.slice("javascript:".length));
+  check(await evaluate(me.session, `!document.querySelector("[data-quiz-drop]") || document.querySelector("[data-quiz-drop]").hidden`),
+    "no box for a downloaded file until the download steps are opened");
 
-  const before = created.length;
-  // Canvas's address comes from the school picked; here, the stand-in's.
-  await evaluate(me.session, `(() => { const open = window.open.bind(window);
-    window.open = (url, name, features) => open(${JSON.stringify(CANVAS + "/login")}, name, features);
-    document.querySelector("[data-canvas-tab]").click(); })()`);
-  await until(me.session, `document.documentElement.classList.contains("canvas-beside") || true`);
-  let popup = null;
-  for (let i = 0; i < 40 && !popup; i++) { popup = created.slice(before).find((t) => t.type === "page" && t.openerId); await sleep(100); }
-  check(!!popup, "Canvas opened in a tab, with the setup page as its opener");
-  const canvas = await attach(popup.targetId);
+  await evaluate(me.session, toFakeCanvas);
+  let before = created.length;
+  await evaluate(me.session, code1); // the bookmark, clicked on this page
+  check(await until(me.session, `document.querySelector("[data-bookmarklet-said]").innerText.includes("It works")`),
+    "clicked here, the button says it works");
+  const tab = await opened(before);
+  check(!!tab, "and Canvas opens in a tab, with this page as its opener");
+  const canvas = await attach(tab.targetId);
   await send("Page.enable", {}, canvas);
-  const loaded = await until(canvas, `location.href.startsWith(${JSON.stringify(CANVAS)}) && !!document.querySelector("form")`, 15000);
-  if (!loaded) console.log("  (Canvas window is at " + await evaluate(canvas, "location.href") + ")");
+  await until(canvas, `location.href.startsWith(${JSON.stringify(CANVAS)}) && !!document.querySelector("form")`, 15000);
   await evaluate(canvas, `document.querySelector("form").submit()`);
   await until(canvas, `location.pathname === "/" && document.readyState === "complete"`);
   check((await text(canvas)).includes("Dashboard"), "signing in to Canvas lands on the Dashboard");
+  check(await evaluate(me.session, `!!document.querySelector("[data-button-known]:not([hidden])")`),
+    "the page now just says to click the button");
 
-  await evaluate(canvas, code1); // the bookmark, clicked
-  await until(canvas, `document.body.innerText.includes("Which class")`);
-  check(await press(canvas, "2026FA_BUSCOM_615_SEC1"), "the button lists the professor's courses, and one is picked");
-  const shown = await until(me.session, `!document.querySelector("[data-canvas-arrived]").hidden`, 10000);
-  check(shown, "the class list showed up on the setup page");
+  await evaluate(canvas, code1); // the bookmark, clicked in Canvas
+  await until(canvas, `document.body.innerText.includes("Which course's students")`);
+  const picker = await evaluate(canvas, `document.querySelector('[aria-label="Send to Scheduler"]').innerText`);
+  check(picker.includes("2026FA_LAW_200_TA") && !picker.includes("FACULTY_TRAINING"),
+    "the course list has courses they teach or TA, not ones they take");
+  check(picker.indexOf("2026FA_BUSCOM_615_SEC1") < picker.indexOf("2027SP_LAW_610_LECTURE"), "this term's courses first");
+  check(/2026FA_BUSCOM_615_SEC1 · 2026 Fall · 57 students/.test(picker), "each with its term and size");
+  check(await press(canvas, "2026FA_BUSCOM_615_SEC1"), "one is picked");
+  check(await until(me.session, `!document.querySelector("[data-canvas-arrived]").hidden`, 10000), "the class list shows up on the setup page");
   const arrived = await evaluate(me.session, `document.querySelector("[data-canvas-arrived]").innerText`);
-  check(arrived.includes("57 students from 2026FA_BUSCOM_615_SEC1"), "it says 57 students, from that course (all pages of Canvas's answer)");
-  check(arrived.includes("All with email addresses"), "with their emails");
+  check(arrived.includes("57 students from 2026FA_BUSCOM_615_SEC1") && arrived.includes("All with email addresses"),
+    "57 students, from that course, all with emails");
   await sleep(2200);
-  const stillOpen = (await send("Target.getTargets")).targetInfos.some((t) => t.targetId === popup.targetId);
-  check(!stillOpen, "the Canvas tab closed by itself, back to the list");
+  check(!(await send("Target.getTargets")).targetInfos.some((t) => t.targetId === tab.targetId), "the Canvas tab closed by itself");
   await evaluate(me.session, `document.querySelector("[data-canvas-arrived] form").submit()`);
-  await until(me.session, `location.search.includes("step=students") && document.readyState === "complete"`);
-  const after = await text(me.session);
-  check(/Added 57 students/.test(after) && after.includes("Canvas"), "Add put 57 students on the sheet: " + (after.match(/Added[^\n]*/) || [""])[0]);
+  check(await until(me.session, `document.readyState === "complete" && /Added 57 students/.test(document.body.innerText)`),
+    "Add put 57 students on the sheet");
 
-  // ---- 2. A Canvas tab of its own: the button takes this tab to Scheduler.
+  // ---- 2. Update from Canvas: straight to that course.
+  await go(me.session, `${SITE}/teach/s/${sid}`);
+  check(await evaluate(me.session, `document.querySelector("[data-canvas-guide]").getAttribute("data-canvas-course-id")`) === "101",
+    "the sheet remembers its Canvas course");
+  await evaluate(me.session, toFakeCanvas);
+  before = created.length;
+  await evaluate(me.session, code1);
+  const tab2 = await opened(before);
+  check(!!tab2, "the button, clicked here, opens Canvas again");
+  const canvas2 = await attach(tab2.targetId);
+  await send("Page.enable", {}, canvas2);
+  check(await until(canvas2, `location.pathname === "/courses/101" && document.readyState === "complete"`, 10000), "right on that course");
+  await evaluate(canvas2, code1);
+  check(await until(me.session, `!document.querySelector("[data-canvas-arrived]").hidden`, 10000), "no picking: the list comes right back");
+  check(await evaluate(me.session, `document.querySelector("[data-canvas-arrived]").closest("details").open`), "shown, unfolded");
+  await evaluate(me.session, `document.querySelector("[data-canvas-arrived] form").submit()`);
+  await until(me.session, `document.readyState === "complete" && location.pathname.includes("/roster/review/")`);
+  check((await text(me.session)).includes("Check the new class list"), "and a sheet with a list shows what changes first");
+
+  // ---- 3. A Canvas tab of its own: the button takes the tab to Scheduler.
   const own = await newPage(`${CANVAS}/courses/202`);
-  await until(own.session, `location.pathname === "/courses/202" && document.readyState === "complete"`);
   await evaluate(own.session, code1);
-  const moved = await until(own.session, `location.pathname.startsWith("/teach/canvas-import/") && document.readyState === "complete"`, 10000);
-  check(moved, "with no Scheduler page behind it, the button took the tab to Scheduler");
-  const page2 = await text(own.session);
-  check(page2.includes("8 students from 2026FA_LAW_540_SEC20"), "Scheduler shows the list from Canvas, to look over");
-  check(page2.includes("E2E Seminar") && page2.includes("A new sign-up sheet"), "and asks which sheet it goes to");
-  await evaluate(own.session, `document.querySelector("form.arrived-form").submit()`);
-  await until(own.session, `!location.pathname.startsWith("/teach/canvas-import/") && document.readyState === "complete"`);
+  check(await until(own.session, `location.pathname.startsWith("/teach/canvas-import/") && document.readyState === "complete"`, 10000),
+    "with no Scheduler page behind it, the button takes the tab to Scheduler");
   const page3 = await text(own.session);
-  check(/What changes|Replace|Add them|add to/i.test(page3), "a sheet that already has a list shows the changes before anything is replaced");
-  // The same list can't be used twice.
-  const again = await evaluate(own.session, `history.length`);
-  check(again >= 1, "done");
-  // ---- 3. No bookmarks: Canvas's lists, copied over as text (a new sheet).
-  const sid3 = await evaluate(me.session, `(async () => {
-    const csrf = document.querySelector('meta[name=csrf-token]').content;
-    const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
-    const body = new URLSearchParams([["csrf_token", csrf], ["title", "E2E Copy"], ["capacity", "30"],
-      ["day_date", day(30)], ["day_key", ""], ["day_date", day(31)], ["day_key", ""]]);
-    const r = await fetch("/teach/new", { method: "POST", body, redirect: "follow" });
-    return (r.url.match(/\\/teach\\/s\\/([^/?#]+)/) || [])[1];
-  })()`);
-  await go(me.session, `${SITE}/teach/s/${sid3}/setup?step=students`);
-  await until(me.session, `!!document.querySelector("[data-copy-paste]")`);
-  const canvasTab = await newPage(`${CANVAS}/`); // what the Canvas window would show, to copy
-  const coursesJson = await evaluate(canvasTab.session, `fetch("/api/v1/courses?enrollment_type=teacher&per_page=100").then((r) => r.text())`);
-  await evaluate(me.session, `(() => { const box = document.querySelector("[data-copy-paste]");
-    box.value = ${JSON.stringify(coursesJson)}; box.dispatchEvent(new Event("input")); })()`);
-  check(await until(me.session, `!document.querySelector("[data-copy-courses]").hidden`), "pasting Canvas's course list shows the courses to pick from");
-  await evaluate(me.session, `(() => { const open = window.open.bind(window); window.open = () => null; })()`);
-  check(await press(me.session, "2026FA_LAW_540_SEC20"), "and one is picked");
-  const usersJson = await evaluate(canvasTab.session, `fetch("/api/v1/courses/202/users?enrollment_type[]=student&include[]=email&per_page=100").then((r) => r.text())`);
-  await evaluate(me.session, `(() => { const box = document.querySelector("[data-copy-paste]");
-    box.value = ${JSON.stringify(usersJson)}; box.dispatchEvent(new Event("input")); })()`);
-  check(await until(me.session, `!document.querySelector("[data-canvas-arrived]").hidden`), "pasting its class list shows it, ready to add");
-  const arrived3 = await evaluate(me.session, `document.querySelector("[data-canvas-arrived]").innerText`);
-  check(arrived3.includes("8 students from 2026FA_LAW_540_SEC20"), "8 students, from that course");
+  check(page3.includes("8 students from 2026FA_LAW_540_SEC20") && page3.includes("From Canvas · 127.0.0.1:5077"),
+    "which shows the list, from where it really came");
+  check(!page3.includes("Did you just click"), "with no warning: the instructor's own button sent it");
+  check(await evaluate(own.session, `!document.querySelector(".arrived-list b") && document.querySelector(".arrived-list").textContent.includes("<b>and</b>")`),
+    "a name that reads like markup stays plain text");
+  check(await evaluate(own.session, `document.querySelector("input[name=sheet][value='${sid}']").checked`),
+    "the sheet they were just on is picked");
+
+  // ---- 4. A list another page sends (no key): flagged, and thrown away.
+  const forged = await newPage(`${CANVAS}/courses/202`);
+  await evaluate(forged.session, `(() => { const f = document.createElement("form"); f.method = "post";
+    f.action = ${JSON.stringify(SITE + "/canvas-import")};
+    const i = document.createElement("input"); i.name = "list";
+    i.value = JSON.stringify({ type: "scheduler-class-list", course: "LAW 501", students: [{ name: "Jane", email: "attacker@evil.example" }] });
+    f.appendChild(i); document.body.appendChild(f); f.submit(); })()`);
+  await until(forged.session, `location.pathname.startsWith("/teach/canvas-import/") && document.readyState === "complete"`, 10000);
+  const page4 = await text(forged.session);
+  check(page4.includes("Did you just click Send to Scheduler") && page4.includes("Sent from 127.0.0.1:5077"), "a list without the key is flagged");
+  check(await evaluate(forged.session, `![...document.querySelectorAll("input[name=sheet]")].some((r) => r.checked)`), "with no sheet picked");
+  await press(forged.session, "Don't add them");
+  await until(forged.session, `!location.pathname.startsWith("/teach/canvas-import/") && document.readyState === "complete"`);
+  check((await text(forged.session)).includes("Nothing was added"), "and thrown away");
+
+  // ---- 5. Copy and paste, 100 at a time.
+  const canvasTab = await newPage(`${CANVAS}/`);
+  const grab = (path) => evaluate(canvasTab.session, `fetch(${JSON.stringify(path)}).then((r) => r.text())`);
+  const paste = (value) => evaluate(me.session, `(() => { const box = document.querySelector("[data-copy-paste]");
+    const dt = new DataTransfer(); dt.setData("text/plain", ${JSON.stringify(value)});
+    box.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+    return box.value; })()`);
+  const said = () => evaluate(me.session, `document.querySelector("[data-copy-said]").textContent`);
+  const stubWindows = `(() => { window.__opened = []; window.open = () => { const w = { closed: false, focus() {}, close() { w.closed = true; } };
+    w.location = { set href(u) { window.__opened.push(u); } }; return w; }; })()`;
+  const copyFlow = async (title) => {
+    const id = await newSheet(title);
+    await go(me.session, `${SITE}/teach/s/${id}/setup?step=students`);
+    await evaluate(me.session, `sessionStorage.setItem("quiz-step-${id}", "canvas"); location.reload()`);
+    await until(me.session, `!!document.querySelector("[data-copy-paste]") && document.readyState === "complete"`);
+    await evaluate(me.session, stubWindows);
+    await evaluate(me.session, `document.querySelector("[data-canvas-copy]").open = true`); // as the professor would
+    await press(me.session, "Show my Canvas courses");
+    return id;
+  };
+  const sid5 = await copyFlow("E2E Copy");
+  check(await evaluate(me.session, `window.__opened.some((u) => u.includes("/api/v1/courses?"))`), "the window beside shows Canvas's courses");
+  const courses = await grab("/api/v1/courses?per_page=100&include[]=term&include[]=total_students");
+  check(await paste(courses) === "", "pasting them leaves nothing in the box");
+  check(await until(me.session, `!document.querySelector("[data-copy-courses]").hidden`), "the courses are shown to pick from");
+  const choices = await evaluate(me.session, `document.querySelector("[data-copy-courses]").textContent`);
+  check(choices.includes("2026FA_LAW_200_TA") && !choices.includes("FACULTY_TRAINING"), "the ones they teach or TA: " + JSON.stringify(choices));
+  check(await press(me.session, "2027SP_LAW_610_LECTURE"), "one is picked");
+  check(await evaluate(me.session, `window.__opened.at(-1).includes("/courses/505/users")`), "the window moves to its class list");
+  const page1 = await grab("/api/v1/courses/505/users?enrollment_type[]=student&include[]=email&per_page=100");
+  await paste(page1);
+  const said1 = await said();
+  check(said1.includes("Got 100 so far") && await evaluate(me.session, `window.__opened.at(-1).includes("page=2")`),
+    "100 at a time: it asks for the next hundred: " + JSON.stringify([said1, await evaluate(me.session, "window.__opened")]));
+  await paste(page1);
+  check((await said()).includes("the part you pasted before"), "the same part again is caught");
+  await paste(await grab("/api/v1/courses/505/users?enrollment_type[]=student&include[]=email&per_page=100&page=2"));
+  check((await said()).includes("Got 200 so far"), "then 200");
+  await paste(await grab("/api/v1/courses/505/users?enrollment_type[]=student&include[]=email&per_page=100&page=3"));
+  check(await until(me.session, `!document.querySelector("[data-canvas-arrived]").hidden`), "then the whole list shows, ready to add");
+  const arrived5 = await evaluate(me.session, `document.querySelector("[data-canvas-arrived]").innerText`);
+  check(arrived5.includes("230 students from 2027SP_LAW_610_LECTURE (2027 Spring)"), "230 students, from that course");
   const sent = await evaluate(me.session, `document.querySelector("[data-canvas-arrived] input[name=list]").value`);
   check(!/login_id|sortable_name|"id"/.test(sent), "only names and emails are sent to Scheduler");
+  await evaluate(me.session, `document.querySelector("[data-canvas-arrived] form").submit()`);
+  check(await until(me.session, `document.readyState === "complete" && /Added 230 students/.test(document.body.innerText)`),
+    "Add put all 230 on the sheet (" + sid5 + ")");
+
+  await copyFlow("E2E Hundred");
+  await paste(courses);
+  await until(me.session, `!document.querySelector("[data-copy-courses]").hidden`);
+  await press(me.session, "2026FA_LAW_700_HUNDRED");
+  await paste(await grab("/api/v1/courses/606/users?enrollment_type[]=student&include[]=email&per_page=100"));
+  await paste(await grab("/api/v1/courses/606/users?enrollment_type[]=student&include[]=email&per_page=100&page=2"));
+  check(await until(me.session, `document.querySelector("[data-canvas-arrived]").innerText.includes("100 students from")`),
+    "a class of exactly 100: the empty next page ends it");
 } catch (err) {
   console.log("FAIL " + err.message);
   failures++;
