@@ -14,6 +14,7 @@ import compose
 import db
 import settings
 from conftest import CANVAS_ROSTER, day_dates, day_keys
+from conftest import test_date as a_date
 
 
 def raw(response):
@@ -2400,3 +2401,124 @@ def test_a_new_sheet_is_set_up_one_question_at_a_time(prof):
     sid = prof.create_sheet()
     edit = raw(prof.get(f"/teach/s/{sid}/edit"))
     assert "data-wizard" not in edit and "Save changes" in edit
+
+
+# ---------------------------------------------------------------------------
+# Deadlines: sign-ups close by themselves, and the professor decides what
+# happens when students are missing.
+# ---------------------------------------------------------------------------
+def _sheet_set(app, sid, **values):
+    with app.app_context():
+        for column, value in values.items():
+            db.run(f"UPDATE sheets SET {column} = :v WHERE id = :sid", v=value, sid=sid)
+        db.commit()
+
+
+def _sheet_get(app, sid, column):
+    return q(app, f"SELECT {column} FROM sheets WHERE id = :sid", sid=sid)
+
+
+PASSED = "2000-01-01T00:00:00+00:00"
+
+
+def test_a_deadline_is_a_date_and_time_in_the_professors_zone(prof):
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    zone = q(prof.app, "SELECT timezone FROM instructors") or settings.DEFAULT_TIMEZONE
+    day = (datetime.now(ZoneInfo(zone)) + timedelta(days=5)).date().isoformat()
+    sid = prof.create_sheet()
+    page = text(prof.get(f"/teach/s/{sid}/edit"))
+    assert "sign-ups close automatically at this time" in page and "Ask me first if anyone hasn't ranked" in page
+    form = {"title": "CS & Law presentations", "capacity": "2", "close_date": day, "close_time": "17:30",
+            "at_close": "publish", "version": re.search(r'name="version" value="(\w+)"', raw(prof.get(f"/teach/s/{sid}/edit"))).group(1),
+            "day_date": day_dates(sid), "day_key": day_keys(sid), "day_label": [""] * len(day_keys(sid))}
+    prof.post(f"/teach/s/{sid}/edit", form)
+    expected = datetime.fromisoformat(day).replace(hour=17, minute=30, tzinfo=ZoneInfo(zone))
+    stored = datetime.fromisoformat(_sheet_get(prof.app, sid, "closes_at"))
+    assert stored == expected and _sheet_get(prof.app, sid, "at_close") == "publish"
+    assert "Sign-ups close automatically" in text(prof.get(f"/teach/s/{sid}"))
+    # A deadline in the past is refused, and the setup reopens on that question.
+    r = prof.post("/teach/new", {"title": "Seminar", "capacity": "2", "close_date": "2001-01-01", "close_time": "09:00",
+                                 "day_date": [a_date("Mon", 0), a_date("Tue", 1)], "day_key": ["", ""], "day_label": ["", ""]})
+    assert "already passed" in text(r) and 'data-wizard-start="deadline"' in raw(r)
+
+
+def test_at_the_deadline_sign_ups_close_and_the_schedule_is_made(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    rankers(browser, sid, [("Sam Lee", [0, 1], [])])
+    _sheet_set(prof.app, sid, closes_at=PASSED, at_close="schedule")
+    sent = len(prof.outbox)
+    sam = browser()
+    sam.get(f"/c/{sid}")  # the first visit after the deadline acts on it
+    assert _sheet_get(prof.app, sid, "bidding_open") == 0 and _sheet_get(prof.app, sid, "auto_closed_at")
+    assert _sheet_get(prof.app, sid, "closes_at") is None and _sheet_get(prof.app, sid, "published_at") is None
+    assert {"sam lee", "alex johnson", "riya patel"} <= set(assigned(prof.app, sid))  # the others got seats left over
+    notes = [m for m in prof.outbox[sent:] if m.to == ["prof@school.edu"]]
+    assert len(notes) == 1 and "sign-ups closed at your deadline" in notes[0].subject
+    # Locked for students: no changes, no draft schedule.
+    signed_in = browser().sign_in_student(sid, "Riya Patel")
+    r = signed_in.client.post(f"/c/{sid}/save", json={"ranking": day_keys(sid)}, headers={"X-CSRF-Token": signed_in.csrf()})
+    assert r.status_code == 403
+    page = text(signed_in.get(f"/c/{sid}/schedule"))
+    assert "Sign-ups are closed" in page and "Draft schedule" not in page
+    # Reopening after the deadline keeps sign-ups open.
+    prof.post(f"/teach/s/{sid}/toggle")
+    browser().get(f"/c/{sid}")
+    assert _sheet_get(prof.app, sid, "bidding_open") == 1
+
+
+def test_publish_at_the_deadline_and_the_daily_job_catches_unvisited_sheets(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    rankers(browser, sid, [("Sam Lee", [0, 1], []), ("Alex Johnson", [1, 0], [])])
+    _sheet_set(prof.app, sid, closes_at=PASSED, at_close="publish")
+    r = prof.get("/cron/daily", headers={"Authorization": "Bearer cron-secret"})
+    assert r.get_json()["deadlines_acted_on"] == 1
+    assert _sheet_get(prof.app, sid, "bidding_open") == 0 and _sheet_get(prof.app, sid, "published_at")
+
+
+def test_ask_first_when_students_are_missing_at_the_deadline(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    rankers(browser, sid, [("Sam Lee", [0, 1], [])])
+    _sheet_set(prof.app, sid, closes_at=PASSED, at_close="ask")
+    sent = len(prof.outbox)
+    browser().get(f"/c/{sid}")
+    browser().get(f"/c/{sid}")  # asked once, not twice
+    assert _sheet_get(prof.app, sid, "bidding_open") == 1 and _sheet_get(prof.app, sid, "deadline_asked_at")
+    asks = [m for m in prof.outbox[sent:] if m.to == ["prof@school.edu"]]
+    assert len(asks) == 1 and "2 students haven’t ranked" in asks[0].subject
+    assert "Alex Johnson, Riya Patel" in asks[0].body
+    page = text(prof.get(f"/teach/s/{sid}"))
+    assert "Your deadline passed" in page and "Keep sign-ups open" in page and "Close sign-ups and make the schedule" in page
+    assert "The deadline has passed" in text(browser().get(f"/c/{sid}"))  # students are told to hurry
+    # Keep it open: no deadline any more.
+    page = text(follow(prof, prof.post(f"/teach/s/{sid}/deadline")))
+    assert "Sign-ups stay open" in page and _sheet_get(prof.app, sid, "closes_at") is None
+    # Or, another time, close and place everyone.
+    _sheet_set(prof.app, sid, closes_at=PASSED, deadline_asked_at=PASSED)
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    assert _sheet_get(prof.app, sid, "bidding_open") == 0 and len(assigned(prof.app, sid)) == 3
+
+
+def test_ask_first_closes_by_itself_when_everyone_ranked(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    rankers(browser, sid, [("Sam Lee", [0, 1], []), ("Alex Johnson", [1, 0], []), ("Riya Patel", [0, 1], [])])
+    _sheet_set(prof.app, sid, closes_at=PASSED, at_close="ask")
+    browser().get(f"/c/{sid}")
+    assert _sheet_get(prof.app, sid, "bidding_open") == 0 and len(assigned(prof.app, sid)) == 3
+
+
+def test_the_professor_hears_once_when_everyone_has_ranked(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    sent = len(prof.outbox)
+    rankers(browser, sid, [("Sam Lee", [0, 1], []), ("Alex Johnson", [1, 0], [])])
+    assert not [m for m in prof.outbox[sent:] if m.to == ["prof@school.edu"]]
+    keys = rankers(browser, sid, [("Riya Patel", [0, 1], [])])
+    told = [m for m in prof.outbox[sent:] if m.to == ["prof@school.edu"]]
+    assert len(told) == 1 and "everyone has ranked" in told[0].subject and "All 3 students" in told[0].body
+    browser().sign_in_student(sid, "Riya Patel").rank(sid, [keys[1], keys[0]])  # a change of mind: no second email
+    assert len([m for m in prof.outbox[sent:] if m.to == ["prof@school.edu"]]) == 1

@@ -15,6 +15,7 @@ It does three things:
 from datetime import timedelta
 
 import db
+import deadlines
 import sheets
 import signin
 import usage
@@ -62,4 +63,5 @@ def run_daily():
         "snapshots_taken": len(changed),
         "near_limits": usage.daily_check(),
         "workos_records_deleted": signin.forget_remote_users(),
+        "deadlines_acted_on": deadlines.enforce_all(),
     }

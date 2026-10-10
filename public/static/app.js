@@ -88,6 +88,10 @@
       el.textContent = when.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
     } else if (kind === "time") {
       el.textContent = when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    } else if (kind === "deadline") {
+      el.textContent = when.toLocaleString(undefined, {
+        weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+      });
     } else if (kind === "seconds") {
       el.textContent = when.toLocaleString(undefined, {
         month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit",
@@ -209,6 +213,19 @@
     guide.addEventListener("toggle", function () {
       store(key, guide.open ? null : "1");
     });
+  });
+
+  // The deadline picker: the warning and the "when sign-ups close" choices
+  // show once a date is picked; "No deadline" empties it.
+  document.querySelectorAll("[data-deadline-field]").forEach(function (field) {
+    var date = field.querySelector('input[type="date"]');
+    var more = field.querySelectorAll("[data-deadline-more]");
+    var sync = function () { more.forEach(function (el) { el.hidden = !date.value; }); };
+    date.addEventListener("input", sync);
+    date.addEventListener("change", sync);
+    var clear = field.querySelector("[data-deadline-clear]");
+    if (clear) clear.addEventListener("click", function () { date.value = ""; sync(); });
+    sync();
   });
 
   // Setting up a new sheet: one question at a time, "Step 2 of 6", Back and

@@ -418,6 +418,31 @@
       </button>
     </form>
   </div>
+  {% if deadline.waiting %}
+  <div class="callout deadline-ask" id="deadline" role="alert">
+    <p><strong>Your deadline passed ({{ deadline.text }}), and {{ deadline.missing | length }}
+      {{ 'student hasn’t' if deadline.missing | length == 1 else 'students haven’t' }} ranked:</strong>
+      {{ deadline.missing[:12] | join(', ') }}{% if deadline.missing | length > 12 %} …{% endif %}.</p>
+    <p>Sign-ups are still open while you decide. What would you like to do?</p>
+    <div class="helper-row">
+      <form method="post" action="{{ url_for('teach.close_and_schedule', sid=sheet.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary">Close sign-ups and make the schedule</button>
+      </form>
+      <form method="post" action="{{ url_for('teach.deadline_keep_open', sid=sheet.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-secondary">Keep sign-ups open</button>
+      </form>
+    </div>
+    <p class="mini-hint">Closing gives anyone who didn't rank one of the seats left over. You can nudge them first with the button below.</p>
+  </div>
+  {% elif deadline.closes_at and sheet.bidding_open %}
+  <p class="deadline-line">Sign-ups close automatically <strong><time datetime="{{ deadline.closes_at }}" data-local="deadline">{{ deadline.text }}</time></strong>.
+    Then {{ {'ask': "the schedule is made if everyone has ranked; if not, we'll ask you first", 'schedule': 'the schedule is made', 'publish': 'the schedule is made and published'}[deadline.at_close] }}.
+    <a href="{{ url_for('teach.edit_sheet', sid=sheet.id) }}#deadline-field">Change</a></p>
+  {% elif deadline.auto_closed_at and not sheet.bidding_open %}
+  <p class="deadline-line">Sign-ups closed automatically at your deadline (<time datetime="{{ deadline.auto_closed_at }}" data-local="deadline">{{ deadline.auto_closed_at[:16] }}</time>).</p>
+  {% endif %}
   {% if nudge %}
   <div class="nudge">
     <a class="btn btn-primary" data-compose data-to="{{ nudge.to }}" data-bcc="{{ nudge.bcc }}" data-subject="{{ nudge.subject }}" data-body="{{ nudge.body }}"

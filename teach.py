@@ -25,6 +25,7 @@ import auth
 import canvasdir
 import compose
 import db
+import deadlines
 import settings
 import sheets
 import signin
@@ -35,7 +36,7 @@ from matching_engine import (
 )
 from roster import describe, find_email, flip_last_first, parse_roster, _is_last_first
 from util import (
-    clean_name, clean_text, date_label, fold, iso, mask_email, new_id, normalize_name, now, parse_iso,
+    clean_name, clean_text, date_label, fold, in_zone, iso, mask_email, new_id, normalize_name, now, parse_iso,
     plural, read_date, slugify, valid_email,
 )
 
@@ -56,6 +57,15 @@ PERSONAL_EMAIL_DOMAINS = {
 def _zone():
     instructor = current_instructor()
     return (instructor and instructor.get("timezone")) or settings.DEFAULT_TIMEZONE
+
+
+@bp.context_processor
+def _deadline_choices():
+    """For the deadline picker (sheet_form.html): times, the instructor's
+    zone, and today in it."""
+    zone = _zone()
+    return {"deadline_times": deadlines.TIMES, "deadline_zone": deadlines.zone_label(zone),
+            "today": in_zone(now(), zone).date().isoformat()}
 
 
 # ---------------------------------------------------------------------------
@@ -317,7 +327,7 @@ def owned_sheet(sid):
     instructor = current_instructor()
     if not sheet or not instructor or sheet["owner_id"] != instructor["id"]:
         abort(_not_in_account(sid))
-    return sheet
+    return deadlines.enforce(sheet)
 
 
 def _own_snapshot(snap_id):
@@ -331,6 +341,7 @@ def _own_snapshot(snap_id):
 @instructor_required
 def dashboard():
     instructor = current_instructor()
+    deadlines.enforce_all(owner_id=instructor["id"])  # so each sheet's status is right
     mine = db.rows(
         """
         SELECT s.id, s.title, s.bidding_open, s.allow_unlisted, s.published_at, s.created_at, s.archived_at,
@@ -371,6 +382,9 @@ def _blank_form():
         "capacity": 4,
         "note": "",
         "rank_by": "",
+        "close_date": "",
+        "close_time": "17:00",
+        "at_close": "ask",
         "allow_unlisted": False,
         "show_preview": False,
     }
@@ -408,7 +422,7 @@ def _setup_step(errors):
     so the step-by-step setup opens right there."""
     for error in errors:
         said = error.lower()
-        for step, words in (("name", ("title",)), ("deadline", ("rank by",)), ("note", ("note to students",)),
+        for step, words in (("name", ("title",)), ("deadline", ("deadline",)), ("note", ("note to students",)),
                             ("seats", ("seats",)), ("days", ("day", "date"))):
             if any(word in said for word in words):
                 return step
@@ -421,13 +435,21 @@ def _read_sheet_form(form):
     filled, day_problems = _read_days(form)
     title = clean_text(form.get("title"), TITLE_LIMIT + 50)
     note = clean_text(form.get("note"), NOTE_LIMIT + 50, keep_newlines=True)
-    rank_by = clean_text(form.get("rank_by"), RANK_BY_LIMIT + 50)
+    zone = _zone()
+    close_date = (form.get("close_date") or "").strip()[:10]
+    close_time = (form.get("close_time") or "17:00").strip()[:5]
+    at_close = form.get("at_close") if form.get("at_close") in deadlines.AT_CLOSE else "ask"
+    closes = deadlines.to_utc(close_date, close_time, zone) if close_date else None
     values = {
         "title": title,
         "days": filled,
         "capacity": (form.get("capacity") or "").strip(),
         "note": note,
-        "rank_by": rank_by,
+        "close_date": close_date,
+        "close_time": close_time,
+        "at_close": at_close,
+        "closes_at": iso(closes) if closes else None,
+        "rank_by": deadlines.describe(iso(closes), zone) if closes else "",
         "allow_unlisted": form.get("allow_unlisted", "0") == "1",
         "show_preview": form.get("show_preview") == "1",
     }
@@ -438,8 +460,12 @@ def _read_sheet_form(form):
         errors.append(f"The title is {len(title)} characters; the most is {TITLE_LIMIT}.")
     if len(note) > NOTE_LIMIT:
         errors.append(f"The note to students is {len(note)} characters; the most is {NOTE_LIMIT}.")
-    if len(rank_by) > RANK_BY_LIMIT:
-        errors.append(f"The “rank by” date is too long — keep it under {RANK_BY_LIMIT} characters.")
+    if close_date and not closes:
+        errors.append("That deadline isn't a real date and time. Pick the date on the calendar.")
+    elif closes and closes <= now() and form.get("closes_at_was") != values["closes_at"]:
+        errors.append("That deadline has already passed. Pick a later date and time, or leave it empty.")
+    elif closes and closes > deadlines.latest():
+        errors.append("That deadline is more than a year away. Check the date.")
     errors += day_problems
     if len(filled) < 2:
         errors.append("Pick at least two days on the calendar for students to choose between.")
@@ -476,11 +502,13 @@ def new_sheet():
         at = iso()
         db.run(
             """
-            INSERT INTO sheets (id, owner_id, title, note, rank_by, capacity_per_day, algorithm, bidding_open,
-                allow_unlisted, show_preview, include_unranked, lottery_seed, created_at, updated_at)
-            VALUES (:sid, :owner, :title, :note, :rank_by, :capacity, :algo, 1, :unlisted, :preview, 1, :seed,
-                :at, :at)
+            INSERT INTO sheets (id, owner_id, title, note, rank_by, closes_at, at_close, capacity_per_day,
+                algorithm, bidding_open, allow_unlisted, show_preview, include_unranked, lottery_seed, created_at,
+                updated_at)
+            VALUES (:sid, :owner, :title, :note, :rank_by, :closes_at, :at_close, :capacity, :algo, 1, :unlisted,
+                :preview, 1, :seed, :at, :at)
             """,
+            closes_at=values["closes_at"], at_close=values["at_close"],
             sid=sid, owner=current_instructor()["id"], title=values["title"], note=values["note"],
             rank_by=values["rank_by"], capacity=values["capacity"], algo=DEFAULT_ALGORITHM,
             unlisted=int(values["allow_unlisted"]), preview=int(values["show_preview"]),
@@ -511,7 +539,7 @@ def _warn_past_days(days):
 def _form_version(sheet, days):
     """Changes whenever the sheet's editable settings do, so a stale Edit
     page left open in another tab can't put back what was changed since."""
-    parts = [sheet["title"], sheet["note"], sheet["rank_by"], sheet["capacity_per_day"],
+    parts = [sheet["title"], sheet["note"], sheet["closes_at"], sheet["at_close"], sheet["capacity_per_day"],
              sheet["allow_unlisted"], sheet["show_preview"], [[d["key"], d["label"], d["date"]] for d in days]]
     return hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:16]
 
@@ -565,10 +593,13 @@ def edit_sheet(sid):
             sheets.take_snapshot(sheet, "edit", "Before renaming " + ", ".join(old for old, _ in renamed))
         db.run(
             """
-            UPDATE sheets SET title = :title, note = :note, rank_by = :rank_by, capacity_per_day = :capacity,
-                allow_unlisted = :unlisted, show_preview = :preview, updated_at = :at
+            UPDATE sheets SET title = :title, note = :note, rank_by = :rank_by, closes_at = :closes_at,
+                at_close = :at_close, capacity_per_day = :capacity, allow_unlisted = :unlisted,
+                show_preview = :preview, updated_at = :at,
+                deadline_asked_at = CASE WHEN closes_at = :closes_at THEN deadline_asked_at ELSE NULL END
             WHERE id = :sid
             """,
+            closes_at=values["closes_at"], at_close=values["at_close"],
             title=values["title"], note=values["note"], rank_by=values["rank_by"], capacity=values["capacity"],
             unlisted=int(values["allow_unlisted"]), preview=int(values["show_preview"]), at=iso(),
             sid=sheet["id"],
@@ -617,6 +648,10 @@ def edit_sheet(sid):
         "capacity": sheet["capacity_per_day"],
         "note": sheet["note"],
         "rank_by": sheet["rank_by"],
+        "close_date": deadlines.local_parts(sheet["closes_at"], _zone())[0],
+        "close_time": deadlines.local_parts(sheet["closes_at"], _zone())[1],
+        "at_close": sheet["at_close"] or "ask",
+        "closes_at": sheet["closes_at"],
         "allow_unlisted": bool(sheet["allow_unlisted"]),
         "show_preview": bool(sheet["show_preview"]),
     }
@@ -696,13 +731,19 @@ def _next_step(sheet, counts, has_schedule, stale, published, without_day=0, stu
                open_seats=0):
     """The one thing to do next, for the card at the top of the sheet page."""
     if not counts["roster"] and not sheet["allow_unlisted"]:
-        return {"title": "Add your class list", "anchor": "class-list",
-                "text": "Students sign in by finding their name on it. Drag in the file from Canvas — "
-                        "“Where do I find this in Canvas?” shows you how."}
+        return {"title": "Add your students", "anchor": "class-list",
+                "text": "A few quick questions walk you through it: from Canvas, a spreadsheet, typing names in, or "
+                        "letting students sign themselves up."}
     if not sheet["bidding_open"] and not counts["submissions"] and not has_schedule:
         return {"title": "Reopen sign-ups so students can rank", "anchor": "signups",
                 "text": "Sign-ups are closed and there are no rankings, so students who open the link can't do "
                         "anything yet."}
+    if deadlines.waiting_for_decision(sheet):
+        left = deadlines.missing(sheet)
+        return {"title": f"Your deadline passed: {plural(len(left), 'student hasn’t', 'students haven’t')} ranked",
+                "anchor": "deadline",
+                "text": "Sign-ups are still open while you decide: close them now (anyone who didn't rank gets a "
+                        "seat left over), or keep them open a while longer."}
     if stuck:
         return {"title": f"{plural(len(stuck['people']), 'student')} couldn't get a sign-in email today",
                 "anchor": "stuck", "text": stuck["summary"]}
@@ -1086,6 +1127,13 @@ def _sheet_page(sid, tab):
         stuck=stuck,
         canvas=canvas,
         nudge=nudge,
+        deadline={
+            "closes_at": sheet["closes_at"], "at_close": sheet["at_close"] or "ask",
+            "waiting": deadlines.waiting_for_decision(sheet),
+            "missing": deadlines.missing(sheet) if sheet["closes_at"] else [],
+            "auto_closed_at": sheet["auto_closed_at"],
+            "text": deadlines.describe(sheet["closes_at"], _zone()) if sheet["closes_at"] else "",
+        },
         me=me["email"],
         mail_default=mail_default,
         list_next=list_next,
@@ -1935,6 +1983,20 @@ def _after_close_backup(sheet):
     flash(message + (" Keep it somewhere safe." if sent else ""), "info")
 
 
+@bp.route("/s/<sid>/deadline", methods=["POST"])
+@instructor_required
+def deadline_keep_open(sid):
+    """The deadline passed with students missing: keep sign-ups open (no
+    deadline now; close them by hand, or set a new one)."""
+    sheet = owned_sheet(sid)
+    db.run("UPDATE sheets SET closes_at = NULL, deadline_asked_at = NULL, updated_at = :at WHERE id = :sid",
+           at=iso(), sid=sheet["id"])
+    db.commit()
+    flash("Sign-ups stay open. Close them whenever you're ready, or set a new deadline under Edit days & settings.",
+          "success")
+    return _back(sheet, "signups")
+
+
 @bp.route("/s/<sid>/toggle", methods=["POST"])
 @instructor_required
 def toggle_bidding(sid):
@@ -1945,9 +2007,16 @@ def toggle_bidding(sid):
         _after_close_backup(sheet)
         return _back(sheet, "schedule")
     was_published = bool(sheet["published_at"])
-    db.run("UPDATE sheets SET bidding_open = 1, published_at = NULL, updated_at = :at WHERE id = :sid",
-           at=iso(), sid=sheet["id"])
+    passed = bool(sheet["closes_at"]) and sheet["closes_at"] <= iso()
+    db.run(
+        "UPDATE sheets SET bidding_open = 1, published_at = NULL, updated_at = :at, deadline_asked_at = NULL, "
+        "all_ranked_at = NULL, closes_at = CASE WHEN closes_at <= :at THEN NULL ELSE closes_at END WHERE id = :sid",
+        at=iso(), sid=sheet["id"],
+    )
     db.commit()
+    if passed or sheet["auto_closed_at"]:
+        flash("Your deadline has passed, so sign-ups stay open until you close them. To set a new deadline, use "
+              "Edit days & settings.", "info")
     flash(
         "Sign-ups are open again."
         + (" The schedule is hidden from students until you publish it again." if was_published else ""),

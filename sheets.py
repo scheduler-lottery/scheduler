@@ -1175,10 +1175,12 @@ def copy_sheet(sheet, owner_id):
     db.run(
         """
         INSERT INTO sheets (id, owner_id, title, note, capacity_per_day, algorithm, bidding_open,
-            allow_unlisted, show_preview, include_unranked, lottery_seed, theme, font, created_at, updated_at)
+            allow_unlisted, show_preview, include_unranked, lottery_seed, theme, font, at_close, created_at,
+            updated_at)
         VALUES (:sid, :owner, :title, :note, :capacity, :algorithm, 1, :unlisted, :preview, :unranked,
-            :seed, :theme, :font, :at, :at)
+            :seed, :theme, :font, :at_close, :at, :at)
         """,
+        at_close=sheet["at_close"] or "ask",
         sid=sid, owner=owner_id, title=(sheet["title"] + " (copy)")[:100], note=sheet["note"],
         capacity=sheet["capacity_per_day"], algorithm=sheet["algorithm"],
         unlisted=sheet["allow_unlisted"], preview=sheet["show_preview"],

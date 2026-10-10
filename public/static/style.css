@@ -2568,3 +2568,23 @@ summary.card-heading::marker, summary.card-heading::-webkit-details-marker { fon
 }
 .wizard-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .wizard-actions [hidden] { display: none; }
+
+/* The deadline: picker, warning, and what the instructor sees about it. */
+.deadline-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.deadline-row input[type="date"] { min-width: 170px; }
+.deadline-warning {
+  margin: 12px 0 10px; padding: 12px 14px; border-radius: var(--radius-sm);
+  background: var(--amber-soft); color: var(--text); border: 1px solid var(--amber);
+}
+.deadline-warning[hidden], .deadline-then[hidden] { display: none; }
+.deadline-then { margin: 4px 0 0; padding: 0; border: 0; }
+.deadline-then legend { font-weight: 650; margin-bottom: 6px; }
+.deadline-line { margin: 8px 0 12px; }
+.deadline-ask { border-color: var(--amber); }
+input[type="date"] {
+  font: inherit; padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border);
+  background: var(--surface-soft); color: var(--text);
+}
+/* A radio or checkbox choice inside a form field: its lead phrase is the
+   <strong>, the rest reads as normal text. */
+.field label.choice { display: flex; font-weight: 400; }

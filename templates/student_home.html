@@ -70,11 +70,7 @@
   </div>
   {% endif %}
 
-  {% if sheet.rank_by and sheet.bidding_open %}
-  <p class="deadline">Please rank by <strong>{{ sheet.rank_by }}</strong>.</p>
-  {% elif sheet.bidding_open %}
-  <p class="mini-hint">Your instructor will close sign-ups when everyone's in.</p>
-  {% endif %}
+  {% include "_deadline_note.html" %}
 
   <div class="action-tiles">
     {% if sheet.bidding_open or has_submitted %}

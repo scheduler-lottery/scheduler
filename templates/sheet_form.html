@@ -46,12 +46,36 @@
 
 {% endmacro %}
 {% macro f_rank_by() %}
-    <div class="field">
-      <label for="rank_by">Rank by <span class="muted">(optional)</span></label>
-      <p class="field-help">A deadline to show students, like “Friday, Oct 10 at 5 PM”. Sign-ups don't close by themselves — you close them.</p>
-      <input type="text" id="rank_by" name="rank_by" value="{{ form.rank_by }}" maxlength="100" placeholder="e.g., Friday, Oct 10 at 5 PM">
+    <div class="field deadline-field" id="deadline-field" data-deadline-field>
+      <label for="close_date">Sign-ups close <span class="muted">(optional)</span></label>
+      <p class="field-help">Pick a date and a time. Leave it empty if you'd rather close sign-ups yourself.</p>
+      <div class="deadline-row">
+        <input type="date" id="close_date" name="close_date" value="{{ form.close_date }}" min="{{ today }}">
+        <label for="close_time" class="visually-hidden">Time</label>
+        <select id="close_time" name="close_time">
+          {% for value, label in deadline_times %}<option value="{{ value }}"{{ ' selected' if value == (form.close_time or '17:00') }}>{{ label }}</option>{% endfor %}
+        </select>
+        <span class="muted">{{ deadline_zone }}</span>
+        <button type="button" class="btn-link" data-deadline-clear>No deadline</button>
+      </div>
+      {% if form.closes_at %}<input type="hidden" name="closes_at_was" value="{{ form.closes_at }}">{% endif %}
+      <div class="deadline-warning" role="note" data-deadline-more>
+        <strong>Heads up: sign-ups close automatically at this time.</strong> After that, students can't change
+        their rankings or see draft schedules. You can always reopen sign-ups.
+      </div>
+      <fieldset class="deadline-then" data-deadline-more>
+        <legend>When sign-ups close</legend>
+        <label class="choice"><input type="radio" name="at_close" value="ask"{{ ' checked' if (form.at_close or 'ask') == 'ask' }}>
+          <span><strong>Ask me first if anyone hasn't ranked</strong> (recommended). If everyone has, the schedule
+          is made. If not, sign-ups stay open and we email you to choose: close them and give those students the
+          seats left over, or keep sign-ups open longer.</span></label>
+        <label class="choice"><input type="radio" name="at_close" value="schedule"{{ ' checked' if form.at_close == 'schedule' }}>
+          <span><strong>Close and make the schedule.</strong> Anyone who didn't rank gets one of the seats left
+          over. You check the schedule, then publish it.</span></label>
+        <label class="choice"><input type="radio" name="at_close" value="publish"{{ ' checked' if form.at_close == 'publish' }}>
+          <span><strong>Close, make the schedule, and publish it</strong>, so students see their day right away.</span></label>
+      </fieldset>
     </div>
-
 {% endmacro %}
 {% macro f_note() %}
       <div class="field">

@@ -14,7 +14,7 @@
           Hi <bdi>{{ name }}</bdi> — put all {{ days | length }} days in the order you'd like them, favorite at the
           top. You'll get a day as high on your list as possible.
         </p>
-        {% if sheet.rank_by %}<p class="deadline">Please rank by <strong>{{ sheet.rank_by }}</strong>.</p>{% endif %}
+        {% include "_deadline_note.html" %}
       {% else %}
         <p class="subtitle locked">Sign-ups are closed — here's what you sent. If
           something needs to change, <a href="mailto:{{ sheet.owner_email }}?subject={{ ('My ranking — ' ~ sheet.title) | urlencode }}">email your instructor</a>.</p>

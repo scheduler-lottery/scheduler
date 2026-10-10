@@ -20,7 +20,7 @@
   <h1>Sign-ups are closed</h1>
   <p class="subtitle">Sign in to see your ranking. Your instructor will publish the schedule soon.</p>
   {% endif %}
-  {% if sheet.rank_by and sheet.bidding_open %}<p class="deadline">Please rank by <strong>{{ sheet.rank_by }}</strong>.</p>{% endif %}
+  {% include "_deadline_note.html" %}
 
   <form method="post" action="{{ url_for('student.login', sid=sheet.id) }}" class="stack" autocomplete="off">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

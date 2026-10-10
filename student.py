@@ -15,6 +15,7 @@ from flask import Blueprint, flash, g, jsonify, redirect, render_template, reque
 import auth
 import compose
 import db
+import deadlines
 import settings
 import sheets
 import signin
@@ -63,6 +64,8 @@ def load_sheet():
     if asked != sheet["id"] and request.method == "GET":
         # A link pasted with a trailing period or in capitals.
         return redirect(url_for(request.endpoint, **{**request.view_args, "sid": sheet["id"]}))
+    # A passed deadline closes sign-ups before anyone sees the page.
+    sheet = deadlines.enforce(sheet)
     g.sheet = sheet
     g.days = sheets.get_days(sheet["id"])
     g.student = auth.current_student(sheet)
@@ -790,6 +793,7 @@ def save(sid):
     )
     sheets.touch(g.sheet["id"])
     db.commit()
+    deadlines.everyone_ranked(g.sheet)
     return jsonify(ok=True, saved_at=saved_at)
 
 

@@ -7,7 +7,7 @@
   <dl class="settings-list">
     <div><dt>Days</dt><dd>{{ days | map(attribute='label') | join(', ') }}</dd></div>
     <div><dt>Seats per day</dt><dd>{{ sheet.capacity_per_day }}</dd></div>
-    <div><dt>Rank by</dt><dd>{{ sheet.rank_by or 'No deadline given' }}</dd></div>
+    <div><dt>Sign-ups close</dt><dd>{% if deadline.closes_at %}{{ deadline.text }}, then {{ {'ask': "the schedule is made if everyone has ranked (if not, you're asked first)", 'schedule': 'the schedule is made', 'publish': 'the schedule is made and published'}[deadline.at_close] }}{% elif sheet.rank_by %}{{ sheet.rank_by }} (shown to students; you close sign-ups yourself){% else %}When you close them{% endif %}</dd></div>
     <div><dt>Who can sign up</dt><dd>{{ 'Anyone with the link' if sheet.allow_unlisted else 'Only names on your class list' }}</dd></div>
     <div><dt>Students can see the draft schedule</dt><dd>{{ 'Yes' if sheet.show_preview else 'No' }}</dd></div>
   </dl>

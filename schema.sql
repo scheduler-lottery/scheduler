@@ -55,6 +55,14 @@ CREATE TABLE IF NOT EXISTS sheets (
     archived_at        TEXT,  -- tucked away on the dashboard (still works for students)
     theme              TEXT,  -- the class's look, set by its instructor (NULL = the standard look)
     font               TEXT,
+    -- The deadline: sign-ups close by themselves at closes_at (UTC). at_close
+    -- says what then: 'ask' (close and make the schedule if everyone ranked,
+    -- otherwise ask the instructor), 'schedule' or 'publish'.
+    closes_at          TEXT,
+    at_close           TEXT NOT NULL DEFAULT 'ask',
+    auto_closed_at     TEXT,  -- when the deadline closed sign-ups
+    deadline_asked_at  TEXT,  -- when the instructor was asked what to do
+    all_ranked_at      TEXT,  -- when the instructor was told everyone had ranked
     created_at         TEXT NOT NULL,
     updated_at         TEXT NOT NULL
 );

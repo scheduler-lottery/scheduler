@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ 'Schedule' if mode == 'final' else 'Draft schedule' }} — {{ sheet.title }}{% endblock %}
+{% block title %}{{ 'Draft schedule' if mode == 'draft' else 'Schedule' }} — {{ sheet.title }}{% endblock %}
 {% block content %}
 <div class="card">
   <p class="eyebrow">{{ sheet.title }}</p>

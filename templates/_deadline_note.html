@@ -1,0 +1,12 @@
+{# For students: when sign-ups close (their own time zone), or the
+   instructor's typed deadline on sheets made before deadlines closed
+   sign-ups by themselves. #}
+{% if sheet.bidding_open %}
+  {% if sheet.closes_at and sheet.deadline_asked_at %}
+  <p class="deadline">The deadline has passed. Sign-ups are still open for now, but could close at any moment, so rank now.</p>
+  {% elif sheet.closes_at %}
+  <p class="deadline">Sign-ups close <strong><time datetime="{{ sheet.closes_at }}" data-local="deadline">{{ sheet.rank_by }}</time></strong>. Rank before then: after that, rankings are locked.</p>
+  {% elif sheet.rank_by %}
+  <p class="deadline">Please rank by <strong>{{ sheet.rank_by }}</strong>.</p>
+  {% endif %}
+{% endif %}
