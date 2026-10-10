@@ -2298,3 +2298,11 @@ def test_instructor_pages_are_framed_and_student_pages_are_not(prof, browser):
     assert "you don't sign in here" in text(browser().get("/teach/login"))
     for page in (raw(browser().get("/")), raw(browser().get(f"/c/{sid}")), raw(browser().get("/privacy"))):
         assert "mode-frame" not in page
+
+
+def test_the_pointer_glow_is_only_on_the_front_page(prof, browser):
+    sid = prof.create_sheet()
+    assert "data-glow" in raw(browser().get("/"))
+    for page in (raw(prof.get("/teach/")), raw(prof.get(f"/teach/s/{sid}")), raw(browser().get(f"/c/{sid}")),
+                 raw(browser().get("/privacy")), raw(browser().get("/teach/login"))):
+        assert "data-glow" not in page

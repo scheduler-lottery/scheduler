@@ -2459,19 +2459,20 @@ summary.card-heading::marker, summary.card-heading::-webkit-details-marker { fon
 .fonts-loading :is(main, .mode-frame) > .card { animation-play-state: paused; }
 
 /* =============================================================
-   A soft light follows the pointer across each block (app.js sets
+   A soft light follows the pointer across a [data-glow] block: only
+   the front page's, never a page people work in (app.js sets
    --mx/--my and .is-lit). Mice and trackpads only; not for readers
    who ask for reduced motion, and not in the high-contrast themes.
    ============================================================= */
 @property --spot { syntax: "<percentage>"; inherits: false; initial-value: 0%; }
 @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-  .card {
+  [data-glow] {
     background-image: radial-gradient(560px circle at var(--mx, 50%) var(--my, 0%),
       color-mix(in srgb, var(--accent) var(--spot), transparent), transparent 70%);
     transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease,
       --spot 0.5s ease;
   }
-  .card.is-lit { --spot: 7%; }
-  [data-mode="dark"] .card.is-lit { --spot: 11%; }
+  [data-glow].is-lit { --spot: 7%; }
+  [data-mode="dark"] [data-glow].is-lit { --spot: 11%; }
 }
-[data-theme^="contrast"] .card { background-image: none; }
+[data-theme^="contrast"] [data-glow] { background-image: none; }

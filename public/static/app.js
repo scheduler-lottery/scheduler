@@ -298,12 +298,13 @@
   });
 })();
 
-// A soft light follows the pointer across each block (see style.css). Mice
-// and trackpads only, and not for readers who ask for reduced motion.
+// A soft light follows the pointer across a [data-glow] block: only the
+// front page's (see style.css). Mice and trackpads only, and not for
+// readers who ask for reduced motion.
 (function () {
   var ask = function (query) { return window.matchMedia && window.matchMedia(query).matches; };
   if (ask("(prefers-reduced-motion: reduce)") || !ask("(hover: hover) and (pointer: fine)")) return;
-  document.querySelectorAll(".card").forEach(function (card) {
+  document.querySelectorAll("[data-glow]").forEach(function (card) {
     card.addEventListener("pointermove", function (e) {
       var box = card.getBoundingClientRect();
       card.style.setProperty("--mx", Math.round(e.clientX - box.left) + "px");
