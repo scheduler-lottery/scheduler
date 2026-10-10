@@ -1,0 +1,15 @@
+{# How far along the setup is: step N of 8, which part, and about how long
+   is left. Needs `progress` (setup_progress(step) in teach.py). On the
+   new-sheet form, app.js updates it as the questions change. #}
+<div class="setup-progress" data-setup-progress data-total="{{ progress.total }}">
+  <div class="setup-progress-top">
+    <p class="setup-progress-step" aria-live="polite"><strong data-progress-step>Step {{ progress.number }} of {{ progress.total }}</strong></p>
+    <p class="setup-progress-left" data-progress-left>About {{ progress.minutes | plural('minute') }} left</p>
+  </div>
+  <progress class="setup-bar" max="{{ progress.total }}" value="{{ progress.number - 0.5 }}" data-progress-bar aria-label="Setup progress">Step {{ progress.number }} of {{ progress.total }}</progress>
+  <ol class="setup-parts">
+    {% for part in progress.parts %}
+    <li class="setup-part is-{{ part.state }}"{% if part.state == 'now' %} aria-current="step"{% endif %}>{{ part.name }}{% if part.state == 'done' %}<span class="visually-hidden"> (done)</span>{% endif %}</li>
+    {% endfor %}
+  </ol>
+</div>

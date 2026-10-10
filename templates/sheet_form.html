@@ -122,7 +122,7 @@
     <a class="link-muted" href="{{ url_for('teach.sheet', sid=sheet.id) if mode == 'edit' else url_for('teach.dashboard') }}">← Back</a>
   </div>
   {% if mode == 'new' %}
-  <p class="subtitle">A few questions, one at a time, and your sign-up sheet is ready.</p>
+  <p class="subtitle">A few questions, one at a time. Then your students and the link to share, and it's ready to use.</p>
   {% endif %}
 
   <form method="post" class="form-stack" novalidate{% if mode == 'new' %} data-wizard data-wizard-start="{{ wizard_start or 'name' }}"{% endif %}>
@@ -147,28 +147,28 @@
     {% endif %}
 
 {% if mode == 'new' %}
-    <p class="wizard-progress" data-wizard-progress aria-live="polite"></p>
-    <section class="wizard-step" data-wizard-step="name">
+    {% with progress = setup_progress(wizard_start or 'name') %}{% include "_setup_progress.html" %}{% endwith %}
+    <section class="wizard-step" data-wizard-step="name" data-progress-number="{{ setup_progress('name').number }}" data-progress-left="{{ setup_progress('name').minutes }}">
       <h2 class="wizard-q" tabindex="-1">What's the class called?</h2>
       {{ f_title() }}
     </section>
-    <section class="wizard-step" data-wizard-step="days">
+    <section class="wizard-step" data-wizard-step="days" data-progress-number="{{ setup_progress('days').number }}" data-progress-left="{{ setup_progress('days').minutes }}">
       <h2 class="wizard-q" tabindex="-1">Which days can students present?</h2>
       {{ f_days() }}
     </section>
-    <section class="wizard-step" data-wizard-step="seats">
+    <section class="wizard-step" data-wizard-step="seats" data-progress-number="{{ setup_progress('seats').number }}" data-progress-left="{{ setup_progress('seats').minutes }}">
       <h2 class="wizard-q" tabindex="-1">How many presentations fit in one day?</h2>
       {{ f_capacity() }}
     </section>
-    <section class="wizard-step" data-wizard-step="deadline">
+    <section class="wizard-step" data-wizard-step="deadline" data-progress-number="{{ setup_progress('deadline').number }}" data-progress-left="{{ setup_progress('deadline').minutes }}">
       <h2 class="wizard-q" tabindex="-1">When should students have ranked by? <span class="muted">(optional)</span></h2>
       {{ f_rank_by() }}
     </section>
-    <section class="wizard-step" data-wizard-step="note">
+    <section class="wizard-step" data-wizard-step="note" data-progress-number="{{ setup_progress('note').number }}" data-progress-left="{{ setup_progress('note').minutes }}">
       <h2 class="wizard-q" tabindex="-1">Anything students should know? <span class="muted">(optional)</span></h2>
       {{ f_note() }}
     </section>
-    <section class="wizard-step" data-wizard-step="who">
+    <section class="wizard-step" data-wizard-step="who" data-progress-number="{{ setup_progress('who').number }}" data-progress-left="{{ setup_progress('who').minutes }}">
       <h2 class="wizard-q" tabindex="-1">Who can sign up?</h2>
       {{ f_who() }}
       {{ f_preview() }}
@@ -179,7 +179,7 @@
       <button type="button" class="btn btn-primary btn-large" data-wizard-next>Next →</button>
       <button type="submit" class="btn btn-primary btn-large" data-wizard-done>Create the sign-up sheet</button>
     </div>
-    <p class="mini-hint">Next you'll add your students, and then share the link. You can change all of this later.</p>
+    <p class="mini-hint">Next you'll add your students, then share the link. You can change all of this later.</p>
 {% else %}
     {{ f_title() }}
     {{ f_days() }}

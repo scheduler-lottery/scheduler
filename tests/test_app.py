@@ -222,7 +222,7 @@ def test_days_must_be_real_dates(prof):
     assert "too far from today" in page
     r = prof.post("/teach/new", {"title": "T", "day_date": ["2027-03-02", "2027-03-01", "2028-01-04"],
                                  "day_key": ["", "", ""], "capacity": "2"})
-    sid = r.headers["Location"].split("/")[-1].split("#")[0]
+    sid = re.search(r"/teach/s/([^/#?]+)", r.headers["Location"]).group(1)
     with prof.app.app_context():
         days = db.rows("SELECT label, day_date FROM sheet_days WHERE sheet_id = :sid ORDER BY sort_order", sid=sid)
     # In date order, labeled for students, with the year once the days span two years.
@@ -233,7 +233,7 @@ def test_days_must_be_real_dates(prof):
 def test_new_sheets_are_private_by_default_and_point_at_the_next_step(prof):
     r = prof.post("/teach/new", {"title": "Seminar", "day_date": ["2027-03-01", "2027-03-02"], "day_key": ["", ""],
                                  "capacity": "2"})
-    sid = r.headers["Location"].split("/")[-1].split("#")[0]
+    sid = re.search(r"/teach/s/([^/#?]+)", r.headers["Location"]).group(1)
     with prof.app.app_context():
         sheet = db.row("SELECT * FROM sheets WHERE id = :sid", sid=sid)
     assert sheet["allow_unlisted"] == 0 and sheet["show_preview"] == 0 and sheet["lottery_seed"] > 0
@@ -2634,3 +2634,51 @@ def test_the_owner_can_delete_everything_but_only_by_typing_DELETE(prof, browser
     assert "There's nothing to delete" in text(owner.get("/owner/"))
     assert browser().get(f"/c/{sid}").status_code == 404
     assert prof.get("/teach/").headers["Location"].endswith("/teach/login")  # signed out: no account now
+
+
+# -- the whole setup: the questions, then the students and the link -----------
+
+def test_a_new_sheet_goes_on_to_its_students_and_its_link_with_a_progress_bar(prof, browser):
+    page = text(prof.get("/teach/new"))
+    assert "Step 1 of 8" in page and "About 7 minutes left" in page and "About the class" in page
+    r = prof.post("/teach/new", {"title": "Seminar", "day_date": [a_date("Mon", 0), a_date("Tue", 1)],
+                                 "day_key": ["", ""], "capacity": "2"})
+    sid = re.search(r"/teach/s/([^/#?]+)", r.headers["Location"]).group(1)
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup")
+    page = raw(prof.get(f"/teach/s/{sid}/setup"))
+    assert "Step 7 of 8" in text(page) and "About 3 minutes left" in text(page) and "Add your students" in page
+    assert "Do you use Canvas for this class?" in html_lib.unescape(page)
+    assert page.count('name="setup" value="1"') == 3  # the drop box, pasting, and "sign themselves up"
+    assert browser().sign_in_instructor("other@school.edu").get(f"/teach/s/{sid}/setup").status_code == 404
+
+    # The class list, added from the setup, comes back to the setup and says what it read.
+    r = prof.post(f"/teach/s/{sid}/roster", {"roster": (io.BytesIO(CANVAS_ROSTER.encode()), "students.csv"),
+                                             "setup": "1"}, content_type="multipart/form-data")
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students")
+    page = text(prof.get(r.headers["Location"]))
+    assert "3 students on your list" in page and "Next: share the link" in page
+    assert "students.csv" in page  # the report on what was read, shown once
+
+    # With the list in, the setup page is on its last step: sharing.
+    page = html(prof.get(f"/teach/s/{sid}/setup"))
+    assert "Step 8 of 8" in page and "About 1 minute left" in page and "Share the link with your class" in page
+    assert "Copy the message" in page and "Email it to your 3 students" in page
+    assert "alex@school.edu, riya@school.edu, sam@school.edu" in page  # the ready-made email's Bcc
+    assert "3 students on your list" in text(page) and "Done: go to my class page" in page
+    assert "students.csv" not in page
+
+
+def test_setup_problems_and_choices_stay_in_the_setup(prof):
+    sid = prof.create_sheet(allow_unlisted=False)
+    said = follow(prof, prof.post(f"/teach/s/{sid}/roster", {"pasted": "", "setup": "1"}))
+    assert "paste a list of names first" in said and "Step 7 of 8" in text(said)
+    assert "Add your students first" in html(prof.get(f"/teach/s/{sid}/setup?step=share"))
+    # "Let students sign themselves up", from the setup: on to sharing, with no email to send.
+    r = prof.post(f"/teach/s/{sid}/who", {"allow_unlisted": "1", "back": "share", "setup": "1"})
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=share")
+    page = html(prof.get(r.headers["Location"]))
+    assert "Copy the message" in page and "Email it to" not in page and "Students sign themselves up" in page
+    # Such a sheet's students step says there's nothing it needs.
+    assert "So there's no list to add" in html(prof.get(f"/teach/s/{sid}/setup?step=students"))
+    # On the class page, the same questions don't mention the setup.
+    assert 'name="setup"' not in raw(prof.get(f"/teach/s/{sid}"))

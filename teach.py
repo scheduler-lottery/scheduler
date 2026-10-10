@@ -417,6 +417,38 @@ def _read_days(form):
     return days, problems
 
 
+# The whole setup, as its progress bar counts it: the questions on the new-
+# sheet form (sheet_form.html), then adding the students and sharing the
+# link (teach_setup.html). Minutes are rough, for "about 5 minutes left".
+SETUP_STEPS = (
+    ("name", "About the class", 0.5),
+    ("days", "About the class", 1),
+    ("seats", "About the class", 0.5),
+    ("deadline", "About the class", 1),
+    ("note", "About the class", 0.5),
+    ("who", "About the class", 0.5),
+    ("students", "Your students", 2),
+    ("share", "Sharing the link", 1),
+)
+SETUP_PARTS = ("About the class", "Your students", "Sharing the link")
+
+
+@bp.app_template_global()
+def setup_progress(step):
+    """Where a step sits in the whole setup: its number, its part, and about
+    how many minutes are left, counting this one."""
+    names = [name for name, _part, _minutes in SETUP_STEPS]
+    at = names.index(step) if step in names else 0
+    part = SETUP_STEPS[at][1]
+    left = sum(minutes for _name, _part, minutes in SETUP_STEPS[at:])
+    now_at = SETUP_PARTS.index(part)
+    return {
+        "number": at + 1, "total": len(SETUP_STEPS), "part": part, "minutes": max(1, round(left)),
+        "parts": [{"name": name, "state": "done" if i < now_at else "now" if i == now_at else "next"}
+                  for i, name in enumerate(SETUP_PARTS)],
+    }
+
+
 def _setup_step(errors):
     """The setup question (sheet_form.html's steps) the first problem is about,
     so the step-by-step setup opens right there."""
@@ -517,13 +549,10 @@ def new_sheet():
         sheets.save_days(sid, [("", d["label"], d["date"]) for d in values["days"]])
         db.commit()
         _warn_past_days(values["days"])
-        flash("Your sign-up sheet is ready. Next: "
-              + ("share the link with your class (or add your class list)." if values["allow_unlisted"]
-                 else "add your class list."), "success")
         if fold(values["title"]) in mine:
             flash("You already have a sheet with this title — the link code under each title on your list "
                   "tells them apart.", "info")
-        return redirect(url_for("teach.sheet", sid=sid) + "#class-list")
+        return redirect(url_for("teach.setup", sid=sid))
     return render_template("sheet_form.html", form=_blank_form(), mode="new", max_days=sheets.MAX_DAYS)
 
 
@@ -956,6 +985,54 @@ def settings_page(sid):
     return _sheet_page(sid, "settings")
 
 
+@bp.route("/s/<sid>/setup")
+@instructor_required
+def setup(sid):
+    """The rest of the setup, after the new-sheet questions: add the
+    students, then share the link, under the same progress bar, so the sheet
+    is ready to use at the end. Either can wait: everything here is on the
+    class page too."""
+    sheet = owned_sheet(sid)
+    sid = sheet["id"]
+    counts = sheets.counts(sid)
+    me = current_instructor()
+    # Before anything below writes: these may save a lookup on their own connection.
+    canvas = _canvas_school(me, guess=not counts["roster"])
+    mail_default = compose.service_for(me["email"])
+    step = request.args.get("step")
+    if step not in ("students", "share"):
+        step = "share" if counts["roster"] else "students"
+    report = session.get("roster_report")
+    if report and report.get("sid") == sid and step == "students":
+        session.pop("roster_report")  # shown here, once
+    else:
+        report = None
+    share_url = url_for("student.signin", sid=sid, _external=True)
+    announcement = _announcement(sheet, share_url, counts)
+    emails = [r["email"] for r in sheets.get_roster(sid) if r["email"] and not r["is_test"]]
+    # The message, ready to send from the instructor's own email, with the
+    # class in Bcc.
+    invite = {
+        "to": me["email"], "bcc": ", ".join(emails), "count": len(emails),
+        "subject": f"Rank your presentation days for {sheet['title']}",
+        "body": f"Hi everyone,\n\n{announcement}\n\nThanks!\n",
+    } if announcement and emails else None
+    return render_template(
+        "teach_setup.html", sheet=sheet, step=step, counts=counts, canvas=canvas, report=report,
+        share_url=share_url, announcement=announcement, invite=invite, days=sheets.get_days(sid),
+        deadline=deadlines.describe(sheet["closes_at"], _zone()) if sheet["closes_at"] else "",
+        me=me["email"], mail_default=mail_default, setup=True,
+    )
+
+
+def _list_back(sheet, setup=None):
+    """Back to where the class list was being added: the setup page's
+    students step, or the class page."""
+    if request.form.get("setup") if setup is None else setup:
+        return redirect(url_for("teach.setup", sid=sheet["id"], step="students"))
+    return _back(sheet, "class-list")
+
+
 def _sheet_page(sid, tab):
     sheet = owned_sheet(sid)
     sid = sheet["id"]
@@ -1349,15 +1426,15 @@ def upload_roster(sid):
         data, source, source_label = pasted.encode("utf-8"), "", "pasted list"
     else:
         flash("Choose a file to upload, or paste a list of names first.", "error")
-        return _back(sheet, "class-list")
+        return _list_back(sheet)
     if len(data) > MAX_UPLOAD_BYTES:
         flash("That file is over 1 MB — a class list is far smaller. Is it the right file?", "error")
-        return _back(sheet, "class-list")
+        return _list_back(sheet)
 
     result = parse_roster(data)
     if result.error:
         flash(result.error, "error")
-        return _back(sheet, "class-list")
+        return _list_back(sheet)
     message, tips = describe(result, source)
     if not source:
         message = message.replace(" from “”", "")
@@ -1368,10 +1445,11 @@ def upload_roster(sid):
     current = [r for r in sheets.get_roster(sheet["id"]) if not r["is_test"]]
     if not current:
         _apply_roster(sheet, result.students, "replace", message, tips, warn, source_label, sections)
-        return _back(sheet, "class-list")
+        return _list_back(sheet)
     pid = _store_pending(sheet, "roster", {
         "students": result.students, "message": message, "tips": tips, "warn": warn,
         "source": source, "source_label": source_label, "pasted": not source, "sections": sections,
+        "setup": bool(request.form.get("setup")),
     })
     return redirect(url_for("teach.review_roster", sid=sheet["id"], pid=pid))
 
@@ -1392,11 +1470,11 @@ def review_roster(sid, pid):
             db.run("DELETE FROM pending_uploads WHERE id = :id", id=pid)
             db.commit()
             flash("Kept your current class list. Nothing changed.", "success")
-            return _back(sheet, "class-list")
+            return _list_back(sheet, pending.get("setup"))
         if action in ("replace", "add"):
             _apply_roster(sheet, pending["students"], action, pending["message"], pending["tips"],
                           pending["warn"], pending["source_label"], pending.get("sections"))
-            return _back(sheet, "class-list")
+            return _list_back(sheet, pending.get("setup"))
     diff = sheets.compare_rosters(sheets.get_roster(sheet["id"]), pending["students"])
     ranked = {r["name_key"] for r in sheets.get_submissions(sheet["id"])}
     dropping_ranked = [r for r in diff["dropping"] if r["name_key"] in ranked]
@@ -1646,6 +1724,8 @@ def set_who(sid):
                 "under Sign-ups — connect each to the right name with “… is really” and Link, or delete it.",
                 "info",
             )
+    if request.form.get("setup"):
+        return redirect(url_for("teach.setup", sid=sheet["id"], step="share" if allow else "students"))
     return _back(sheet, request.form.get("back") if request.form.get("back") in ("share",) else "class-list")
 
 

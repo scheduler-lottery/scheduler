@@ -153,6 +153,9 @@ body {
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
+/* Links in the site's own color, not the browser's blue; any link with a
+   style of its own (buttons, the footer, menus) keeps that. */
+a { color: var(--accent-strong); text-underline-offset: 0.15em; }
 
 .btn, .status-pill, .count-number {
   font-family: var(--font-body);
@@ -2690,8 +2693,48 @@ button.icon-dock-label { border: 0; background: none; font-family: inherit; curs
 /* =============================================================
    Setting up a new sheet: one question per screen.
    ============================================================= */
-.wizard-progress { margin: 6px 0 4px; font-size: 0.85rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-.wizard-progress:empty { display: none; }
+/* The whole setup's progress (the questions, then the students and the
+   link): step N of 8, about how long is left, a bar, and its three parts. */
+.setup-progress {
+  margin: 6px 0 22px; padding: 14px 16px 12px;
+  border: 1px solid var(--border); border-radius: 14px; background: var(--surface-soft);
+}
+.setup-progress-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 14px; }
+.setup-progress-step, .setup-progress-left { margin: 0; font-family: var(--font-small); font-size: 0.9rem; }
+.setup-progress-step strong { font-weight: 650; }
+.setup-progress-left { color: var(--muted); }
+.setup-bar {
+  -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 8px; margin: 10px 0 11px;
+  border: 0; border-radius: 999px; background: var(--surface-strong); color: var(--accent); overflow: hidden;
+}
+.setup-bar::-webkit-progress-bar { background: var(--surface-strong); border-radius: 999px; }
+.setup-bar::-webkit-progress-value { background: var(--accent); border-radius: 999px; }
+.setup-bar::-moz-progress-bar { background: var(--accent); border-radius: 999px; }
+.setup-parts {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 20px;
+  font-family: var(--font-small); font-size: 0.86rem; color: var(--muted);
+}
+.setup-part { position: relative; padding-left: 21px; line-height: 1.4; }
+.setup-part::before {
+  content: ""; position: absolute; left: 0; top: 0.2em; width: 14px; height: 14px; box-sizing: border-box;
+  border-radius: 50%; border: 1.5px solid var(--border-strong);
+}
+.setup-part.is-now { color: var(--text); font-weight: 650; }
+.setup-part.is-now::before { border: 4px solid var(--accent); }
+.setup-part.is-done { color: var(--text); }
+.setup-part.is-done::before { background: var(--accent); border-color: var(--accent); }
+.setup-part.is-done::after {
+  content: ""; position: absolute; left: 5px; top: calc(0.2em + 2.5px); width: 3px; height: 6.5px;
+  border: solid var(--on-accent); border-width: 0 1.8px 1.8px 0; transform: rotate(45deg);
+}
+
+/* The setup page: the students step, then sharing. */
+.setup-step > .wizard-q { margin-top: 2px; }
+.setup-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 18px 0 6px; }
+.setup-sub { margin: 26px 0 10px; }
+.setup-try { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0; }
+.setup-summary { margin: 0 0 6px; padding-left: 1.2em; line-height: 1.6; }
+.setup-skip { margin-top: 18px; }
 .wizard-step[hidden] { display: none; }
 .wizard-q {
   margin: 4px 0 16px; font-size: clamp(1.45rem, 2.8vw, 1.8rem); line-height: 1.1;

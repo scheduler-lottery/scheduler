@@ -1,5 +1,6 @@
 <form method="post" action="{{ url_for('teach.upload_roster', sid=sheet.id) }}" enctype="multipart/form-data" data-dropzone>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if setup %}<input type="hidden" name="setup" value="1">{% endif %}
   <input type="file" id="roster-file" name="roster" accept=".csv,.tsv,.txt,.xlsx,text/csv,text/plain" class="visually-hidden-file">
   <label class="dropzone" for="roster-file">
     <span class="dropzone-title">{{ 'Drop the new class list here' if counts.roster else 'Drag your class list here' }}</span>

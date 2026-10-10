@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Set up {{ sheet.title }} — {{ app_name }}{% endblock %}
+{% block content %}
+{# The rest of the setup, after the new-sheet questions: the students, then
+   sharing the link, under the same progress bar (teach.setup). #}
+<div class="card setup-card">
+  <div class="admin-header">
+    <h1>{{ sheet.title }}</h1>
+    <a class="link-muted" href="{{ url_for('teach.sheet', sid=sheet.id) }}">Finish later</a>
+  </div>
+  {% with progress = setup_progress(step) %}{% include "_setup_progress.html" %}{% endwith %}
+
+  {% if step == 'students' %}
+  <section class="setup-step" aria-labelledby="setup-q">
+    <h2 class="wizard-q" id="setup-q">Add your students</h2>
+    {% if report %}
+    <div class="report{{ ' report-warn' if report.warn }}">
+      <p class="report-main">{{ report.message }}</p>
+      {% if report.tips %}<ul class="tips">{% for tip in report.tips %}<li>{{ tip }}</li>{% endfor %}</ul>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if counts.roster %}
+    <p class="lead-line">
+      <strong>{{ counts.roster | plural('student') }}</strong> on your list{% if counts.roster_with_email == counts.roster %}, all with email addresses: each confirms it's them with an emailed code.{% elif counts.roster_with_email %}: {{ counts.roster_with_email }} with email addresses (they get an emailed code); the rest sign in with a PIN.{% else %}, without email addresses: they sign in by name and a PIN.{% endif %}
+    </p>
+    <div class="setup-actions">
+      <a class="btn btn-primary btn-large" href="{{ url_for('teach.setup', sid=sheet.id, step='share') }}">Next: share the link <span aria-hidden="true">→</span></a>
+    </div>
+    <details class="replace-list">
+      <summary>Wrong list? Use a different file</summary>
+      {% include "_roster_upload.html" %}
+    </details>
+    {% elif sheet.allow_unlisted %}
+    <p class="lead-line">You chose to let students sign themselves up: anyone with your link adds their own name and picks a PIN. So there's no list to add.</p>
+    <div class="setup-actions">
+      <a class="btn btn-primary btn-large" href="{{ url_for('teach.setup', sid=sheet.id, step='share') }}">Next: share the link <span aria-hidden="true">→</span></a>
+    </div>
+    <details class="more-options">
+      <summary>Add a class list anyway</summary>
+      <p class="mini-hint">A list lets students confirm it's them with an emailed code, and shows you who hasn't ranked.</p>
+      {% include "_class_quiz.html" %}
+    </details>
+    {% else %}
+    <p class="lead-line">A couple of quick questions, and we'll walk you through it.</p>
+    {% include "_class_quiz.html" %}
+    <p class="privacy-line">Private: only names and emails are kept, everything is encrypted, and only you can see the list. <button type="button" class="btn-link" data-popover-target="privacy-details" aria-haspopup="dialog">How it's protected</button></p>
+    <p class="mini-hint setup-skip"><a href="{{ url_for('teach.sheet', sid=sheet.id) }}">Skip for now</a>: you can add your students later, from the class page. Until then, nobody can sign in.</p>
+    {% endif %}
+  </section>
+
+  {% else %}
+  <section class="setup-step" aria-labelledby="setup-q">
+    <h2 class="wizard-q" id="setup-q">Share the link with your class</h2>
+    {% if not announcement %}
+    <p class="lead-line">Add your students first: until then, nobody can sign in.</p>
+    <div class="setup-actions">
+      <a class="btn btn-primary" href="{{ url_for('teach.setup', sid=sheet.id, step='students') }}"><span aria-hidden="true">←</span> Add your students</a>
+    </div>
+    {% else %}
+    <p class="lead-line">Post this message where your class will see it, like a Canvas announcement, or email it to them. Edit it first if you like.</p>
+    <label for="announcement" class="visually-hidden">Message for your students</label>
+    <textarea id="announcement" rows="11" class="announcement">{{ announcement }}</textarea>
+    <div class="helper-row">
+      <button class="btn btn-primary" type="button" data-copy="#announcement"
+              data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}">Copy the message</button>
+      {% if invite %}
+      <a class="btn btn-secondary" data-compose data-to="{{ invite.to }}" data-bcc="{{ invite.bcc }}" data-subject="{{ invite.subject }}" data-body="{{ invite.body }}"
+         data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}"
+         href="mailto:{{ invite.to }}?bcc={{ invite.bcc | replace(' ', '') }}&amp;subject={{ invite.subject | urlencode }}&amp;body={{ invite.body | urlencode }}">Email it to your {{ invite.count | plural('student') }}</a>
+      {% endif %}
+    </div>
+    {% if invite %}
+    <p class="mini-hint">“Email it” opens the message, ready to send, in your own email, with your students' addresses in Bcc.</p>
+    {% with picker_id="invite", mail_why="It's picked to match your email address.", mail_account=me %}{% include "_mail_picker.html" %}{% endwith %}
+    {% endif %}
+    <p class="mini-hint">Students can also type the code <strong>{{ sheet.id }}</strong> on the {{ app_name }} home page.</p>
+
+    <h3 class="group-label setup-sub">Want to check it first?</h3>
+    <form method="post" action="{{ url_for('teach.try_as_student', sid=sheet.id) }}" target="_blank" class="setup-try">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-secondary" type="submit">See it as a student</button>
+      <span class="mini-hint">Opens in a new tab, as a pretend student; this page stays here.</span>
+    </form>
+    {% endif %}
+
+    <h3 class="group-label setup-sub">What's set up</h3>
+    <ul class="setup-summary">
+      <li><strong>{{ days | length | plural('day') }}</strong>{% if days %}, {{ days[0].label }}{% if days | length > 1 %} to {{ days[-1].label }}{% endif %}{% endif %}, with {{ sheet.capacity_per_day | plural('presentation') }} a day</li>
+      <li>{% if counts.roster %}<strong>{{ counts.roster | plural('student') }}</strong> on your list{% elif sheet.allow_unlisted %}Students sign themselves up{% else %}No class list yet{% endif %}</li>
+      <li>{% if deadline %}Sign-ups close <strong>{{ deadline }}</strong>{% else %}No deadline: you'll close sign-ups yourself{% endif %}</li>
+    </ul>
+    <p class="mini-hint"><a href="{{ url_for('teach.edit_sheet', sid=sheet.id) }}">Change days &amp; settings</a></p>
+    <div class="setup-actions">
+      <a class="btn btn-secondary" href="{{ url_for('teach.setup', sid=sheet.id, step='students') }}"><span aria-hidden="true">←</span> Back</a>
+      <a class="btn btn-primary btn-large" href="{{ url_for('teach.sheet', sid=sheet.id) }}">Done: go to my class page</a>
+    </div>
+  </section>
+  {% endif %}
+</div>
+
+<div id="privacy-details" class="modal-overlay" role="dialog" aria-modal="true" aria-label="How your class list is protected">
+  <div class="modal-dialog modal-wide">
+    <button type="button" class="modal-close" data-popover-close aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+    {% include "_privacy_panel.html" %}
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='compose.js') }}"></script>{% endblock %}

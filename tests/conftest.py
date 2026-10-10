@@ -155,7 +155,7 @@ class Browser:
             "show_preview": "1" if show_preview else "",
         })
         assert r.status_code == 302, r.get_data(as_text=True)
-        return r.headers["Location"].split("#")[0].rstrip("/").split("/")[-1]
+        return re.search(r"/teach/s/([^/#?]+)", r.headers["Location"]).group(1)  # on to its setup page
 
     def upload(self, sid, content=CANVAS_ROSTER, filename="roster.csv"):
         if isinstance(content, str):
