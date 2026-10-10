@@ -2825,3 +2825,61 @@ input[type="date"] {
 .cal-day:disabled:hover { border-color: var(--border); }
 .deadline-row[hidden], [data-deadline-chip][hidden], [data-deadline-open][hidden] { display: none; }
 [data-theme^="contrast"] .time-slot > span { border: 2px solid var(--border); }
+
+/* =============================================================
+   Messages about what just happened. With scripts on, they come up in
+   the upper part of the window, larger, the page behind blurred for a
+   moment (app.js). Without scripts, they sit at the top of the page.
+   ============================================================= */
+.flash-stack {
+  position: static; transform: none; width: auto; margin: 0 0 16px; pointer-events: auto;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.js .flash-stack {
+  position: fixed; top: clamp(84px, 17vh, 180px); left: 50%; transform: translateX(-50%);
+  width: min(600px, calc(100% - 32px)); z-index: 75; margin: 0; pointer-events: none;
+}
+.flash-stack .flash {
+  display: flex; align-items: flex-start; gap: 12px; padding: 16px 12px 16px 18px;
+  border: 1.5px solid currentColor; border-radius: 16px; background: var(--card-bg);
+  backdrop-filter: none; -webkit-backdrop-filter: none;
+  box-shadow: 0 24px 60px rgba(17, 17, 26, 0.22), 0 2px 6px rgba(17, 17, 26, 0.08);
+  font-size: 1.02rem; line-height: 1.45; cursor: default; pointer-events: auto;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.js .flash-stack .flash { animation: flash-in 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
+@keyframes flash-in { from { opacity: 0; transform: translateY(-10px) scale(0.98); } }
+.flash-stack .flash.leaving { opacity: 0; transform: translateY(-8px); }
+.flash-icon {
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 28px; height: 28px; border-radius: 50%; background: currentColor;
+}
+.flash-icon svg { width: 17px; height: 17px; color: var(--card-bg); }
+.flash-text { flex: 1; min-width: 0; margin: 3px 0 0; color: var(--text); }
+.flash-close {
+  flex-shrink: 0; width: 30px; height: 30px; margin: -1px 0 0; border: 0; border-radius: 50%;
+  background: none; color: var(--muted); font: inherit; font-size: 1.4rem; line-height: 1; cursor: pointer;
+}
+.flash-close:hover { background: var(--surface-soft); color: var(--text); }
+:not(.js) > body .flash-close { display: none; }
+.flash-veil {
+  position: fixed; inset: 0; z-index: 74; pointer-events: none;
+  background: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(8px) saturate(115%); -webkit-backdrop-filter: blur(8px) saturate(115%);
+  animation: flash-veil 2.2s ease forwards;
+}
+[data-mode="dark"] .flash-veil { background: rgba(5, 6, 15, 0.42); }
+[data-theme^="contrast"] .flash-veil { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(0, 0, 0, 0.2); }
+@keyframes flash-veil { 0% { opacity: 0; } 12% { opacity: 1; } 68% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .js .flash-stack .flash { animation: none; }
+}
+
+/* Canvas: the step to do next, after coming back from the Canvas tab. */
+.guide-steps > li.is-next { border-radius: 12px; outline: 2px solid var(--accent); outline-offset: 6px; }
+.canvas-welcome {
+  margin: 14px 0 4px; padding: 12px 14px; border-radius: 12px; border: 1.5px solid var(--accent);
+  background: var(--accent-soft); color: var(--accent-strong); font-weight: 600; line-height: 1.45;
+}
+.canvas-retry { display: block; margin-top: 6px; }
+#canvas-open[aria-disabled="true"] { opacity: 0.55; }

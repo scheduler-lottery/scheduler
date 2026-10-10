@@ -103,9 +103,24 @@
   {% endif %}
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
-      <div class="flash-stack" role="status">
+      {# What just happened. With scripts on, these come up in the upper part
+         of the window over the page, blurred for a moment (app.js); good
+         news fades after a while, and problems stay until closed. #}
+      <div class="flash-stack" role="status" data-flash-stack>
       {% for category, message in messages %}
-        <div class="flash flash-{{ category }}">{{ message | local_times }}</div>
+        <div class="flash flash-{{ category }}">
+          <span class="flash-icon" aria-hidden="true">
+            {%- if category == 'error' -%}
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 6.5v7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><circle cx="12" cy="17.6" r="1.6" fill="currentColor"/></svg>
+            {%- elif category == 'success' -%}
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6 12.5l4 4 8-8.5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            {%- else -%}
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="6.8" r="1.6" fill="currentColor"/><path d="M12 10.5v7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
+            {%- endif -%}
+          </span>
+          <p class="flash-text">{{ message | local_times }}</p>
+          <button type="button" class="flash-close" aria-label="Close this message">×</button>
+        </div>
       {% endfor %}
       </div>
     {% endif %}

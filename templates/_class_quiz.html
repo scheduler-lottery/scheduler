@@ -55,26 +55,32 @@
     <h3 class="quiz-q" tabindex="-1">Get your class list from Canvas</h3>
     <p class="quiz-school">Your school's Canvas: <strong data-school-name>{{ canvas.name if canvas else 'not chosen yet' }}</strong>
       <button type="button" class="btn-link" data-go="school">Change</button></p>
-    <ol class="guide-steps">
-      <li><strong>Open your course in Canvas.</strong>
-        <a class="btn btn-secondary btn-small" data-canvas-home href="https://{{ canvas.domain if canvas else 'canvas.instructure.com' }}/courses" target="_blank" rel="noopener">Open Canvas</a>
-        <span class="mini-hint">It opens in a new tab, so this page stays right here.</span></li>
-      <li><strong>Copy your course's address</strong> from the top of the browser, and paste it here:
+    {# Signing in to Canvas often lands on Canvas's home page instead of
+       where a link pointed, so the two Canvas links are separate steps, and
+       when this tab is looked at again it says what's next (app.js). #}
+    <ol class="guide-steps" data-canvas-steps>
+      <li data-canvas-step="signin"><strong>Sign in to Canvas, and open your course.</strong>
+        <a class="btn btn-secondary btn-small" data-canvas-home data-canvas-went="signin" href="https://{{ canvas.domain if canvas else 'canvas.instructure.com' }}/courses" target="_blank" rel="noopener">Open Canvas</a>
+        <span class="mini-hint">It opens in a new tab: sign in there if it asks. This page stays right here.</span></li>
+      <li data-canvas-step="course"><strong>Copy your course's address</strong> from the top of the browser, and paste it here:
         <div class="canvas-open" data-canvas-guide data-sheet="{{ sheet.id }}">
           <label for="canvas-course" class="visually-hidden">Your Canvas course address</label>
           <input type="text" id="canvas-course" placeholder="e.g., https://canvas.myschool.edu/courses/123456" autocomplete="off" spellcheck="false">
           <p class="mini-hint" data-canvas-status>We'll remember it on this computer for this sheet.</p>
         </div></li>
-      <li><strong>Open the student list and download it.</strong>
-        <a class="btn btn-primary btn-small" id="canvas-open" href="https://{{ canvas.domain if canvas else 'canvas.instructure.com' }}/courses" target="_blank" rel="noopener">Open my class's student list</a>
+      <li data-canvas-step="list"><strong>Open the student list and download it.</strong>
+        <a class="btn btn-primary btn-small" id="canvas-open" data-canvas-went="list" href="https://{{ canvas.domain if canvas else 'canvas.instructure.com' }}/courses" target="_blank" rel="noopener">Open my class's student list</a>
         <span class="mini-hint" data-canvas-where>It opens Canvas's New Analytics page for your course.</span>
-        Then click <strong>Download CSV</strong>, the download icon at the top right of the student table.</li>
-      <li><strong>Drag the downloaded file</strong> (usually <code>students.csv</code>, in your Downloads folder) into the box below.</li>
+        Then click <strong>Download CSV</strong>, the download icon at the top right of the student table.
+        <span class="mini-hint canvas-retry">Landed on Canvas's home page instead? That happens right after signing in. Click the button again: now it goes straight there.</span></li>
+      <li data-canvas-step="drop"><strong>Drag the downloaded file</strong> (usually <code>students.csv</code>, in your Downloads folder) into the box below.</li>
     </ol>
+    <p class="canvas-welcome" data-canvas-welcome role="status" hidden></p>
     <details class="quiz-help">
       <summary>Stuck?</summary>
       <p><strong>No Download CSV button?</strong> In New Analytics, open the <strong>Reports</strong> tab and click <strong>Run Report</strong> next to <strong>Class Roster</strong>. That file works too.</p>
       <p><strong>No New Analytics in the course menu?</strong> Go to <strong>Settings → Navigation</strong>, drag it into the visible list, and click <strong>Save</strong>.</p>
+      <p><strong>Can't download the list at all?</strong> Copy it from <a data-canvas-people href="https://{{ canvas.domain if canvas else 'canvas.instructure.com' }}/courses" target="_blank" rel="noopener">your course's People page</a> instead: select the whole table, copy it, and paste it under <button type="button" class="btn-link" data-go="paste">Type or paste your students</button>.</p>
       <p><strong>Students missing?</strong> The course has to be published, and Canvas can take a day or two to add new enrollments.</p>
       <p><strong>Afterwards</strong>, delete the downloaded file: it holds grades and more that this site doesn't keep.</p>
     </details>

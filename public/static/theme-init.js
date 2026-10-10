@@ -31,4 +31,7 @@
   // Hide the page until its fonts are in (app.js shows it), so nothing
   // flashes from a stand-in font to the real one.
   if (document.fonts) root.classList.add("fonts-loading");
+  // Scripts run here, so what needs them can count on them (messages float
+  // over the page only when they can be closed).
+  root.classList.add("js");
 })();

@@ -10,6 +10,7 @@
     if (shown) return;
     shown = true;
     root.classList.remove("fonts-loading");
+    document.dispatchEvent(new Event("page-shown"));
   };
   setTimeout(show, 2500);
   var want = function (face) {
@@ -46,17 +47,50 @@
     return null;
   }
 
-  // Flash messages: click to dismiss; good news fades on its own, but
-  // problems stay until you've seen them.
-  document.querySelectorAll(".flash-stack .flash").forEach(function (el) {
-    var dismiss = function () {
-      el.classList.add("leaving");
-      setTimeout(function () { el.remove(); }, 400);
+  // Messages about what just happened: once the page shows, they come up in
+  // the upper part of the window, the page behind blurred for a moment.
+  // Good news fades after a while; problems stay until they're closed.
+  var stack = document.querySelector("[data-flash-stack]");
+  if (stack) {
+    var notes = Array.prototype.slice.call(stack.querySelectorAll(".flash"));
+    var dismiss = function (note) {
+      if (!note.parentNode) return;
+      note.classList.add("leaving");
+      setTimeout(function () {
+        note.remove();
+        if (!stack.querySelector(".flash")) stack.remove();
+      }, 350);
     };
-    el.title = "Click to dismiss";
-    el.addEventListener("click", dismiss);
-    if (!el.classList.contains("flash-error")) setTimeout(dismiss, 7000);
-  });
+    notes.forEach(function (note) {
+      note.querySelector(".flash-close").addEventListener("click", function () { dismiss(note); });
+    });
+    var arrive = function () {
+      // Over everything else on the page, and put back in so screen readers
+      // read them out.
+      document.body.appendChild(stack);
+      notes.forEach(function (note) { note.remove(); });
+      setTimeout(function () {
+        var veil = document.createElement("div");
+        veil.className = "flash-veil";
+        veil.setAttribute("aria-hidden", "true");
+        document.body.appendChild(veil);
+        veil.addEventListener("animationend", function () { veil.remove(); });
+        setTimeout(function () { veil.remove(); }, 3000);
+        notes.forEach(function (note) {
+          stack.appendChild(note);
+          if (!note.classList.contains("flash-error")) setTimeout(function () { dismiss(note); }, 8000);
+        });
+      }, 50);
+    };
+    if (!document.documentElement.classList.contains("fonts-loading")) {
+      arrive();
+    } else {
+      var arrived = false;
+      var once = function () { if (!arrived) { arrived = true; arrive(); } };
+      document.addEventListener("page-shown", once);
+      setTimeout(once, 3100); // the page shows by itself after 3 seconds
+    }
+  }
 
   // Close buttons on the notes pinned to the bottom of the screen.
   document.addEventListener("click", function (e) {
@@ -447,6 +481,7 @@
       if (!found) {
         var host = (quizBox && quizBox.getAttribute("data-canvas-host")) || store("canvas-host") || "canvas.instructure.com";
         openLink.href = "https://" + host + "/courses";
+        openLink.setAttribute("aria-disabled", "true"); // until there's a course to open
         openLink.textContent = "Open my class's student list";
         where.textContent = "Paste your course's address above first, and this button goes straight to its student list.";
         status.textContent = courseInput.value.trim()
@@ -461,6 +496,8 @@
       var tool = found.tool || learned[found.host] || KNOWN_TOOLS[found.host];
       openLink.href = "https://" + found.host + "/courses/" + found.course
         + (tool ? "/external_tools/" + tool + "?launch_type=course_navigation" : "");
+      if (people) people.href = "https://" + found.host + "/courses/" + found.course + "/users";
+      openLink.removeAttribute("aria-disabled");
       openLink.textContent = "Open my class's student list";
       where.textContent = tool
         ? "It opens New Analytics for your course."
@@ -472,8 +509,50 @@
       }
     };
     courseInput.value = store(courseKey) || "";
+    var people = document.querySelector("[data-canvas-people]");
     applyCourse(false);
     courseInput.addEventListener("input", function () { applyCourse(true); });
+    // Without a course address, the button would only open Canvas's list
+    // of courses: point at step 2 instead.
+    openLink.addEventListener("click", function (e) {
+      if (openLink.getAttribute("aria-disabled") !== "true") return;
+      e.preventDefault();
+      status.textContent = "Paste your course's address here first, and that button goes straight to its student list.";
+      courseInput.focus();
+    });
+
+    // Back from Canvas (this tab looked at again): say what's next, right
+    // where it's needed. Signing in there often ends on Canvas's home page
+    // instead of where the link pointed, so that's covered too.
+    var canvasSteps = document.querySelector("[data-canvas-steps]");
+    var welcome = document.querySelector("[data-canvas-welcome]");
+    var went = "";
+    document.querySelectorAll("[data-canvas-went]").forEach(function (link) {
+      link.addEventListener("click", function () {
+        if (link.getAttribute("aria-disabled") !== "true") went = link.getAttribute("data-canvas-went");
+      });
+    });
+    var cameBack = function () {
+      if (!went || document.visibilityState === "hidden" || !welcome) return;
+      var next = went === "signin" && !readCourse(courseInput.value) ? "course" : went === "signin" ? "list" : "drop";
+      went = "";
+      welcome.textContent = {
+        course: "Welcome back. Signed in to Canvas? In that tab, open your course, copy the address from the top of the browser, and paste it in step 2.",
+        list: "Welcome back. You're signed in to Canvas, so “Open my class's student list” in step 3 goes straight there now.",
+        drop: "Welcome back. Downloaded the student list? Drag the file into the box below. If Canvas showed its home page instead, click “Open my class's student list” again: you're signed in now, so it goes straight there.",
+      }[next];
+      welcome.hidden = false;
+      canvasSteps.querySelectorAll("[data-canvas-step]").forEach(function (li) {
+        li.classList.toggle("is-next", li.getAttribute("data-canvas-step") === next);
+      });
+      var target = next === "course" ? courseInput : next === "list" ? openLink : document.querySelector("[data-quiz-drop]");
+      if (target) {
+        target.scrollIntoView({ block: "center", behavior: "smooth" });
+        if (target === courseInput) courseInput.focus({ preventScroll: true });
+      }
+    };
+    document.addEventListener("visibilitychange", cameBack);
+    window.addEventListener("focus", cameBack);
   }
 
   // Name fields start read-only so browsers don't autofill a stranger's name

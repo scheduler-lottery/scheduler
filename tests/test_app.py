@@ -2728,3 +2728,14 @@ def test_setup_parts_link_back_and_the_sheet_is_a_draft_until_set_up(prof):
     assert "Seminar in Law" in raw(prof.get(r.headers["Location"]))
     # Once set up, the class page doesn't say draft.
     assert "draft-badge" not in raw(prof.get(f"/teach/s/{sid}"))
+
+
+def test_messages_can_be_closed_and_canvas_steps_pick_up_after_signing_in(prof, browser):
+    sid = prof.create_sheet(allow_unlisted=False)
+    page = raw(prof.get(f"/teach/s/{sid}"))
+    assert 'data-canvas-went="signin"' in page and 'data-canvas-went="list"' in page
+    assert "data-canvas-welcome" in page and "data-canvas-people" in page
+    r = prof.post(f"/teach/s/{sid}/roster", {"pasted": ""})
+    page = raw(prof.get(r.headers["Location"]))
+    assert 'data-flash-stack' in page and 'class="flash-close" aria-label="Close this message"' in page
+    assert "flash-error" in page
