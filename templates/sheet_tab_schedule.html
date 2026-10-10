@@ -1,0 +1,250 @@
+{% extends "sheet_admin.html" %}
+{# The Schedule tab: running the bidding. Close sign-ups, make the
+   schedule, see it day by day, move people, publish. #}
+{% block sheet_body %}
+<p class="tab-lead">
+  {% if counts.roster %}<strong>{{ counts.listed_submissions }} of {{ counts.roster }}</strong> on your list {{ 'has' if counts.listed_submissions == 1 else 'have' }} ranked{% else %}<strong>{{ counts.submissions | plural('person has', 'people have') }}</strong> ranked{% endif %},
+  and sign-ups are <strong>{{ 'open' if sheet.bidding_open else 'closed' }}</strong>.
+  <a href="{{ tab_href(sheet.id, 'signups') }}">See who has signed up</a>
+</p>
+
+{# -------------------------------------------------------------- schedule #}
+<section class="card" id="schedule">
+  <h2 class="card-heading">Schedule</h2>
+
+  {% if seat_warning %}
+  <div class="warn-box">
+    <p>{% if seat_warning.counting_unranked %}{{ seat_warning.people }} students ({{ seat_warning.ranked }} ranked{{ ' so far' if sheet.bidding_open }}, and those who don't rank get leftover seats){% else %}{{ seat_warning.people }} people have ranked{% endif %}, but there are only {{ seat_warning.seats }} seats ({{ days | length }} days × {{ sheet.capacity_per_day }}).
+    Raise seats per day to {{ seat_warning.need }}, or add {{ seat_warning.more_days | plural('more day') }} — otherwise some students won't get a day.</p>
+    <form method="post" action="{{ url_for('teach.set_capacity', sid=sheet.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="capacity" value="{{ seat_warning.need }}">
+      <button type="submit" class="btn btn-secondary btn-small">Set seats per day to {{ seat_warning.need }}</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="settings-row">
+    <form method="post" action="{{ url_for('teach.set_capacity', sid=sheet.id) }}" class="capacity-row">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="capacity">Seats per day:</label>
+      <input type="number" id="capacity" name="capacity" min="1" max="500" value="{{ sheet.capacity_per_day }}">
+      <button type="submit" class="btn btn-secondary btn-small">Update</button>
+    </form>
+    {% if counts.roster %}
+    <form method="post" action="{{ url_for('teach.set_unranked', sid=sheet.id) }}" class="capacity-row">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if sheet.include_unranked %}
+      <span>Students who don't rank get the seats that are left.</span>
+      <input type="hidden" name="include_unranked" value="0">
+      <button type="submit" class="btn-link">Leave them off the schedule instead</button>
+      {% else %}
+      <span>Students who don't rank are left off the schedule.</span>
+      <input type="hidden" name="include_unranked" value="1">
+      <button type="submit" class="btn-link">Give them the leftover seats instead</button>
+      {% endif %}
+    </form>
+    {% endif %}
+  </div>
+
+  {% if sheet.bidding_open %}
+  <div class="run-row">
+    <form method="post" action="{{ url_for('teach.close_and_schedule', sid=sheet.id) }}"
+          data-confirm="{% if counts.waiting > 0 %}{{ counts.waiting }} of {{ counts.roster }} students on your list {{ 'hasn' if counts.waiting == 1 else 'haven' }}'t ranked yet{% if sheet.include_unranked %} — they'll get whatever seats are left{% else %} and won't get a day{% endif %}. {% endif %}{% if counts.unlisted_submissions and counts.roster %}{{ counts.unlisted_submissions | plural('ranking is', 'rankings are') }} from names not on your list. {% endif %}{% if manual_moves %}Your hand-made moves ({{ manual_moves | join(', ') }}) will be replaced — you can undo. {% endif %}Close sign-ups and make the schedule now?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-primary btn-large" {{ 'disabled' if not counts.submissions and not counts.test_submissions }}>Close sign-ups and make the schedule</button>
+    </form>
+    <a class="btn btn-ghost" href="{{ url_for('teach.draft', sid=sheet.id) }}">Peek at a draft (nothing is saved)</a>
+  </div>
+  <p class="mini-hint">A student is never put on a day they marked as one they can't do. If every day they can do fills up (or they marked every day), they're left without a day and listed here for you to place, with their notes — nobody is bumped to make room.</p>
+  {% elif not has_schedule %}
+  <div class="run-row">
+    <form method="post" action="{{ url_for('teach.run_assignment', sid=sheet.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-primary btn-large">Make the schedule</button>
+    </form>
+  </div>
+  {% endif %}
+
+  {% if has_schedule %}
+    {% if sheet.bidding_open %}
+    <div class="warn-box"><p>This schedule was made before you reopened sign-ups, so it may be out of date. Close sign-ups to make it again.</p></div>
+    {% elif stale and not published %}
+    <div class="warn-box">
+      <p>Rankings or settings changed after you made this schedule. Nobody has seen it yet, so make it again to use them.</p>
+      <form method="post" action="{{ url_for('teach.run_assignment', sid=sheet.id) }}"
+            data-confirm="Make the schedule again? Everyone's day is worked out fresh from the rankings{% if manual_moves %}, and your hand-made moves ({{ manual_moves | join(', ') }}) are replaced{% endif %}. You can undo it.">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary">Make the schedule again</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% set auto_cant = cant_do | rejectattr('method', 'equalto', 'manual') | list %}
+    {% set moved_cant = cant_do | selectattr('method', 'equalto', 'manual') | list %}
+    {% if auto_cant %}
+    <div class="problem-box">
+      <p><strong>{{ auto_cant | length | plural('student is', 'students are') }} on a day they said they can't do</strong> (from a schedule made before this site stopped doing that):</p>
+      <ul>{% for r in auto_cant %}<li><bdi>{{ r.name }}</bdi> — {{ r.label }}{% if r.note %}: “{{ r.note }}”{% endif %}</li>{% endfor %}</ul>
+      <p class="mini-hint">Read their notes, then move them by hand below if you can.</p>
+    </div>
+    {% endif %}
+    {% if moved_cant %}
+    <div class="problem-box">
+      <p><strong>You moved {{ moved_cant | length | plural('student') }} onto a day they said they can't do:</strong></p>
+      <ul>{% for r in moved_cant %}<li><bdi>{{ r.name }}</bdi> — {{ r.label }}{% if r.note %}: “{{ r.note }}”{% endif %}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+    {% if over_days %}
+    {% set squeezed = placed | selectattr('squeezed') | list %}
+    <div class="problem-box">
+      <p><strong>Over the seat limit:</strong>
+      {% for d in over_days %}{{ d.label }} has {{ day_counts[d.key] }} people for {{ sheet.capacity_per_day | plural('seat') }}{% if not loop.last %}; {% endif %}{% endfor %}.</p>
+      {% if squeezed %}<p>Squeezed onto a full day because every day they could do was full: {% for r in squeezed %}<bdi>{{ r.name }}</bdi> ({{ r.label }}){% if not loop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+      <p class="mini-hint">Raise seats per day, or move people by hand below.</p>
+    </div>
+    {% endif %}
+    {% if unlisted_on_schedule and counts.roster %}
+    <p class="mini-hint">On the schedule but not on your class list: {% for r in unlisted_on_schedule %}<bdi>{{ r.name }}</bdi>{% if not loop.last %}, {% endif %}{% endfor %}. That's fine if you meant it; otherwise link or delete their rankings under <a href="{{ tab_href(sheet.id, 'signups') }}">Sign-ups</a>.</p>
+    {% endif %}
+    {% if without_day %}
+    <div class="problem-box" id="no-day">
+      <p><strong>{{ without_day | plural('student has', 'students have') }} no day yet</strong>{% if published %} — they can see that{% endif %}:</p>
+      <ul class="no-day-list">
+        {% for r in needs_day %}
+        <li><bdi>{{ r.name }}</bdi> —
+          {% if r.reason == 'full' %}every day they can do is full{% if r.cant %} (can't do {{ r.cant | join(' · ') }}){% endif %}
+          {% elif r.reason == 'room' %}there's now room on a day they can do ({{ r.room[:3] | join(', ') }}){% if r.cant %}; can't do {{ r.cant | join(' · ') }}{% endif %}
+          {% elif r.reason == 'ruled-out' %}marked every day as one they can't do
+          {% else %}ranked (or changed their ranking) after you made the schedule{% if r.cant %}; can't do {{ r.cant | join(' · ') }}{% endif %}
+          {% endif %}
+          {% for label, text in r.notes %}<br><span class="mini-hint">{{ label }}: “{{ text }}”</span>{% endfor %}
+        </li>
+        {% endfor %}
+        {% if didnt_rank %}
+        <li>Didn't rank ({{ didnt_rank | length }}): {% for r in didnt_rank %}<bdi>{{ r.display_name }}</bdi>{% if not loop.last %}, {% endif %}{% endfor %}</li>
+        {% endif %}
+      </ul>
+      {% if fill_count %}
+      <form method="post" action="{{ url_for('teach.give_open_seats', sid=sheet.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary btn-small">Give them the open seats ({{ fill_count | plural('student gets', 'students get') }} a day)</button>
+      </form>
+      <p class="mini-hint">Nobody who already has a day moves. Each student who ranked gets the highest day on their own list that still has a seat — never one they said they can't do{% if didnt_rank %}; students who didn't rank get any open seat{% endif %}.{% if fill_count < without_day %} The rest still need a day after that — move them by hand below.{% endif %}</p>
+      {% elif stale and not published %}
+      <p class="mini-hint">Press “Make the schedule again” above to use your new settings — it fits in everyone it can.</p>
+      {% elif not open_seats %}
+      <p class="mini-hint">There are no open seats. Raise seats per day (or add a day){% if published %}, then come back here and press “Give them the open seats”{% else %}, then make the schedule again{% endif %} — or move someone by hand below. Nobody is bumped automatically, so a can't-do mark can't be used to jump the line.</p>
+      {% else %}
+      <p class="mini-hint">The only open seats are on days they said they can't do. Read their notes, then move them by hand below — or raise seats per day.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if tests_left_out %}<p class="mini-hint">Test students are left out, because real students have ranked.</p>{% endif %}
+
+    <div class="day-columns">
+      {% for d in days %}
+      <div class="day-column{{ ' over' if day_counts[d.key] > sheet.capacity_per_day }}">
+        <h3>{{ d.label }}</h3>
+        <p class="mini-hint">{{ day_counts[d.key] | plural('person', 'people') }} · {{ sheet.capacity_per_day | plural('seat') }}</p>
+        <ul class="assign-list">
+          {% for a in by_day[d.key] %}
+          <li class="{{ 'flagged' if a.cant or a.over }}">
+            <bdi>{{ a.name }}</bdi>
+            {% if a.choice %}<span class="tag" title="Where this day was on their list">choice #{{ a.choice }}</span>{% endif %}
+            {% if a.cant %}<span class="tag tag-danger">said they can't do this day</span>{% endif %}
+            {% if a.squeezed %}<span class="tag tag-danger">squeezed onto a full day</span>{% endif %}
+            {% if not a.ranked and not a.is_test %}<span class="tag">didn't rank</span>{% endif %}
+            {% if a.method == 'manual' %}<span class="tag">moved by you</span>{% endif %}
+            {% if a.ranked and not a.choice %}<span class="tag tag-warn">day added after they ranked</span>{% endif %}
+            {% if a.is_test %}<span class="tag">test</span>{% endif %}
+            {% if a.unlisted and counts.roster %}<span class="tag tag-warn">not on class list</span>{% endif %}
+            {% if a.note %}<div class="comment-note">“{{ a.note }}”</div>{% endif %}
+          </li>
+          {% else %}
+          <li class="muted">Nobody</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endfor %}
+    </div>
+
+    <h3 class="move-heading">Move a student</h3>
+    <form method="post" action="{{ url_for('teach.move_student', sid=sheet.id) }}" class="manual-move-row">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="move-who" class="visually-hidden">Student</label>
+      <select id="move-who" name="name_key" required>
+        {% for p in move_people %}
+        <option value="{{ p.key }}">{{ p.name }} ({{ 'now ' ~ p.now if p.now else 'no day yet' }})</option>
+        {% endfor %}
+      </select>
+      <label for="move-to" class="visually-hidden">New day</label>
+      <select id="move-to" name="day_key" required>
+        {% for d in days %}<option value="{{ d.key }}">{{ d.label }}{% if day_counts[d.key] >= sheet.capacity_per_day %} — full{% endif %}</option>{% endfor %}
+      </select>
+      <button type="submit" class="btn btn-secondary">Move</button>
+    </form>
+
+    <p><a href="{{ url_for('teach.export_csv', sid=sheet.id) }}" class="btn btn-secondary">Download the schedule (opens in Excel)</a></p>
+
+    {% if stale and published and not sheet.bidding_open %}
+    <div class="soft-note">
+      <p class="mini-hint">You changed rankings or settings after publishing. The schedule students see still works as it is{% if not without_day %} — everyone has a day, so there's nothing you need to do{% endif %}. Making it again from scratch could give some students a higher choice, but it would move people who have already seen their day.</p>
+      <form method="post" action="{{ url_for('teach.run_assignment', sid=sheet.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-ghost btn-small">See what a fresh schedule would change (nothing is saved yet)</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if not sheet.bidding_open %}
+    <div class="publish-box" id="publish">
+      {% if published %}
+      <h3>Published — students can see their day</h3>
+      <p>Each student sees their day when they open the class link. Post this to let them know:</p>
+      <label for="publish-message" class="visually-hidden">Message for students</label>
+      <textarea id="publish-message" rows="5" class="announcement">{{ publish_announcement }}</textarea>
+      <div class="helper-row">
+        <button class="btn btn-primary" type="button" data-copy="#publish-message">Copy the schedule-is-ready message</button>
+        <form method="post" action="{{ url_for('teach.unpublish', sid=sheet.id) }}" data-confirm="Hide the schedule from students again?">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-ghost btn-small">Hide it from students</button>
+        </form>
+      </div>
+      <p class="mini-hint">If you move someone now, they see the change right away.</p>
+      {% else %}
+      <h3>Happy with it? Publish it.</h3>
+      <p>Publishing shows each student their own day when they open the class link{% if sheet.show_preview %}, and the whole schedule{% endif %}.</p>
+      {% set nobody = (needs_day | map(attribute='name') | list) + (didnt_rank | map(attribute='display_name') | list) %}
+      {% if nobody %}<p class="warn-line">{{ nobody | length | plural('student has', 'students have') }} no day yet: {{ nobody[:8] | join(', ') }}{{ ' …' if nobody | length > 8 }}. If you publish now, they'll see that they have no day.</p>{% endif %}
+      <form method="post" action="{{ url_for('teach.publish', sid=sheet.id) }}"
+            {% if stale or nobody %}data-confirm="{% if nobody %}{{ nobody | length | plural('student has', 'students have') }} no day yet ({{ nobody[:5] | join(', ') }}{{ ' …' if nobody | length > 5 }}). {% endif %}{% if stale %}The schedule is out of date (rankings or settings changed). {% endif %}Publish it anyway?"{% endif %}>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary btn-large">Publish: show students their day</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+  {% endif %}
+
+  <details class="more-options">
+    <summary>Advanced — how ties are broken (most people never change this)</summary>
+    <form method="post" action="{{ url_for('teach.set_algorithm', sid=sheet.id) }}" class="capacity-row"
+          {% if has_schedule %}data-confirm="The schedule is already made. Changing how ties are broken gives a different draw — students were told the draw is fixed. Change it anyway? (The change is kept in Earlier versions.)"{% endif %}>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="algorithm" class="visually-hidden">Method</label>
+      <select id="algorithm" name="algorithm">
+        {% for algo_id in choosable %}
+        <option value="{{ algo_id }}" {{ 'selected' if algo_id == current_algorithm }}>{{ algorithms[algo_id].label }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-secondary btn-small">Use this</button>
+    </form>
+    <p class="mini-hint">{{ algorithms[current_algorithm].description }}</p>
+    <form method="post" action="{{ url_for('teach.compare', sid=sheet.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-ghost btn-small" {{ 'disabled' if not submissions }}>Compare the options on your class's rankings</button>
+    </form>
+  </details>
+</section>
+{% endblock %}

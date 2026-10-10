@@ -3,7 +3,7 @@
 {% block page_class %} page-wide{% endblock %}
 {% block content %}
 <div class="card">
-  <p class="eyebrow"><a href="{{ url_for('teach.sheet', sid=sheet.id) }}#schedule" class="link-muted">← {{ sheet.title }}</a></p>
+  <p class="eyebrow"><a href="{{ tab_href(sheet.id, 'schedule') }}" class="link-muted">← {{ sheet.title }}</a></p>
   <h1>Draft schedule</h1>
   <p class="subtitle">
     How the schedule would come out if you closed sign-ups right now. Nothing is saved.
@@ -42,6 +42,6 @@
     </div>
     {% endfor %}
   </div>
-  <p><a class="btn btn-secondary" href="{{ url_for('teach.sheet', sid=sheet.id) }}#schedule">← Back to the sheet</a></p>
+  <p><a class="btn btn-secondary" href="{{ tab_href(sheet.id, 'schedule') }}">← Back to the sheet</a></p>
 </div>
 {% endblock %}

@@ -2,7 +2,7 @@
 {% block title %}Go back to an earlier version — {{ sheet.title }}{% endblock %}
 {% block content %}
 <div class="card">
-  <p class="eyebrow"><a href="{{ url_for('teach.sheet', sid=sheet.id) }}#backups" class="link-muted">← {{ sheet.title }}</a></p>
+  <p class="eyebrow"><a href="{{ tab_href(sheet.id, 'backups') }}" class="link-muted">← {{ sheet.title }}</a></p>
   <h1>{{ 'Restore from a backup file' if file_new else 'Go back to an earlier version' }}</h1>
   <p class="subtitle">
     {% if file_new %}The backup file was taken{% else %}This version was saved{% endif %}
@@ -63,7 +63,7 @@
     {% if file_new and not different_sheet %}
     <button type="submit" name="mode" value="new" class="btn btn-ghost btn-block">Bring it back as a separate new sheet instead</button>
     {% endif %}
-    <a class="btn btn-ghost btn-block" href="{{ url_for('teach.sheet', sid=sheet.id) }}#backups">Cancel</a>
+    <a class="btn btn-ghost btn-block" href="{{ tab_href(sheet.id, 'backups') }}">Cancel</a>
   </form>
   <p class="mini-hint">Whether sign-ups are open stays as it is now. A copy of your sheet as it is now is saved first, so you can undo this.</p>
 </div>

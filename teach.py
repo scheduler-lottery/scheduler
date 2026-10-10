@@ -867,9 +867,42 @@ def _changed_emails(sheet, snap_id, roster_rows):
     return [r["email"] for r in roster_rows if r["name_key"] in changed and r["email"] and not r["is_test"]]
 
 
+# Each class has three tabs: Class (the class at a glance and its sign-ups),
+# Schedule (running the bidding) and Settings (days, backups, deleting).
+# Anchors say which tab a section lives on, for links and redirects.
+SCHEDULE_ANCHORS = {"schedule", "publish", "no-day", "algorithm", "capacity", "move-who", "move-to"}
+SETTINGS_ANCHORS = {"settings", "backups", "danger"}
+TAB_TEMPLATES = {"class": "sheet_tab_class.html", "schedule": "sheet_tab_schedule.html",
+                 "settings": "sheet_tab_settings.html"}
+
+
+@bp.app_template_global()
+def tab_href(sid, anchor=""):
+    """The URL of the tab that holds this section of a sheet, with the anchor."""
+    endpoint = ("teach.schedule_page" if anchor in SCHEDULE_ANCHORS else
+                "teach.settings_page" if anchor in SETTINGS_ANCHORS else "teach.sheet")
+    return url_for(endpoint, sid=sid) + (f"#{anchor}" if anchor and anchor != "top" else "")
+
+
 @bp.route("/s/<sid>")
 @instructor_required
 def sheet(sid):
+    return _sheet_page(sid, "class")
+
+
+@bp.route("/s/<sid>/schedule")
+@instructor_required
+def schedule_page(sid):
+    return _sheet_page(sid, "schedule")
+
+
+@bp.route("/s/<sid>/settings")
+@instructor_required
+def settings_page(sid):
+    return _sheet_page(sid, "settings")
+
+
+def _sheet_page(sid, tab):
     sheet = owned_sheet(sid)
     sid = sheet["id"]
     days = sheets.get_days(sid)
@@ -984,7 +1017,8 @@ def sheet(sid):
     move_people += [{"key": r["name_key"], "name": r["display_name"], "now": None} for r in didnt_rank]
 
     return render_template(
-        "sheet_admin.html",
+        TAB_TEMPLATES[tab],
+        tab=tab,
         sheet=sheet,
         days=days,
         counts=counts,
@@ -1058,7 +1092,7 @@ def _pop_form(name, sid):
 
 
 def _back(sheet, anchor=""):
-    return redirect(url_for("teach.sheet", sid=sheet["id"]) + (f"#{anchor}" if anchor else ""))
+    return redirect(tab_href(sheet["id"], anchor))
 
 
 def _offer_undo(sheet, snap_id, message, parts, key="", tell=False):

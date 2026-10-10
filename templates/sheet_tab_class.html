@@ -1,0 +1,606 @@
+{% extends "sheet_admin.html" %}
+{# The Class tab: the class at a glance (what's next, the class list,
+   trying it as a student, sharing the link, and who has signed up). #}
+{% block sheet_body %}
+<nav class="page-jump" aria-label="On this page">
+  <a href="#class-list">Class list</a>
+  <a href="#try-it">See it as a student</a>
+  <a href="#share">Share</a>
+  <a href="#signups">Sign-ups</a>
+</nav>
+
+{# ------------------------------------------------------- getting started #}
+{% set remaining = steps | rejectattr('done') | list %}
+{% if remaining %}
+<details class="card guide" data-guide="{{ sheet.id }}" open>
+  <summary class="card-heading">Getting started ({{ steps | selectattr('done') | list | length }} of {{ steps | length }} done)</summary>
+  <ol class="checklist">
+    {% for step in steps %}
+    <li class="check-item{{ ' done' if step.done }}">
+      <span class="check-mark" aria-hidden="true">{% if step.done %}<svg viewBox="0 0 24 24" width="14" height="14" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>{% else %}{{ loop.index }}{% endif %}</span>
+      <span class="check-text">
+        <a href="{{ tab_href(sheet.id, step.anchor) }}">{{ step.title }}</a>{% if step.optional and not step.done %} <span class="muted">(optional)</span>{% endif %}
+        {% if step.hint and not step.done %}<span class="check-hint">{{ step.hint }}</span>{% endif %}
+      </span>
+      <span class="visually-hidden">{{ 'done' if step.done else 'to do' }}</span>
+    </li>
+    {% endfor %}
+  </ol>
+</details>
+{% endif %}
+
+{# ------------------------------------------------------------ class list #}
+<section class="card" id="class-list">
+  <h2 class="card-heading">Class list</h2>
+
+  {% if report %}
+  <div class="report{{ ' report-warn' if report.warn }}">
+    <p class="report-main">{{ report.message }}</p>
+    {% if report.tips %}
+    <ul class="tips">{% for tip in report.tips %}<li>{{ tip }}</li>{% endfor %}</ul>
+    {% endif %}
+    <div class="report-foot">
+      {% if report.undo %}
+      <form method="post" action="{{ url_for('teach.undo', sid=sheet.id, snap_id=report.undo) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="parts" value="roster">
+        <button type="submit" class="btn btn-secondary btn-small">Wrong list? Put the previous one back</button>
+      </form>
+      {% endif %}
+      <form method="post" action="{{ url_for('teach.dismiss_report', sid=sheet.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-ghost btn-small">OK, got it</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  {% set paused = roster | selectattr('name_key', 'in', locked) | list %}
+  {% if paused %}
+  <div class="warn-box">
+    <p>Signing in is paused for {{ paused | map(attribute='display_name') | join(', ') }} — too many wrong codes or PINs were tried. If that wasn't them, unlock it:</p>
+    {% for r in paused %}
+    <form method="post" action="{{ url_for('teach.unlock_pin', sid=sheet.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="name_key" value="{{ r.name_key }}">
+      <input type="hidden" name="back" value="class-list">
+      <button type="submit" class="btn btn-secondary btn-small" aria-label="Unlock {{ r.display_name }}'s sign-in">Unlock {{ r.display_name }}</button>
+    </form>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if counts.roster %}
+  <p class="lead-line">
+    <strong>{{ counts.roster | plural('student') }}</strong> on your list{% if counts.roster_with_email == counts.roster %}, all with email addresses — each confirms it's them with an emailed code.{% elif counts.roster_with_email %}: {{ counts.roster_with_email }} with email addresses (they get an emailed code); the rest sign in with a PIN.{% else %}, without email addresses — they sign in by name and a PIN.{% endif %}
+  </p>
+  {% if not counts.roster_with_email %}
+  <p class="warn-line">Without emails, whoever types a name first can claim it. To prevent that, use the Canvas file, which includes emails.</p>
+  {% endif %}
+  <p class="privacy-line">Private: only names and emails are kept, everything is encrypted, and only you can see the list. <button type="button" class="btn-link" data-popover-target="privacy-details" aria-haspopup="dialog">How it's protected</button></p>
+  <div class="helper-row">
+    {% if list_next %}<a class="btn btn-primary btn-small" href="{{ tab_href(sheet.id, list_next.anchor) }}">Next: {{ list_next.title }} →</a>{% endif %}
+    <form method="post" action="{{ url_for('teach.clear_roster', sid=sheet.id) }}" data-confirm="Delete the whole class list and start over? Rankings stay, and you can undo this right after.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-ghost btn-small">Delete this list and start over</button>
+    </form>
+  </div>
+  <details class="replace-list">
+    <summary>Replace it with a new file</summary>
+    {% include "_roster_upload.html" %}
+  </details>
+  {% else %}
+  <p class="lead-line">
+    {% if sheet.allow_unlisted %}
+      No class list yet: anyone with your link can sign up by name and a PIN. A list lets students confirm it's
+      really them with an emailed code, and shows you who hasn't ranked.
+    {% else %}
+      <strong>Next, add your students.</strong> A couple of quick questions, and we'll walk you through it.
+    {% endif %}
+  </p>
+
+  {# The class-list questions: one at a time, with Back (app.js). Without
+     JavaScript every step simply shows, in order. #}
+  <div class="quiz" data-quiz data-sheet="{{ sheet.id }}"
+       data-schools-url="{{ url_for('teach.canvas_schools') }}" data-school-save="{{ url_for('teach.canvas_school') }}"
+       {% if canvas %}data-canvas-host="{{ canvas.domain }}"{% endif %}>
+
+    <section class="quiz-step" data-step="start">
+      <h3 class="quiz-q" tabindex="-1">Do you use Canvas for this class?</h3>
+      <div class="quiz-choices">
+        <button type="button" class="quiz-choice" data-go="{{ 'canvas' if canvas and canvas.saved else 'school' }}">
+          <strong>Yes, my class is in Canvas</strong>
+          <span>We'll walk you through downloading its class list. It takes about a minute.</span>
+        </button>
+        <button type="button" class="quiz-choice" data-go="other">
+          <strong>No, I don't use Canvas</strong>
+          <span>Add students from a spreadsheet, type them in, or let them sign themselves up.</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="quiz-step" data-step="school">
+      <button type="button" class="quiz-back" data-back>← Back</button>
+      <h3 class="quiz-q" tabindex="-1">Which school's Canvas do you use?</h3>
+      {% if canvas %}
+      <p class="quiz-guess">From your email address, it looks like <strong>{{ canvas.name }}</strong> <span class="muted">({{ canvas.domain }})</span>.</p>
+      <div class="quiz-choices">
+        <button type="button" class="quiz-choice" data-school-pick data-domain="{{ canvas.domain }}" data-name="{{ canvas.name }}">
+          <strong>Yes, that's my school</strong>
+        </button>
+        <button type="button" class="quiz-choice" data-school-other>
+          <strong>No, a different school</strong>
+        </button>
+      </div>
+      {% endif %}
+      <div class="school-search" data-school-search{% if canvas %} data-start-hidden{% endif %}>
+        <label class="field-label" for="school-query">Type your school's name</label>
+        <input type="search" id="school-query" data-school-query placeholder="e.g., Northwestern University" autocomplete="off">
+        <ul class="school-results" data-school-results aria-live="polite"></ul>
+        <p class="mini-hint" data-school-status></p>
+        <details class="school-manual">
+          <summary>My school isn't listed</summary>
+          <label class="field-help" for="school-host">Open Canvas and type the start of the address at the top of your browser, like canvas.myschool.edu:</label>
+          <div class="inline-form">
+            <input type="text" id="school-host" data-school-host placeholder="e.g., canvas.myschool.edu" autocomplete="off" spellcheck="false">
+            <button type="button" class="btn btn-secondary btn-small" data-school-host-use>Use this address</button>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <section class="quiz-step" data-step="canvas">
+      <button type="button" class="quiz-back" data-back>← Back</button>
+      <h3 class="quiz-q" tabindex="-1">Get your class list from Canvas</h3>
+      <p class="quiz-school">Your school's Canvas: <strong data-school-name>{{ canvas.name if canvas else 'not chosen yet' }}</strong>
+        <button type="button" class="btn-link" data-go="school">Change</button></p>
+      <ol class="guide-steps">
+        <li><strong>Open your course in Canvas.</strong>
+          <a class="btn btn-secondary btn-small" data-canvas-home href="https://{{ canvas.domain if canvas else 'canvas.instructure.com' }}/courses" target="_blank" rel="noopener">Open Canvas</a>
+          <span class="mini-hint">It opens in a new tab, so this page stays right here.</span></li>
+        <li><strong>Copy your course's address</strong> from the top of the browser, and paste it here:
+          <div class="canvas-open" data-canvas-guide data-sheet="{{ sheet.id }}">
+            <label for="canvas-course" class="visually-hidden">Your Canvas course address</label>
+            <input type="text" id="canvas-course" placeholder="e.g., https://canvas.myschool.edu/courses/123456" autocomplete="off" spellcheck="false">
+            <p class="mini-hint" data-canvas-status>We'll remember it on this computer for this sheet.</p>
+          </div></li>
+        <li><strong>Open the student list and download it.</strong>
+          <a class="btn btn-primary btn-small" id="canvas-open" href="https://{{ canvas.domain if canvas else 'canvas.instructure.com' }}/courses" target="_blank" rel="noopener">Open my class's student list</a>
+          <span class="mini-hint" data-canvas-where>It opens Canvas's New Analytics page for your course.</span>
+          Then click <strong>Download CSV</strong>, the download icon at the top right of the student table.</li>
+        <li><strong>Drag the downloaded file</strong> (usually <code>students.csv</code>, in your Downloads folder) into the box below.</li>
+      </ol>
+      <details class="quiz-help">
+        <summary>Stuck?</summary>
+        <p><strong>No Download CSV button?</strong> In New Analytics, open the <strong>Reports</strong> tab and click <strong>Run Report</strong> next to <strong>Class Roster</strong>. That file works too.</p>
+        <p><strong>No New Analytics in the course menu?</strong> Go to <strong>Settings → Navigation</strong>, drag it into the visible list, and click <strong>Save</strong>.</p>
+        <p><strong>Students missing?</strong> The course has to be published, and Canvas can take a day or two to add new enrollments.</p>
+        <p><strong>Afterwards</strong>, delete the downloaded file: it holds grades and more that this site doesn't keep.</p>
+      </details>
+    </section>
+
+    <section class="quiz-step" data-step="other">
+      <button type="button" class="quiz-back" data-back>← Back</button>
+      <h3 class="quiz-q" tabindex="-1">How would you like to add your students?</h3>
+      <div class="quiz-choices">
+        <button type="button" class="quiz-choice" data-go="file">
+          <strong>From a spreadsheet</strong>
+          <span>An Excel or CSV file with their names, and ideally their emails.</span>
+        </button>
+        <button type="button" class="quiz-choice" data-go="paste">
+          <strong>Type or paste their names and emails</strong>
+          <span>One student per line. Copying a table from anywhere works too.</span>
+        </button>
+        <button type="button" class="quiz-choice" data-go="self">
+          <strong>Let students sign themselves up</strong>
+          <span>No list: anyone with your link adds their own name and picks a PIN.</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="quiz-step" data-step="file">
+      <button type="button" class="quiz-back" data-back>← Back</button>
+      <h3 class="quiz-q" tabindex="-1">Drag your spreadsheet into the box below</h3>
+      <p class="quiz-note">It needs a column of names, ideally headed “Name”, and ideally a column of emails, so students can confirm it's them with an emailed code. Every other column is thrown away the moment it's read.</p>
+    </section>
+
+    <section class="quiz-step" data-step="paste">
+      <button type="button" class="quiz-back" data-back>← Back</button>
+      <h3 class="quiz-q" tabindex="-1">Type or paste your students</h3>
+      <form method="post" action="{{ url_for('teach.upload_roster', sid=sheet.id) }}" class="stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="quiz-pasted" class="field-help">One student per line: their name, a comma, then their email. Without emails, students sign in with a PIN instead of an emailed code.</label>
+        <textarea id="quiz-pasted" name="pasted" rows="8" placeholder="e.g., Alex Johnson, alex.johnson@school.edu&#10;Sam Lee, sam.lee@school.edu"></textarea>
+        <button class="btn btn-primary" type="submit">Add these students</button>
+      </form>
+    </section>
+
+    <section class="quiz-step" data-step="self">
+      <button type="button" class="quiz-back" data-back>← Back</button>
+      <h3 class="quiz-q" tabindex="-1">Let students sign themselves up</h3>
+      <p class="quiz-note">Anyone with your link types their own name and picks a PIN, a number only they know. With no list to check against, look over the names as they come in under Sign-ups. You can add a class list at any time.</p>
+      {% if sheet.allow_unlisted %}
+      <p><strong>That's how this sheet works now.</strong> All that's left is to <a href="{{ tab_href(sheet.id, 'share') }}">share your link</a>.</p>
+      {% else %}
+      <form method="post" action="{{ url_for('teach.set_who', sid=sheet.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="allow_unlisted" value="1">
+        <input type="hidden" name="back" value="share">
+        <button type="submit" class="btn btn-primary">Let students sign themselves up</button>
+      </form>
+      {% endif %}
+    </section>
+
+    <div class="quiz-drop" data-quiz-drop>
+      {% with paste_box=False %}{% include "_roster_upload.html" %}{% endwith %}
+    </div>
+  </div>
+  <p class="privacy-line">Private: only names and emails are kept, everything is encrypted, and only you can see the list. <button type="button" class="btn-link" data-popover-target="privacy-details" aria-haspopup="dialog">How it's protected</button></p>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('teach.set_who', sid=sheet.id) }}" class="who-row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if sheet.allow_unlisted %}
+    <span><strong>Who can sign up:</strong> anyone with the link.</span>
+    <input type="hidden" name="allow_unlisted" value="0">
+    <button type="submit" class="btn-link">Change to “only names on my list”</button>
+    {% else %}
+    <span><strong>Who can sign up:</strong> only names on your list.</span>
+    <input type="hidden" name="allow_unlisted" value="1">
+    <button type="submit" class="btn-link">Change to “anyone with the link”</button>
+    {% endif %}
+  </form>
+
+  <details class="roster-details" {{ 'open' if edit_form or add_form or not roster }}>
+    <summary>{% if roster %}See or change the list ({{ counts.roster }}{% if counts.test_students %} + {{ counts.test_students }} test{% endif %}){% else %}Add one student at a time{% endif %}</summary>
+  <div id="add-student" class="add-student-box">
+    <h3>Add a student who joined late</h3>
+    <form method="post" action="{{ url_for('teach.add_student', sid=sheet.id) }}" class="inline-form add-student">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="add-name" class="visually-hidden">Name</label>
+      <input type="text" id="add-name" name="name" placeholder="Their name" maxlength="60" required value="{{ add_form.name if add_form else '' }}">
+      <label for="add-email" class="visually-hidden">Email</label>
+      <input type="text" id="add-email" name="email" placeholder="Their school email" maxlength="254" value="{{ add_form.email if add_form else '' }}" inputmode="email">
+      <button type="submit" class="btn btn-secondary btn-small">Add</button>
+    </form>
+    {% if add_form and add_form.twin %}
+    <form method="post" action="{{ url_for('teach.add_student', sid=sheet.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="name" value="{{ add_form.name }}">
+      <input type="hidden" name="email" value="{{ add_form.email }}">
+      <input type="hidden" name="same_name" value="1">
+      <button type="submit" class="btn btn-secondary btn-small">Add a second <bdi>{{ add_form.name }}</bdi> ({{ add_form.email }}) — a different student</button>
+    </form>
+    {% endif %}
+  </div>
+    {% if roster %}
+    {% if counts.roster_with_email %}<p class="mini-hint">Student not getting the site's email? Press “Sign-in link” next to their name to send them one from your own email (or read them a code). For the whole class at once: <a href="{{ url_for('teach.email_links', sid=sheet.id) }}">send sign-in links from your own email</a>.</p>{% endif %}
+    <div class="table-wrap">
+      <table class="admin-table compact">
+        <thead><tr><th>Name</th><th>Email</th><th><span class="visually-hidden">Change</span></th></tr></thead>
+        <tbody>
+          {% for r in roster %}
+          {% set editing = edit_form and edit_form.key == r.name_key %}
+          <tr>
+            <td><bdi>{{ r.display_name }}</bdi>{% if r.is_test %} <span class="tag">test</span>{% endif %}</td>
+            <td class="muted">{{ r.email or '—' }}{% if r.name_key in typo_domains %} <span class="tag tag-warn">did you mean …@{{ typo_domains[r.name_key] }}?</span>{% endif %}{% if not r.email and not r.is_test and counts.roster_with_email %} <span class="tag tag-warn" title="Whoever types this name first chooses the PIN">no email — signs in with a PIN</span>{% endif %}</td>
+            <td>
+              {% if not r.is_test %}
+              <div class="row-actions">
+                <details class="row-edit" {{ 'open' if editing }}>
+                  <summary class="btn btn-ghost btn-small" aria-label="Edit {{ r.display_name }}">Edit</summary>
+                  <form method="post" action="{{ url_for('teach.edit_student', sid=sheet.id) }}" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="name_key" value="{{ r.name_key }}">
+                    <label class="visually-hidden" for="edit-name-{{ loop.index }}">Name</label>
+                    <input type="text" id="edit-name-{{ loop.index }}" name="name" value="{{ edit_form.name if editing else r.display_name }}" maxlength="60" required>
+                    <label class="visually-hidden" for="edit-email-{{ loop.index }}">Email</label>
+                    <input type="text" id="edit-email-{{ loop.index }}" name="email" value="{{ edit_form.email if editing else r.email }}" maxlength="254" placeholder="email">
+                    <button type="submit" class="btn btn-secondary btn-small" aria-label="Save {{ r.display_name }}'s details">Save</button>
+                  </form>
+                </details>
+                {% if r.name_key in submissions | map(attribute='key') | list %}
+                <details class="row-edit">
+                  <summary class="btn btn-ghost btn-small" aria-label="Remove {{ r.display_name }}">Remove</summary>
+                  <form method="post" action="{{ url_for('teach.remove_student', sid=sheet.id) }}" class="stack-tight">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="name_key" value="{{ r.name_key }}">
+                    <span class="mini-hint"><bdi>{{ r.display_name }}</bdi> has ranked. Did they drop the class?</span>
+                    <button type="submit" name="delete_ranking" value="1" class="btn btn-danger btn-small" aria-label="Remove {{ r.display_name }} and delete their ranking">Remove and delete their ranking</button>
+                    <button type="submit" name="delete_ranking" value="0" class="btn btn-secondary btn-small" aria-label="Remove {{ r.display_name }} but keep their ranking">Remove, but keep their ranking</button>
+                    <span class="mini-hint">If you keep it, they stay on the schedule but can't sign in to see their day — tell them it yourself.</span>
+                  </form>
+                </details>
+                {% else %}
+                <form method="post" action="{{ url_for('teach.remove_student', sid=sheet.id) }}" data-confirm="Take {{ r.display_name }} off the class list?">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="name_key" value="{{ r.name_key }}">
+                  <button type="submit" class="btn btn-ghost btn-small" aria-label="Remove {{ r.display_name }} from the list">Remove</button>
+                </form>
+                {% endif %}
+                {% if r.email %}
+                <form method="post" action="{{ url_for('teach.signin_code', sid=sheet.id) }}" data-confirm="Make a sign-in link for {{ r.display_name }} to send from your own email (and a code you can read out)?">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="name_key" value="{{ r.name_key }}">
+                  <button type="submit" class="btn btn-ghost btn-small" aria-label="Sign-in link for {{ r.display_name }}">Sign-in link</button>
+                </form>
+                {% endif %}
+                {% if r.name_key in pins %}
+                <form method="post" action="{{ url_for('teach.reset_pin', sid=sheet.id) }}" data-confirm="Reset {{ r.display_name }}'s PIN? Anyone signed in as them is signed out, and they'll choose a new PIN next time.">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="name_key" value="{{ r.name_key }}">
+                  <button type="submit" class="btn btn-ghost btn-small" aria-label="Reset {{ r.display_name }}'s PIN">Reset PIN</button>
+                </form>
+                {% endif %}
+              </div>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </details>
+</section>
+
+{# ---------------------------------------------------------------- try it #}
+<section class="card" id="try-it">
+  <h2 class="card-heading">See it as a student</h2>
+  <p>See exactly what your students will see, in a new tab — you stay signed in here. You'll be a pretend student called <strong>Test Student 1</strong>; its rankings stop counting once real students rank.</p>
+  <form method="post" action="{{ url_for('teach.try_as_student', sid=sheet.id) }}" target="_blank">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-primary" type="submit">See it as a student </button>
+  </form>
+  {% if test_roster %}
+  <p class="mini-hint">Test students on your list: {{ test_roster | map(attribute='display_name') | join(', ') }}.</p>
+  <form method="post" action="{{ url_for('teach.remove_test_students', sid=sheet.id) }}" data-confirm="Remove the test students and anything they ranked?">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-ghost btn-small" type="submit">I'm done — remove the test students</button>
+  </form>
+  {% endif %}
+  <details class="more-options">
+    <summary>Also try the emailed-code sign-in</summary>
+    <p class="mini-hint">Adds Test Student 1 and 2 with their codes going to the inbox below. Then open your student link (if you used “See it as a student”, sign out of Test Student 1 there first), type “Test Student 2”, and enter the code from your email.</p>
+    <form method="post" action="{{ url_for('teach.add_test_students', sid=sheet.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="test-email" class="visually-hidden">Send the test codes to</label>
+      <input type="text" id="test-email" name="email" value="{{ test_email }}" maxlength="254" required inputmode="email">
+      <button class="btn btn-secondary btn-small" type="submit">Add test students</button>
+    </form>
+  </details>
+</section>
+
+{# ----------------------------------------------------------------- share #}
+<section class="card" id="share">
+  <h2 class="card-heading">Share with your class</h2>
+  {% if published %}
+  <p>The schedule is published. To tell your class, post this in Canvas:</p>
+  <label for="announcement-published" class="visually-hidden">Message for students</label>
+  <textarea id="announcement-published" rows="5" class="announcement">{{ publish_announcement }}</textarea>
+  <div class="helper-row">
+    <button class="btn btn-primary" type="button" data-copy="#announcement-published">Copy the schedule-is-ready message</button>
+  </div>
+  {% elif not sheet.bidding_open %}
+  <p class="muted">Sign-ups are closed, so the sign-up message isn't shown. Once you publish the schedule, a “schedule is ready” message appears here.</p>
+  {% elif announcement %}
+  <p>Post this in Canvas (an announcement or a module). Edit it if you like, then copy it:</p>
+  <label for="announcement" class="visually-hidden">Announcement</label>
+  <textarea id="announcement" rows="11" class="announcement">{{ announcement }}</textarea>
+  <div class="helper-row">
+    <button class="btn btn-primary" type="button" data-copy="#announcement"
+            data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}">Copy the sign-up message</button>
+    <span class="field-help">Students can also type the code <strong>{{ sheet.id }}</strong> on the {{ app_name }} home page.</span>
+  </div>
+  {% if counts.roster %}<p class="mini-hint">When someone types three letters of a name on the sign-in page, matching names from your list appear (never emails).</p>{% endif %}
+  {% else %}
+  <p class="muted">Add your class list first — then a ready-made message appears here to copy.</p>
+  {% endif %}
+  <p class="mini-hint">Note to students: {% if sheet.note %}“{{ sheet.note | truncate(140) }}”{% else %}none{% endif %} · <a href="{{ url_for('teach.edit_sheet', sid=sheet.id) }}">{{ 'Edit' if sheet.note else 'Add one' }}</a></p>
+</section>
+
+{# -------------------------------------------------------------- sign-ups #}
+<section class="card" id="signups">
+  <h2 class="card-heading">Sign-ups</h2>
+  <div class="status-row">
+    <span class="count-inline">
+      {% if counts.roster %}
+      <strong>{{ counts.listed_submissions }} of {{ counts.roster }}</strong> on your list {{ 'has' if counts.listed_submissions == 1 else 'have' }} ranked{% if counts.unlisted_submissions %}, plus {{ counts.unlisted_submissions | plural('person', 'people') }} not on your list{% endif %}
+      {% else %}
+      <strong>{{ counts.submissions | plural('person has', 'people have') }}</strong> ranked
+      {% endif %}
+    </span>
+    <form method="post" action="{{ url_for('teach.toggle_bidding', sid=sheet.id) }}"
+          {% if sheet.bidding_open %}data-confirm="{% if counts.waiting > 0 %}{{ counts.waiting }} of {{ counts.roster }} students on your list {{ 'hasn' if counts.waiting == 1 else 'haven' }}'t ranked yet. {% endif %}Close sign-ups now? Students won't be able to change their rankings (you can reopen any time)."{% elif published %}data-confirm="Reopen sign-ups? Students will stop seeing the published schedule until you publish again."{% endif %}>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-secondary">
+        {{ 'Close sign-ups' if sheet.bidding_open else 'Reopen sign-ups' }}
+      </button>
+    </form>
+  </div>
+  {% if nudge %}
+  <div class="nudge">
+    <a class="btn btn-primary" data-compose data-to="{{ nudge.to }}" data-bcc="{{ nudge.bcc }}" data-subject="{{ nudge.subject }}" data-body="{{ nudge.body }}"
+       href="mailto:{{ nudge.to }}?bcc={{ nudge.bcc | replace(' ', '') }}&amp;subject={{ nudge.subject | urlencode }}&amp;body={{ nudge.body | urlencode }}">Nudge the {{ nudge.count }} who haven't ranked</a>
+    <span class="mini-hint">Opens a ready-to-send reminder in your own email, with their addresses in Bcc.</span>
+    {% with picker_id="nudge", mail_why="It's picked to match your email address.", mail_account=me %}{% include "_mail_picker.html" %}{% endwith %}
+  </div>
+  {% endif %}
+
+  {% if stuck %}
+  <div class="callout" id="stuck">
+    <p><strong>Couldn't get a sign-in email today ({{ stuck.people | length }}):</strong> send each one a sign-in link from your own email{% if stuck.people | selectattr('paused') | list %}, or unlock a paused name{% endif %}. <a href="{{ url_for('teach.email_links', sid=sheet.id) }}">Do them all at once</a></p>
+    <ul class="plain-rows">
+      {% for p in stuck.people %}
+      <li class="plain-row">
+        <span><bdi>{{ p.name }}</bdi> <span class="mini-hint">— {{ p.reason }} (<time datetime="{{ p.at }}" data-local="time">{{ p.at[11:16] }}</time>){% if p.link_at %}; you made them a sign-in link at <time datetime="{{ p.link_at }}" data-local="time">{{ p.link_at[11:16] }}</time>{% endif %}</span></span>
+        <span class="row-actions">
+          {% if p.paused %}
+          <form method="post" action="{{ url_for('teach.unlock_pin', sid=sheet.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="name_key" value="{{ p.key }}">
+            <input type="hidden" name="back" value="stuck">
+            <button type="submit" class="btn btn-ghost btn-small" aria-label="Unlock {{ p.name }}'s sign-in">Unlock</button>
+          </form>
+          {% endif %}
+          {% if p.email %}
+          <form method="post" action="{{ url_for('teach.signin_code', sid=sheet.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="name_key" value="{{ p.key }}">
+            <input type="hidden" name="back" value="stuck">
+            <button type="submit" class="btn btn-secondary btn-small" aria-label="Sign-in link for {{ p.name }}">{{ 'New sign-in link' if p.link_at else 'Sign-in link' }}</button>
+          </form>
+          {% endif %}
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="mini-hint">A name leaves this list once that student signs in. (Someone typing a classmate's name can put it here too.)</p>
+  </div>
+  {% endif %}
+
+  {% if not_yet %}
+  <details class="not-yet">
+    <summary>Haven't ranked yet ({{ not_yet | length }})</summary>
+    <p>{% for r in not_yet %}<bdi>{{ r.display_name }}</bdi>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+    {% set emails = not_yet | map(attribute='email') | select | list %}
+    {% if emails %}
+    <textarea id="not-yet-emails" class="visually-hidden" readonly aria-hidden="true" tabindex="-1">{{ emails | join(', ') }}</textarea>
+    <button type="button" class="btn btn-ghost btn-small" data-copy="#not-yet-emails">Copy their emails (to send a reminder)</button>
+    {% endif %}
+  </details>
+  {% endif %}
+
+  {% set with_email = real_roster | selectattr('email') | list %}
+  {% if with_email %}
+  <form method="post" action="{{ url_for('teach.signin_code', sid=sheet.id) }}" class="inline-form code-helper">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="back" value="signups">
+    <label for="code-for">Student not getting the site's email?</label>
+    <select id="code-for" name="name_key" required>
+      <option value="">— pick their name —</option>
+      {% for r in with_email %}<option value="{{ r.name_key }}">{{ r.display_name }}</option>{% endfor %}
+    </select>
+    <button type="submit" class="btn btn-secondary btn-small">Make a sign-in link to send them</button>
+  </form>
+  {% endif %}
+
+  {% if pin_waiting %}
+  <div class="callout">
+    <p><strong>Chose a PIN but {{ 'hasn' if pin_waiting | length == 1 else 'haven' }}'t ranked yet:</strong> if one of them forgot their PIN — or says they never chose one — reset it here.</p>
+    <ul class="plain-rows">
+      {% for p in pin_waiting %}
+      <li class="plain-row">
+        <span><bdi>{{ p.name }}</bdi>{% if not p.listed and counts.roster %} <span class="tag tag-warn">not on class list</span>{% endif %}{% if p.locked %} <span class="tag tag-danger">sign-in paused — too many wrong tries</span>{% endif %}</span>
+        <span class="row-actions">
+          {% if p.locked %}
+          <form method="post" action="{{ url_for('teach.unlock_pin', sid=sheet.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="name_key" value="{{ p.key }}">
+            <button type="submit" class="btn btn-ghost btn-small" aria-label="Unlock {{ p.name }}'s sign-in">Unlock</button>
+          </form>
+          {% endif %}
+          <form method="post" action="{{ url_for('teach.reset_pin', sid=sheet.id) }}" data-confirm="Reset {{ p.name }}'s PIN? Anyone signed in as them is signed out, and they'll choose a new PIN next time.">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="name_key" value="{{ p.key }}">
+            <button type="submit" class="btn btn-ghost btn-small" aria-label="Reset {{ p.name }}'s PIN">Reset PIN</button>
+          </form>
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if unlisted and counts.roster %}
+  <div class="callout">
+    <p><strong>{{ unlisted | length | plural('ranking is', 'rankings are') }} from names not on your class list.</strong>
+    A spelling difference? Link each to the right student — or delete it if it shouldn't count.</p>
+    {% for s in unlisted %}
+    <form method="post" action="{{ url_for('teach.link_student', sid=sheet.id) }}" class="inline-form link-row">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="name_key" value="{{ s.key }}">
+      <span>“<bdi>{{ s.name }}</bdi>” is really</span>
+      <label for="link-{{ loop.index }}" class="visually-hidden">Student on your list</label>
+      <select id="link-{{ loop.index }}" name="to_key" required>
+        <option value="">— pick a student —</option>
+        {% for r in link_choices %}<option value="{{ r.name_key }}" {{ 'selected' if r.name_key == s.likely }}>{{ r.display_name }}{{ ' (likely match)' if r.name_key == s.likely }}</option>{% endfor %}
+      </select>
+      <button type="submit" class="btn btn-secondary btn-small" aria-label="Link {{ s.name }}">Link</button>
+    </form>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if submissions %}
+  <div class="helper-row">
+    <label for="find-student" class="visually-hidden">Find a student</label>
+    <input type="search" id="find-student" placeholder="Find a student…" data-filter="#signups-table tbody tr" class="input-medium">
+    <a class="btn btn-ghost btn-small" href="{{ url_for('teach.rankings_csv', sid=sheet.id) }}">Download rankings (opens in Excel)</a>
+  </div>
+  {% if pins %}<p class="mini-hint">Student forgot their PIN? Press “Reset PIN” next to their name.</p>{% endif %}
+  {% if submissions | length > 30 %}
+  <details class="more-options">
+    <summary>Show all {{ submissions | length }} rankings</summary>
+  {% endif %}
+  <div class="table-wrap">
+  <table class="admin-table" id="signups-table">
+    <thead>
+      <tr><th>Student</th><th>Ranking (favorite first)</th><th>Can't do</th><th>Notes</th><th>Saved</th><th><span class="visually-hidden">Actions</span></th></tr>
+    </thead>
+    <tbody>
+      {% for s in submissions %}
+      <tr>
+        <td>
+          <bdi>{{ s.name }}</bdi>
+          {% if s.is_test %}<span class="tag">test</span>{% endif %}
+          {% if s.unlisted and counts.roster %}<span class="tag tag-warn">not on class list</span>{% endif %}
+          {% if s.has_pin %}<span class="tag" title="Signed in with a name and PIN, not an emailed code">PIN</span>{% endif %}
+          {% if s.locked %}<span class="tag tag-danger">PIN locked — too many wrong tries</span>{% endif %}
+        </td>
+        <td>
+          {% for label in s.ranking %}<span class="chip">{{ label }}</span>{% if not loop.last %} → {% endif %}{% endfor %}
+          {% if s.unranked_days %}<span class="mini-hint">not ranked yet: {{ s.unranked_days | join(', ') }}</span>{% endif %}
+        </td>
+        <td>{% for label in s.excluded %}<span class="chip chip-danger">{{ label }}</span>{% endfor %}</td>
+        <td>{% for label, text in s.comments %}<div class="comment-note"><strong>{{ label }}:</strong> {{ text }}</div>{% endfor %}</td>
+        <td class="muted nowrap"><time datetime="{{ s.updated_at }}" data-local>{{ s.updated_at[:16] }}</time></td>
+        <td>
+          <div class="row-actions">
+          {% if s.locked %}
+          <form method="post" action="{{ url_for('teach.unlock_pin', sid=sheet.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="name_key" value="{{ s.key }}">
+            <button type="submit" class="btn btn-ghost btn-small" aria-label="Unlock {{ s.name }}'s PIN">Unlock</button>
+          </form>
+          {% endif %}
+          {% if s.has_pin %}
+          <details class="row-edit">
+            <summary class="btn btn-ghost btn-small" aria-label="Reset {{ s.name }}'s PIN">Reset PIN</summary>
+            <form method="post" action="{{ url_for('teach.reset_pin', sid=sheet.id) }}" class="stack-tight">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="name_key" value="{{ s.key }}">
+              <span class="mini-hint">Anyone signed in as <bdi>{{ s.name }}</bdi> is signed out, and they choose a new PIN next time.</span>
+              <button type="submit" name="delete_ranking" value="0" class="btn btn-secondary btn-small" aria-label="Reset {{ s.name }}'s PIN and keep the ranking">Reset PIN, keep the ranking</button>
+              <button type="submit" name="delete_ranking" value="1" class="btn btn-danger btn-small" aria-label="Reset {{ s.name }}'s PIN and delete the ranking">Reset PIN and delete the ranking (someone else made it)</button>
+            </form>
+          </details>
+          {% endif %}
+          <form method="post" action="{{ url_for('teach.delete_submission', sid=sheet.id) }}" data-confirm="Delete {{ s.name }}'s ranking{{ ' and notes' if s.comments }}? You can undo this right after.">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="name_key" value="{{ s.key }}">
+            <button type="submit" class="btn btn-ghost btn-small" aria-label="Delete {{ s.name }}'s ranking">Delete ranking</button>
+          </form>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% if submissions | length > 30 %}</details>{% endif %}
+  {% else %}
+  <p class="muted">No one has ranked the days yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

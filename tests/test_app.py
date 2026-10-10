@@ -355,7 +355,8 @@ def test_upload_warns_when_seats_run_short_and_about_strays(prof, browser):
     sid = prof.create_sheet(days=("Mon", "Tue"), capacity=1)
     browser().sign_in_student(sid, "Someone Else").rank(sid, day_keys(sid))
     page = follow(prof, prof.upload(sid))
-    assert "only 2 seats" in page and "Set seats per day to 2" in page
+    assert "only 2 seats" in page
+    assert "Set seats per day to 2" in html(prof.get(f"/teach/s/{sid}/schedule"))
     assert "Someone Else" in page and "not on this list" in page
 
 
@@ -651,7 +652,7 @@ def test_close_and_make_the_schedule_in_one_step_and_publish(prof, browser):
     result = assigned(prof.app, sid)
     assert len(result) == 2 and {d for d, _ in result.values()} == set(keys)
     assert q(prof.app, "SELECT bidding_open FROM sheets WHERE id = :sid", sid=sid) == 0
-    page = html(prof.get(f"/teach/s/{sid}"))
+    page = html(prof.get(f"/teach/s/{sid}/schedule"))
     assert "Publish: show students their day" in page
 
     ana = browser().sign_in_student(sid, "Ana Able")
@@ -690,7 +691,7 @@ def test_cant_do_is_a_real_constraint_and_the_professor_decides(prof, browser):
     result = assigned(prof.app, sid)
     assert result.get("ana able", (None,))[0] != keys[0]
     if "ana able" not in result:
-        page = text(prof.get(f"/teach/s/{sid}"))
+        page = text(prof.get(f"/teach/s/{sid}/schedule"))
         assert "1 student has no day yet" in page and "clinic shift" in page
         assert "Ana Able — every day they can do is full (can't do Mon, Mar 1)" in page
 
@@ -708,7 +709,7 @@ def test_students_who_did_not_rank_get_leftover_seats_or_a_list(prof, browser):
     prof.post(f"/teach/s/{sid}/unranked", {"include_unranked": "0"})
     prof.post(f"/teach/s/{sid}/run")
     assert set(assigned(prof.app, sid)) == {"sam lee"}
-    page = text(prof.get(f"/teach/s/{sid}"))
+    page = text(prof.get(f"/teach/s/{sid}/schedule"))
     assert "Didn't rank (2)" in page and "Give them the open seats (2 students get a day)" in page
     prof.post(f"/teach/s/{sid}/open-seats")
     assert set(assigned(prof.app, sid)) == {"sam lee", "alex johnson", "riya patel"}
@@ -749,9 +750,9 @@ def test_schedule_goes_out_of_date_when_inputs_change(prof, browser):
     sid = prof.create_sheet(days=("Mon", "Tue"), capacity=2)
     rankers(browser, sid, [("Ana Able", [0, 1], [])])
     prof.post(f"/teach/s/{sid}/close-and-schedule")
-    assert "out of date" not in html(prof.get(f"/teach/s/{sid}"))
+    assert "out of date" not in html(prof.get(f"/teach/s/{sid}/schedule"))
     prof.post(f"/teach/s/{sid}/capacity", {"capacity": "1"})
-    assert "out of date" in html(prof.get(f"/teach/s/{sid}"))
+    assert "out of date" in html(prof.get(f"/teach/s/{sid}/schedule"))
     assert "between 1 and 500" in follow(prof, prof.post(f"/teach/s/{sid}/capacity", {"capacity": "900"}))
 
 
@@ -862,7 +863,7 @@ def test_restore_points_say_what_they_hold_and_skip_duplicates(prof, browser):
     prof.post(f"/teach/s/{sid}/toggle")
     prof.post(f"/teach/s/{sid}/toggle")  # closed twice, nothing changed in between
     assert q(prof.app, "SELECT COUNT(*) FROM snapshots WHERE sheet_id = :sid", sid=sid) == 1
-    assert "1 ranking · 0 on the class list" in html(prof.get(f"/teach/s/{sid}"))
+    assert "1 ranking · 0 on the class list" in html(prof.get(f"/teach/s/{sid}/settings"))
 
 
 def test_delete_all_downloads_a_backup_and_can_be_undone(prof, browser):
@@ -1287,7 +1288,7 @@ def test_students_who_did_not_rank_only_fill_open_seats(prof, browser):
     prof.post(f"/teach/s/{sid}/close-and-schedule")
     result = assigned(prof.app, sid)
     assert len(result) == 2 and all(m in ("preference", "unranked") for _d, m in result.values())
-    page = text(prof.get(f"/teach/s/{sid}"))
+    page = text(prof.get(f"/teach/s/{sid}/schedule"))
     assert "Didn't rank (1)" in page and "There are no open seats" in page
     assert "no open seats" in follow(prof, prof.post(f"/teach/s/{sid}/open-seats"))
 
@@ -1377,7 +1378,7 @@ def test_publishing_warns_about_students_without_a_day(prof, browser):
     prof.post(f"/teach/s/{sid}/close-and-schedule")
     page = text(prof.get(f"/teach/s/{sid}"))
     assert "1 student still has no day" in page  # the next step says so
-    assert re.search(r'action="/teach/s/\w+/publish"\s+data-confirm="1 student has no day yet', raw(prof.get(f"/teach/s/{sid}")))
+    assert re.search(r'action="/teach/s/\w+/publish"\s+data-confirm="1 student has no day yet', raw(prof.get(f"/teach/s/{sid}/schedule")))
 
 
 def test_remaking_a_published_schedule_shows_who_changes_first(prof, browser):
@@ -1804,7 +1805,7 @@ def test_marking_every_day_cant_do_means_the_professor_decides(prof, browser):
     browser().sign_in_student(sid, "Ben Baker").rank(sid, keys)
     prof.post(f"/teach/s/{sid}/close-and-schedule")
     assert set(assigned(prof.app, sid)) == {"ben baker"}  # never on a day she marked, even with room
-    page = text(prof.get(f"/teach/s/{sid}"))
+    page = text(prof.get(f"/teach/s/{sid}/schedule"))
     assert "Ana Able — marked every day as one they can't do" in page and "surgery that week" in page
     assert "Give them the open seats (" not in page  # filling can't place her either
 
@@ -2362,3 +2363,22 @@ def test_nudge_reminds_only_the_students_who_havent_ranked(prof, browser):
     assert "Nudge the 2 who haven't ranked" in text(page)
     prof.post(f"/teach/s/{sid}/toggle")  # sign-ups closed: nobody to nudge
     assert "Nudge the" not in text(prof.get(f"/teach/s/{sid}"))
+
+
+def test_each_class_has_class_schedule_and_settings_tabs(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    page = text(prof.get(f"/teach/s/{sid}"))
+    assert "Class list" in page and "Sign-ups" in page and "Seats per day:" not in page
+    page = text(prof.get(f"/teach/s/{sid}/schedule"))
+    assert "Seats per day:" in page and "0 of 3 on your list have ranked" in page and "Backups" not in page
+    page = text(prof.get(f"/teach/s/{sid}/settings"))
+    assert "Days & settings" in page and "Backups" in page and "Copy or delete" in page
+    assert 'id="signups"' not in raw(prof.get(f"/teach/s/{sid}/settings"))
+    for tab in ("", "/schedule", "/settings"):
+        assert 'aria-current="page"' in raw(prof.get(f"/teach/s/{sid}{tab}"))
+    # Actions come back to the tab they belong to.
+    assert prof.post(f"/teach/s/{sid}/capacity", {"capacity": "3"}).headers["Location"].endswith(f"/teach/s/{sid}/schedule#schedule")
+    other = browser().sign_in_instructor("other@school.edu")
+    for tab in ("/schedule", "/settings"):
+        assert other.get(f"/teach/s/{sid}{tab}").status_code == 404

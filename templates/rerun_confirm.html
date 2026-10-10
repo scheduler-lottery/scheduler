@@ -2,7 +2,7 @@
 {% block title %}Make the schedule again? — {{ sheet.title }}{% endblock %}
 {% block content %}
 <div class="card">
-  <p class="eyebrow"><a href="{{ url_for('teach.sheet', sid=sheet.id) }}#schedule" class="link-muted">← {{ sheet.title }}</a></p>
+  <p class="eyebrow"><a href="{{ tab_href(sheet.id, 'schedule') }}" class="link-muted">← {{ sheet.title }}</a></p>
   <h1>Make the schedule again?</h1>
   <p class="subtitle">Students can already see their days. Here's what would change — nothing is saved until you press a button.</p>
   <ul class="diff-list">
@@ -20,7 +20,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="confirmed" value="1">
     <button type="submit" class="btn btn-danger btn-block">Make it again and show students the new days</button>
-    <a class="btn btn-secondary btn-block" href="{{ url_for('teach.sheet', sid=sheet.id) }}#schedule">Keep the schedule students see now</a>
+    <a class="btn btn-secondary btn-block" href="{{ tab_href(sheet.id, 'schedule') }}">Keep the schedule students see now</a>
   </form>
   <p class="mini-hint">To give one person a day without changing anyone else's, use “Move a student” instead. A copy of the current schedule is saved first either way, and you can undo.</p>
 </div>

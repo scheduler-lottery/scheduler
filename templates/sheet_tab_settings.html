@@ -1,0 +1,88 @@
+{% extends "sheet_admin.html" %}
+{# The Settings tab: the sheet's days and settings, backups, and copying
+   or deleting it. #}
+{% block sheet_body %}
+<section class="card" id="settings">
+  <h2 class="card-heading">Days &amp; settings</h2>
+  <dl class="settings-list">
+    <div><dt>Days</dt><dd>{{ days | map(attribute='label') | join(', ') }}</dd></div>
+    <div><dt>Seats per day</dt><dd>{{ sheet.capacity_per_day }}</dd></div>
+    <div><dt>Rank by</dt><dd>{{ sheet.rank_by or 'No deadline given' }}</dd></div>
+    <div><dt>Who can sign up</dt><dd>{{ 'Anyone with the link' if sheet.allow_unlisted else 'Only names on your class list' }}</dd></div>
+    <div><dt>Students can see the draft schedule</dt><dd>{{ 'Yes' if sheet.show_preview else 'No' }}</dd></div>
+  </dl>
+  <a class="btn btn-secondary" href="{{ url_for('teach.edit_sheet', sid=sheet.id) }}">Edit days &amp; settings</a>
+</section>
+
+{# --------------------------------------------------------------- backups #}
+<section class="card" id="backups">
+  <h2 class="card-heading">Backups</h2>
+  <p>
+    Your sheet saves a copy of itself automatically — once a day when anything changes, and right before anything is
+    deleted or replaced. You can go back to any of these, or keep your own copy.
+  </p>
+  <div class="roster-row">
+    <a class="btn btn-secondary" href="{{ url_for('teach.download_backup', sid=sheet.id) }}">Download a backup</a>
+    {% if email_on %}
+    <form method="post" action="{{ url_for('teach.email_backup_now', sid=sheet.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-secondary">Email me a backup</button>
+    </form>
+    {% endif %}
+  </div>
+
+  {% if snapshots %}
+  <h3>Earlier versions of your sheet</h3>
+  <ul class="plain-rows">
+    {% for snap in snapshots %}
+    {% if loop.index == 11 %}
+  </ul>
+  <details class="more-options">
+    <summary>Older versions ({{ snapshots | length - 10 }})</summary>
+  <ul class="plain-rows">
+    {% endif %}
+    <li class="plain-row">
+      <span><time datetime="{{ snap.created_at }}" data-local="seconds">{{ snap.created_at[:16] }}</time>
+        <span class="muted">— {{ snap.reason }}{% if snap.summary %} · {{ snap.summary }}{% endif %}</span></span>
+      <span class="row-actions">
+        <a class="btn btn-ghost btn-small" href="{{ url_for('teach.snapshot_zip', snap_id=snap.id) }}">Download</a>
+        <a class="btn btn-secondary btn-small" href="{{ url_for('teach.restore_snapshot', sid=sheet.id, snap_id=snap.id) }}">Go back to this version…</a>
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% if snapshots | length > 10 %}</details>{% endif %}
+  {% else %}
+  <p class="muted">No earlier versions yet — the first is saved tonight, or before anything gets deleted.</p>
+  {% endif %}
+
+  <details class="more-options">
+    <summary>Restore from a backup file</summary>
+    <form method="post" action="{{ url_for('teach.restore_file', sid=sheet.id) }}" enctype="multipart/form-data" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="backup-file" class="visually-hidden">Backup file</label>
+      <input type="file" id="backup-file" name="backup" accept=".zip,.json" required>
+      <button type="submit" class="btn btn-secondary btn-small">Continue…</button>
+    </form>
+    <p class="field-help">Use the backup file (it ends in .zip) from “Download a backup” or a backup email. You'll see what it holds before anything changes.</p>
+  </details>
+</section>
+
+{# ---------------------------------------------------------------- delete #}
+<section class="card danger-zone" id="danger">
+  <h2 class="card-heading">Copy or delete</h2>
+  <div class="roster-row">
+    <form method="post" action="{{ url_for('teach.duplicate_sheet', sid=sheet.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-secondary">Copy for next term</button>
+    </form>
+    {% if submissions %}
+    <button type="button" class="btn btn-danger" data-popover-target="delete-all-modal" aria-haspopup="dialog">
+      {{ 'Delete the 1 ranking' if submissions | length == 1 else 'Delete all ' ~ (submissions | length) ~ ' rankings' }}
+    </button>
+    {% endif %}
+    <button type="button" class="btn btn-danger" data-popover-target="delete-sheet-modal" aria-haspopup="dialog">Delete this sign-up sheet</button>
+  </div>
+  <p class="mini-hint">“Copy for next term” keeps the days and settings, without students. Deleting saves a backup and downloads it to you first; a deleted sheet can be brought back from your dashboard for 30 days.</p>
+</section>
+{% endblock %}
