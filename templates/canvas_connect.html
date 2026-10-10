@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Which course? — {{ app_name }}{% endblock %}
+{% block content %}
+{# Connect Canvas (teach.canvas_connected): Canvas said yes; which course's
+   class list goes to this sheet? Picking reads it, and Canvas's permission
+   is given back at once. #}
+<div class="card canvas-arrived">
+  <p class="eyebrow">Connected to Canvas</p>
+  <h1>Which course is “{{ sheet.title }}” for?</h1>
+  <p class="subtitle">Pick it, and its students' names and email addresses come over. Nothing else is read, and nothing in Canvas changes.</p>
+  <form method="post" action="{{ url_for('teach.canvas_connected_pick') }}" class="connect-courses">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% for c in courses %}
+    <button type="submit" class="quiz-choice" name="course_id" value="{{ c.id }}" data-name="{{ c.name }}{% if c.term %} ({{ c.term }}){% endif %}">
+      <strong>{{ c.name }}</strong>{% if c.term or c.students is not none %} <span>{% if c.term %}{{ c.term }}{% endif %}{% if c.term and c.students is not none %} · {% endif %}{% if c.students is not none %}{{ c.students | plural('student') }}{% endif %}</span>{% endif %}
+    </button>
+    {% endfor %}
+    <input type="hidden" name="course_name" value="" data-course-name>
+  </form>
+  <p class="mini-hint">Not listed? Only courses where you're a teacher or TA show. <a href="{{ tab_href(sheet.id, 'class-list') }}">Back to the class list</a></p>
+</div>
+{% endblock %}

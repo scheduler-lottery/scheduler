@@ -7,10 +7,12 @@ There is no other way in, for anyone — including the site's owner.
 """
 
 import hashlib
+import hmac
 import json
 import math
 import os
 import re
+import secrets
 import unicodedata
 from collections import Counter
 from datetime import date, timedelta
@@ -23,6 +25,7 @@ from flask import (
 
 import auth
 import canvas_import
+import canvas_oauth
 import canvasdir
 import compose
 import db
@@ -1612,6 +1615,115 @@ def canvas_list_here(sid):
     # this page read it from Canvas itself.
     return _take_canvas_list(sheet, data, setup=bool(request.form.get("setup")),
                              copied=request.form.get("how") in ("copied", "helper"))
+
+
+# ---------------------------------------------------------------------------
+# Connect Canvas (canvas_oauth): Canvas's own sign-in and Authorize page, then
+# the class list read server to server, and the key given back.
+# ---------------------------------------------------------------------------
+CONNECT_TROUBLE = {
+    "denied": "Canvas wasn't connected (you pressed Cancel there). Nothing was read.",
+    "signin": "Canvas didn't let Scheduler in. Press Connect Canvas to try again.",
+    "forbidden": "Canvas won't share that course's class list with you. Is it a course you teach?",
+    "missing": "Canvas couldn't find that course. Press Connect Canvas and pick it again.",
+    "expired": "That took a while, so Canvas's permission ran out. Press Connect Canvas again.",
+    "canvas": "Canvas didn't answer just now. Wait a minute, then press Connect Canvas again.",
+}
+
+
+def _connect_back(why):
+    """Back to the sheet the professor connected Canvas from, saying what went wrong."""
+    pending = session.pop("canvas_connect", None) or {}
+    sealed = pending.get("token")
+    token = canvas_oauth.unseal(sealed) if sealed else None
+    if token:
+        canvas_oauth.revoke(token)
+    flash(CONNECT_TROUBLE.get(why, CONNECT_TROUBLE["canvas"]), "error" if why != "denied" else "info")
+    sheet = sheets.get_sheet(pending.get("sid")) if pending.get("sid") else None
+    if sheet and sheet["owner_id"] == current_instructor()["id"]:
+        return _list_back(sheet, pending.get("setup"))
+    return redirect(url_for("teach.dashboard"))
+
+
+@bp.route("/s/<sid>/canvas/connect")
+@instructor_required
+def canvas_connect(sid):
+    sheet = owned_sheet(sid)
+    if not canvas_oauth.ready():
+        abort(404)
+    state = secrets.token_urlsafe(24)
+    session["canvas_connect"] = {"state": state, "sid": sheet["id"], "setup": bool(request.args.get("setup"))}
+    return redirect(canvas_oauth.authorize_url(state, url_for("teach.canvas_connected", _external=True)))
+
+
+def _from_connected_canvas(token, course_id, course_name):
+    """Read the class list with the key, give the key back, and take the list."""
+    pending = session.pop("canvas_connect", None) or {}
+    try:
+        people = canvas_oauth.students(token, course_id)
+    except canvas_oauth.CanvasError as err:
+        session["canvas_connect"] = pending
+        return _connect_back(err.why)
+    finally:
+        canvas_oauth.revoke(token)
+    sheet = owned_sheet(pending.get("sid"))
+    if not people:
+        flash(f"{course_name} has no students in Canvas yet. If it isn't published, or students just enrolled, Canvas "
+              "may not list them for a day or two.", "info")
+        return _list_back(sheet, pending.get("setup"))
+    data = {"course": course_name, "course_id": course_id, "host": settings.CANVAS_OAUTH_HOST,
+            "students": [{"name": p["name"][:120], "email": p["email"][:254] if "@" in p["email"] else ""} for p in people],
+            "key": "", "v": 2}
+    return _take_canvas_list(sheet, data, setup=pending.get("setup"), copied=True)
+
+
+@bp.route("/canvas/oauth/callback")
+@instructor_required
+def canvas_connected():
+    """Canvas, sending the professor back: a one-time code (or a Cancel)."""
+    pending = session.get("canvas_connect") or {}
+    if not pending.get("state") or not hmac.compare_digest(request.args.get("state", ""), pending["state"]):
+        flash("That Canvas connection didn't come from here. Press Connect Canvas to start again.", "error")
+        session.pop("canvas_connect", None)
+        return redirect(url_for("teach.dashboard"))
+    if request.args.get("error"):
+        return _connect_back("denied" if request.args["error"] == "access_denied" else "canvas")
+    sheet = owned_sheet(pending.get("sid"))
+    try:
+        token = canvas_oauth.exchange(request.args.get("code", ""), url_for("teach.canvas_connected", _external=True))
+    except canvas_oauth.CanvasError as err:
+        return _connect_back(err.why)
+    if sheet.get("canvas_course_id"):  # its course from last time: straight to the list
+        return _from_connected_canvas(token, sheet["canvas_course_id"], sheet.get("canvas_course") or "your course")
+    try:
+        found = canvas_oauth.courses(token)
+    except canvas_oauth.CanvasError as err:
+        canvas_oauth.revoke(token)
+        return _connect_back(err.why)
+    if len(found) == 1:
+        c = found[0]
+        return _from_connected_canvas(token, c["id"], c["name"] + (f" ({c['term']})" if c["term"] else ""))
+    pending["state"] = None
+    pending["token"] = canvas_oauth.seal(token)
+    session["canvas_connect"] = pending
+    if not found:
+        return _connect_back("forbidden")
+    return render_template("canvas_connect.html", sheet=sheet, courses=found)
+
+
+@bp.route("/canvas/oauth/pick", methods=["POST"])
+@instructor_required
+def canvas_connected_pick():
+    pending = session.get("canvas_connect") or {}
+    token = canvas_oauth.unseal(pending.get("token")) if pending.get("token") else None
+    if not token:
+        return _connect_back("expired")
+    owned_sheet(pending.get("sid"))
+    course_id = request.form.get("course_id", "")
+    if not re.fullmatch(r"\d{1,15}", course_id):
+        canvas_oauth.revoke(token)
+        return _connect_back("missing")
+    return _from_connected_canvas(token, course_id, " ".join((request.form.get("course_name") or "your course").split())[:200])
 
 
 @bp.route("/canvas-import/<iid>", methods=["GET", "POST"])

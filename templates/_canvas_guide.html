@@ -8,10 +8,21 @@
      data-canvas-course-id="{{ sheet.canvas_course_id or '' }}"
      data-button-key="{{ canvas_button_key() }}" data-button-v="{{ canvas_button_version() }}"
      data-helper-ids="{{ helper_ids }}" data-helper-store="{{ helper_store_url }}">
+  {# Connect Canvas (canvas_oauth): with the school's developer key, the
+     simplest of all, in every browser. #}
+  {# (only for the school whose key it is) #}
+  {% set connect_here = canvas_connect and (not canvas or canvas.domain == canvas_connect_host) %}
+  {% if connect_here %}
+  <section class="canvas-easy canvas-connect" data-connect aria-labelledby="canvas-connect-title-{{ sheet.id }}">
+    <h4 class="canvas-easy-title" id="canvas-connect-title-{{ sheet.id }}">The easy way: connect Canvas</h4>
+    <a class="btn btn-primary btn-large" href="{{ url_for('teach.canvas_connect', sid=sheet.id, setup=1 if setup else None) }}">Connect Canvas</a>
+    <p class="mini-hint">Canvas opens; sign in if it asks, then press <strong>Authorize</strong>. {% if sheet.canvas_course %}{{ sheet.canvas_course }}'s{% else %}Pick the course, and its{% endif %} students' names and email addresses come right back here. Nothing else is read, and nothing in Canvas changes.</p>
+  </section>
+  {% endif %}
   {# Scheduler Helper (extension/): with it, one click here fetches the list
      from Canvas. Shown by app.js once it's installed, or (in Chrome and
      Edge) with how to add it. #}
-  {% if helper_ids %}
+  {% if helper_ids and not connect_here %}
   <section class="canvas-easy canvas-helper" data-helper hidden aria-labelledby="canvas-helper-title-{{ sheet.id }}">
     <h4 class="canvas-easy-title" id="canvas-helper-title-{{ sheet.id }}">The easy way: one click</h4>
     <div data-helper-ready hidden>
@@ -30,6 +41,8 @@
     <p class="bookmarklet-said" data-helper-said role="status" hidden></p>
     <div class="canvas-copy-courses" data-helper-courses hidden></div>
   </section>
+  {% endif %}
+  {% if helper_ids or connect_here %}
   <details class="canvas-by-hand" data-bookmark-more hidden>
     <summary>Or: a button for your bookmarks bar</summary>
   </details>

@@ -28,6 +28,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 import auth
 import canvas_import
+import canvas_oauth
 import db
 import deadlines
 import maintenance
@@ -253,6 +254,8 @@ def template_globals():
         "preload_fonts": _preload_fonts(),
         "codes_by_workos": signin.email_mode() == "workos",
         "helper_ids": ",".join(settings.CANVAS_HELPER_IDS),
+        "canvas_connect": canvas_oauth.ready(),
+        "canvas_connect_host": settings.CANVAS_OAUTH_HOST,
         "helper_store_url": settings.CANVAS_HELPER_STORE_URL,
         "mail_by_gmail": signin.smtp_ready(),
         # On the general pages a student might wander to (Privacy, How it

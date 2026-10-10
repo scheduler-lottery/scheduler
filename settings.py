@@ -99,6 +99,13 @@ SOURCE_URL = _env("SOURCE_URL", "https://github.com/scheduler-lottery/scheduler"
 CANVAS_HELPER_IDS = [i.strip() for i in _env("CANVAS_HELPER_IDS").split(",") if i.strip()]
 CANVAS_HELPER_STORE_URL = _env("CANVAS_HELPER_STORE_URL")
 
+# "Connect Canvas" (canvas_oauth.py): the school's Canvas, and the developer
+# key its admins issue (docs/northwestern-canvas-request.md). Until all three
+# are set, it isn't offered. The secret belongs only in the host's settings.
+CANVAS_OAUTH_HOST = _env("CANVAS_OAUTH_HOST").lower()
+CANVAS_OAUTH_CLIENT_ID = _env("CANVAS_OAUTH_CLIENT_ID")
+CANVAS_OAUTH_CLIENT_SECRET = _env("CANVAS_OAUTH_CLIENT_SECRET")
+
 # The credit at the foot of every page. Running your own copy? Set these to
 # yourself (or BUILT_BY to "-" to show no credit).
 BUILT_BY = _env("BUILT_BY", "Nathan Reitinger")

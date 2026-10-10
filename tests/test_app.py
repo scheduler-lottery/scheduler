@@ -3282,6 +3282,90 @@ def test_the_helper_extension_builds_with_least_permissions():
     assert not any("127.0.0.1" in h or "localhost" in h for h in json.dumps(manifest).split('"'))
 
 
+def _connectable_canvas(monkeypatch):
+    """The stand-in Canvas (tools/fake_canvas.py) as the school's Canvas for
+    Connect Canvas, answering the site's server-to-server requests."""
+    import importlib.util
+
+    import canvas_oauth
+
+    spec = importlib.util.spec_from_file_location("fake_canvas", "tools/fake_canvas.py")
+    fake = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fake)
+    canvas = fake.app.test_client()
+    monkeypatch.setattr(settings, "CANVAS_OAUTH_HOST", "canvas.test")
+    monkeypatch.setattr(settings, "CANVAS_OAUTH_CLIENT_ID", fake.CLIENT_ID)
+    monkeypatch.setattr(settings, "CANVAS_OAUTH_CLIENT_SECRET", fake.CLIENT_SECRET)
+
+    def http(method, url, headers=None, data=None):
+        assert url.startswith("https://canvas.test/")
+        r = canvas.open(url[len("https://canvas.test"):], method=method, headers=headers or {}, data=data,
+                        base_url="https://canvas.test")
+        return r.status_code, dict(r.headers), r.get_data(as_text=True)
+
+    monkeypatch.setattr(canvas_oauth, "_http", http)
+    canvas.post("/login", base_url="https://canvas.test")  # the professor, signed in to Canvas
+    return canvas, fake
+
+
+def _authorize(canvas, location, action="authorize"):
+    """At Canvas: the Authorize page, and the professor's answer. Back to Scheduler's callback."""
+    from urllib.parse import parse_qs, urlsplit
+
+    assert location.startswith("https://canvas.test/login/oauth2/auth?")
+    asked = parse_qs(urlsplit(location).query)
+    assert asked["scope"] == ["url:GET|/api/v1/courses url:GET|/api/v1/courses/:course_id/users"]
+    page = canvas.get(location[len("https://canvas.test"):], base_url="https://canvas.test")
+    assert "requesting access to your account" in page.get_data(as_text=True)
+    back = canvas.post("/login/oauth2/confirm", base_url="https://canvas.test", data={
+        "redirect_uri": asked["redirect_uri"][0], "state": asked["state"][0], "action": action})
+    return urlsplit(back.headers["Location"])
+
+
+def test_connect_canvas_reads_the_class_list_with_canvas_permission(prof, monkeypatch):
+    sid = prof.create_sheet(allow_unlisted=False)
+    assert "Connect Canvas" not in text(prof.get(f"/teach/s/{sid}"))  # no developer key: not offered
+    canvas, fake = _connectable_canvas(monkeypatch)
+    assert "Connect Canvas" in text(prof.get(f"/teach/s/{sid}"))
+    back = _authorize(canvas, prof.get(f"/teach/s/{sid}/canvas/connect").headers["Location"])
+    page = text(prof.get(back.path + "?" + back.query))
+    assert "Which course is" in page and "2026FA_BUSCOM_615_SEC1" in page and "FACULTY_TRAINING" not in page
+    r = prof.post("/teach/canvas/oauth/pick", {"course_id": "101", "course_name": "2026FA_BUSCOM_615_SEC1 (2026 Fall)"})
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 57
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :sid", sid=sid) == "101"
+    assert "Who was added (57)" in text(prof.get(f"/teach/s/{sid}"))
+    assert not fake.TOKENS  # Canvas's permission given back at once
+    # Next time, no picking: the sheet's course, straight away (a list in place: what changes, first).
+    back = _authorize(canvas, prof.get(f"/teach/s/{sid}/canvas/connect").headers["Location"])
+    r = prof.get(back.path + "?" + back.query)
+    assert "/roster/review/" in r.headers["Location"] and not fake.TOKENS
+
+
+def test_connect_canvas_takes_no_for_an_answer_and_nothing_forged(prof, monkeypatch):
+    import canvas_oauth
+
+    sid = prof.create_sheet(allow_unlisted=False)
+    canvas, fake = _connectable_canvas(monkeypatch)
+    back = _authorize(canvas, prof.get(f"/teach/s/{sid}/canvas/connect").headers["Location"], action="cancel")
+    assert "you pressed Cancel" in follow(prof, prof.get(back.path + "?" + back.query))
+    # Canvas's answer has to match the request this browser started.
+    back = _authorize(canvas, prof.get(f"/teach/s/{sid}/canvas/connect").headers["Location"])
+    forged = back.query.replace("state=", "state=x")
+    assert "didn't come from here" in follow(prof, prof.get(back.path + "?" + forged))
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 0
+    # The permission waits ten minutes for the course to be picked, no more, and is given back.
+    back = _authorize(canvas, prof.get(f"/teach/s/{sid}/canvas/connect").headers["Location"])
+    prof.get(back.path + "?" + back.query)
+    monkeypatch.setattr(canvas_oauth, "SEALED_FOR", -1)
+    assert "permission ran out" in follow(prof, prof.post("/teach/canvas/oauth/pick", {"course_id": "101"}))
+    # Someone else's sheet can't be connected.
+    other = prof.create_sheet(title="Mine")
+    prof.post("/teach/logout")
+    prof.sign_in_instructor("other@school.edu")
+    assert prof.get(f"/teach/s/{other}/canvas/connect").status_code == 404
+
+
 def test_canvas_names_written_last_first_are_turned_round_not_cut(prof):
     sid = prof.create_sheet(allow_unlisted=False)
     names = ["Kim, Alex", "Lee, Sam", "Diaz, Maria", "Kim, Jordan"]

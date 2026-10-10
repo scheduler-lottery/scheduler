@@ -494,6 +494,15 @@
     }
   });
 
+  // Connect Canvas's course choice: the course's name goes with its number
+  // (for the review and the sheet), set from the button pressed.
+  document.querySelectorAll(".connect-courses").forEach(function (form) {
+    form.addEventListener("click", function (e) {
+      var pick = e.target.closest("button[data-name]");
+      if (pick) form.querySelector("[data-course-name]").value = pick.getAttribute("data-name");
+    });
+  });
+
   // The Send to Scheduler button clicked on a page with no class-list
   // step: say where it does something.
   if (!document.querySelector("[data-canvas-guide]")) {
@@ -1028,6 +1037,16 @@
       copyBox.value = "";
       takePaste(text);
     });
+
+    // Connect Canvas offered (canvas_oauth): the bookmark button becomes a
+    // folded fallback.
+    if (guide.querySelector("[data-connect]")) {
+      var foldBookmark = guide.querySelector("[data-bookmark-more]");
+      if (foldBookmark) {
+        foldBookmark.appendChild(guide.querySelector("[data-bookmark-section]"));
+        foldBookmark.hidden = false;
+      }
+    }
 
     // Scheduler Helper (extension/): with it installed, one click here gets
     // the professor's courses and then a course's class list from Canvas,

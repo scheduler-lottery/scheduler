@@ -17,7 +17,11 @@ It behaves the way Canvas does where it matters to Scheduler:
   you can't see), one of 230 students and one of exactly 100;
 - students' emails (teachers may see them), login IDs that aren't emails,
   and one student whose name reads like an instruction;
-- X-Frame-Options: SAMEORIGIN, so it can't be shown inside another site.
+- X-Frame-Options: SAMEORIGIN, so it can't be shown inside another site;
+- OAuth2 for "Connect Canvas": /login/oauth2/auth (sign in, then an
+  Authorize page), /login/oauth2/token (a code for a key, and DELETE to give
+  it back), and the API taking "Authorization: Bearer <key>". Its developer
+  key: FAKE_CANVAS_CLIENT_ID / FAKE_CANVAS_CLIENT_SECRET (see the defaults).
 FAKE_CANVAS_CSP=1 adds a strict Content-Security-Policy, to check that the
 import still runs on a Canvas that enforces one. FAKE_CANVAS_NO_EMAIL=1 is a
 school that hides emails from teachers. FAKE_CANVAS_WHILE1=1 starts each
@@ -30,10 +34,16 @@ import os
 import secrets
 from urllib.parse import urlencode
 
-from flask import Flask, make_response, redirect, request
+from urllib.parse import urlencode as _encode
+
+from flask import Flask, jsonify, make_response, redirect, request
 
 app = Flask(__name__)
 SESSIONS = set()
+CLIENT_ID = os.environ.get("FAKE_CANVAS_CLIENT_ID", "170000000000001")
+CLIENT_SECRET = os.environ.get("FAKE_CANVAS_CLIENT_SECRET", "fake-canvas-secret")
+CODES = {}   # one-time code -> redirect_uri
+TOKENS = set()
 
 FALL = {"name": "2026 Fall", "start_at": "2026-08-20T00:00:00Z", "end_at": "2026-12-20T00:00:00Z"}
 SPRING = {"name": "2027 Spring", "start_at": "2027-01-05T00:00:00Z", "end_at": "2027-05-20T00:00:00Z"}
@@ -76,6 +86,9 @@ def canvas_headers(response):
 
 
 def signed_in():
+    bearer = request.headers.get("Authorization", "")
+    if bearer.startswith("Bearer ") and bearer[7:] in TOKENS:
+        return True
     return request.cookies.get("canvas_session") in SESSIONS
 
 
@@ -91,13 +104,56 @@ def page(title, body):
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    back = request.values.get("return_to", "")
     if request.method == "POST":
         token = secrets.token_hex(16)
         SESSIONS.add(token)
-        response = make_response(redirect("/"))  # SSO: always the Dashboard
+        # SSO: always the Dashboard, except on the way to authorizing an app.
+        response = make_response(redirect(back if back.startswith("/login/oauth2/auth?") else "/"))
         response.set_cookie("canvas_session", token, samesite="Lax", httponly=True)
         return response
-    return page("Log in", '<main><h1>Fake Canvas sign-in</h1><form method="post"><button>Sign in</button></form></main>')
+    return page("Log in", '<main><h1>Fake Canvas sign-in</h1><form method="post">'
+                f'<input type="hidden" name="return_to" value="{back.replace(chr(34), "")}"><button>Sign in</button></form></main>')
+
+
+@app.route("/login/oauth2/auth")
+def oauth_auth():
+    if request.args.get("client_id") != CLIENT_ID or not request.args.get("redirect_uri"):
+        return page("Error", "<main><h1>unauthorized_client</h1></main>"), 400
+    if request.cookies.get("canvas_session") not in SESSIONS:
+        return redirect("/login?" + _encode({"return_to": request.full_path}))
+    hidden = "".join(f'<input type="hidden" name="{k}" value="{request.args.get(k, "").replace(chr(34), "")}">'
+                     for k in ("redirect_uri", "state"))
+    return page("Authorize", f'<main><h1>Scheduler is requesting access to your account</h1>'
+                f'<form method="post" action="/login/oauth2/confirm">{hidden}'
+                '<button name="action" value="cancel">Cancel</button> <button name="action" value="authorize">Authorize</button>'
+                '</form></main>')
+
+
+@app.route("/login/oauth2/confirm", methods=["POST"])
+def oauth_confirm():
+    if request.cookies.get("canvas_session") not in SESSIONS:
+        return redirect("/login")
+    back, state = request.form["redirect_uri"], request.form.get("state", "")
+    if request.form.get("action") != "authorize":
+        return redirect(back + "?" + _encode({"error": "access_denied", "state": state}))
+    code = secrets.token_hex(12)
+    CODES[code] = back
+    return redirect(back + "?" + _encode({"code": code, "state": state}))
+
+
+@app.route("/login/oauth2/token", methods=["POST", "DELETE"])
+def oauth_token():
+    if request.method == "DELETE":
+        TOKENS.discard(request.headers.get("Authorization", "")[7:])
+        return jsonify({})
+    f = request.form
+    if (f.get("client_id") != CLIENT_ID or f.get("client_secret") != CLIENT_SECRET
+            or CODES.pop(f.get("code", ""), None) != f.get("redirect_uri")):
+        return jsonify({"error": "invalid_grant"}), 400
+    key = secrets.token_hex(20)
+    TOKENS.add(key)
+    return jsonify({"access_token": key, "token_type": "Bearer", "expires_in": 3600, "user": {"id": 1}})
 
 
 @app.route("/")
