@@ -102,6 +102,16 @@ try {
     await loaded(me, step);
     await sleep(600); // (the page asks for the helper, and hears nothing)
   };
+  // SHOTS=<folder>: a picture of each browser's offer, for looking over.
+  const shot = async (name) => {
+    if (!process.env.SHOTS) return;
+    await send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false }, me);
+    await evaluate(me, `document.querySelector("[data-canvas-guide]").closest("section, details, .card").scrollIntoView({ block: "start" })`);
+    await sleep(500);
+    const { data } = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false }, me);
+    writeFileSync(join(process.env.SHOTS, name), Buffer.from(data, "base64"));
+    await send("Emulation.clearDeviceMetricsOverride", {}, me);
+  };
   const shown = (sel) => evaluate(me, `(() => { const el = document.querySelector(${JSON.stringify(sel)}); return !!el && el.offsetParent !== null; })()`);
   const visibleText = () => evaluate(me, `document.querySelector("[data-canvas-guide]").innerText`);
 
@@ -116,12 +126,14 @@ try {
   check(await evaluate(me, `!document.querySelector("[data-canvas-download]").open`) && words.includes("Or upload Canvas's student file instead"),
     "and the file folded under it");
   check(!/token|bookmark|copy and paste/i.test(words), "and nothing else: no token, no bookmark, no copy and paste");
+  await shot("chrome-add-helper.png");
 
   // Edge: Edge's steps.
   await as("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36 Edg/155.0.0.0");
   words = await visibleText();
   check(words.includes("Add Scheduler Helper to Edge") && words.includes("Allow extensions from other stores") && words.includes("Get"),
     "Edge: Edge's own steps");
+  await shot("edge-add-helper.png");
 
   // Safari and Firefox, with no helper to add: the file, open, first.
   for (const [name, agent] of [["Safari", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"],
@@ -130,6 +142,7 @@ try {
     check(!(await shown("[data-helper-add]")) && await evaluate(me, `document.querySelector("[data-canvas-download]").open`)
       && (await visibleText()).includes("Upload Canvas's student file"), `${name}: no helper to add yet, so the file, first`);
     check(await shown("[data-quiz-drop]"), `${name}: and the box for it`);
+    await shot(`${name.toLowerCase()}-upload-first.png`);
   }
 
   // The file: Canvas opens beside this page (a window of its own), and the file goes in.

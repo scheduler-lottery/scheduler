@@ -26,6 +26,8 @@ const SCHEDULER_ORIGINS = ((chrome.runtime.getManifest().externally_connectable 
   .map((pattern) => (pattern.match(/^(https?:\/\/[^/]+)\//) || [])[1])
   .filter(Boolean);
 const COURSES = "/api/v1/courses?per_page=100&include[]=term&include[]=total_students";
+const IN_SAFARI = chrome.runtime.getURL("").indexOf("safari-web-extension:") === 0;
+const KEEP_AWAKE_MS = 25 * 1000; // Safari stops a quiet helper after about 30 seconds
 const SIGN_IN_WAIT_MS = 10 * 60 * 1000;
 
 function fromScheduler(sender) {
@@ -40,6 +42,15 @@ function canvasOrigin(host) {
   return (/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(host) ? "http://" : "https://") + host;
 }
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+
+// Safari asks the professor to allow each site; the page to do it in, opened
+// when the helper is first turned on there (and whenever it's needed).
+function openAllowPage() {
+  return chrome.tabs.create({ url: chrome.runtime.getURL("allow.html"), active: true }).catch(() => {});
+}
+chrome.runtime.onInstalled.addListener((details) => {
+  if (IN_SAFARI && details.reason === "install") openAllowPage();
+});
 
 // One request from the page: the courses, or one course's students. `say`
 // carries word along the way (a sign-in), where the page can hear it.
@@ -118,9 +129,13 @@ function people(users) {
 // Read these Canvas API paths (each with all its pages), one way or the
 // other (see the top).
 async function read(origin, paths, say, schedulerTab) {
-  // Safari asks the professor to allow each site; until they have, say so.
+  // Safari asks the professor to allow each site; until they have, the page
+  // to allow it opens, and the Scheduler page says so.
   const allowed = await chrome.permissions.contains({ origins: [origin + "/*"] }).catch(() => true);
-  if (!allowed) throw new Error("access");
+  if (!allowed) {
+    if (IN_SAFARI) openAllowPage();
+    throw new Error("access");
+  }
   try {
     return await Promise.all(paths.map((path) => direct(origin, path)));
   } catch (err) {
@@ -178,7 +193,12 @@ async function inTab(origin, paths, say, schedulerTab) {
 async function signedIn(tab, origin, say) {
   const until = Date.now() + SIGN_IN_WAIT_MS;
   let asked = false;
+  let awake = Date.now();
   while (Date.now() < until) {
+    if (Date.now() - awake > KEEP_AWAKE_MS) { // (a word to the page keeps Safari from stopping the helper)
+      awake = Date.now();
+      say({ type: "wait" });
+    }
     const now = await chrome.tabs.get(tab.id).catch(() => null);
     if (!now) throw new Error("closed");
     if (now.status === "complete" && now.url && now.url.indexOf(origin + "/") === 0 && !/\/login\b/.test(now.url)) {

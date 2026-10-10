@@ -643,8 +643,8 @@
     };
 
     // Scheduler Helper. It answers only this site (its manifest says so).
-    // Chrome and Edge talk to it over a port (which keeps it awake through a
-    // Canvas sign-in); Safari, by single messages.
+    // The page talks to it over a port, which keeps it awake through a Canvas
+    // sign-in (single messages if a browser has no ports).
     var helperBox = guide.querySelector("[data-helper]");
     var helperIds = (guide.getAttribute("data-helper-ids") || "").split(",").filter(Boolean);
     var storeUrl = isSafari ? guide.getAttribute("data-helper-safari") : (isChromium ? guide.getAttribute("data-helper-store") : "");
@@ -661,6 +661,8 @@
       if (!upload) return;
       upload.open = true;
       upload.classList.add("is-first");
+      var open = upload.querySelector("[data-canvas-beside]");
+      if (open) open.classList.replace("btn-secondary", "btn-primary"); // the one thing to do first
       var title = upload.querySelector("[data-upload-title]");
       if (title) title.textContent = title.getAttribute("data-upload-title");
     };
@@ -750,10 +752,11 @@
           answered = true;
           onAnswer(msg || { type: "problem", why: "gone" });
         };
-        if (rt && rt.connect && !isSafari) {
+        if (rt && rt.connect) {
           var port = rt.connect(helperId);
           var beat = setInterval(function () { try { port.postMessage({ type: "ping" }); } catch (err) { /* gone */ } }, 20000);
           port.onMessage.addListener(function (msg) {
+            if (msg && msg.type === "wait") return; // still signing in
             if (msg && msg.type === "signin") {
               helperSay("Sign in to Canvas in the tab that just opened. This page carries on by itself after.");
               return;
@@ -776,9 +779,8 @@
         helperSay(why === "forbidden" ? "Canvas won't share that course's class list with you. Is it a course you teach?"
           : why === "missing" ? "Canvas couldn't find that course. Press Get my class list from Canvas and pick it again."
           : why === "signin" || why === "closed" ? "Canvas sign-in didn't finish. Press Get my class list from Canvas to try again."
-          : why === "access" ? "Safari needs your OK first: in Safari's menu bar choose Safari, then Settings, then "
-            + "Extensions; click Scheduler Helper, then Edit Websites, and set " + host() + " to Allow. Then press Get my "
-            + "class list from Canvas again."
+          : why === "access" ? "Safari needs your OK first. A Scheduler Helper page just opened: click Allow there, "
+            + "then come back and press Get my class list from Canvas again."
           : why === "host" ? "Scheduler Helper doesn't know your school's Canvas yet. Upload the student file instead (below)."
           : "Canvas didn't answer just now. Wait a minute, then press Get my class list from Canvas again.");
         if (why === "host") uploadFirst();

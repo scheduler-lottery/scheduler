@@ -2,6 +2,7 @@
 Builds the Scheduler Helper browser extension (extension/) for
 
     .venv/bin/python tools/build_extension.py store   # dist/scheduler-helper.zip, for the Chrome Web Store
+    .venv/bin/python tools/build_extension.py safari  # dist/scheduler-helper-safari.zip, for Apple (docs/safari-extension.md)
     .venv/bin/python tools/build_extension.py dev     # dist/scheduler-helper-dev/, for trying it locally
 
 The dev build also reads the stand-in Canvas (tools/fake_canvas.py, on
@@ -10,6 +11,11 @@ localhost:5050), and has a fixed id (tools/extension_dev_key.txt is the
 public half of a throwaway key), so a local Scheduler can be told its id:
 
     CANVAS_HELPER_IDS=<that id> .venv/bin/python app.py
+
+The Safari build adds what Safari needs: the Allow page (allow.html, where
+the professor lets the helper use Canvas and Scheduler, since Safari asks
+per site), a toolbar button that opens it, and a background page as well as
+the service worker (Safari keeps cookies more reliably for a page).
 
 The icons are drawn here, so there are no image files to keep.
 """
@@ -85,7 +91,7 @@ def _png(size):
 def build(target):
     with open(os.path.join(SOURCE, "manifest.json"), encoding="utf-8") as handle:
         manifest = json.load(handle)
-    name = "scheduler-helper" if target == "store" else "scheduler-helper-dev"
+    name = {"store": "scheduler-helper", "safari": "scheduler-helper-safari"}.get(target, "scheduler-helper-dev")
     out = os.path.join(DIST, name)
     shutil.rmtree(out, ignore_errors=True)
     os.makedirs(out)
@@ -95,13 +101,20 @@ def build(target):
         manifest["name"] += " (dev)"
         manifest["host_permissions"] += ["http://127.0.0.1:5077/*"]
         manifest["externally_connectable"]["matches"] += ["http://127.0.0.1:5050/*", "http://localhost:5050/*"]
+    files = ["background.js"]
+    if target == "safari":
+        manifest["background"]["scripts"] = ["background.js"]
+        manifest["action"] = {"default_title": "Scheduler Helper", "default_popup": "allow.html",
+                              "default_icon": {k: v for k, v in manifest["icons"].items() if k in ("16", "32", "48")}}
+        files += ["allow.html", "allow.js"]
     with open(os.path.join(out, "manifest.json"), "w", encoding="utf-8") as handle:
         json.dump(manifest, handle, indent=2)
-    shutil.copy(os.path.join(SOURCE, "background.js"), out)
+    for file in files:
+        shutil.copy(os.path.join(SOURCE, file), out)
     for size in (16, 32, 48, 128):
         with open(os.path.join(out, f"icon-{size}.png"), "wb") as handle:
             handle.write(_png(size))
-    if target == "store":
+    if target in ("store", "safari"):
         archive = os.path.join(DIST, name + ".zip")
         with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
             for file in sorted(os.listdir(out)):
