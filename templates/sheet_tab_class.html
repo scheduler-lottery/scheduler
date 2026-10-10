@@ -37,6 +37,7 @@
   {% if report %}
   <div class="report{{ ' report-warn' if report.warn }}">
     <p class="report-main">{{ report.message }}</p>
+    {% with people=report_added, heading='Who was added', fix_href=None %}{% include "_roster_people.html" %}{% endwith %}
     {% if report.tips %}
     <ul class="tips">{% for tip in report.tips %}<li>{{ tip }}</li>{% endfor %}</ul>
     {% endif %}

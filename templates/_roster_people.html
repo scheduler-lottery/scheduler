@@ -1,0 +1,12 @@
+{# Students by name, right where a class list was just added, so the
+   instructor sees who came over (teach._who_was_added, or the whole list
+   while setting up). `people`, `heading`, and an optional `fix_href`. #}
+{% if people %}
+<details class="report-people" open>
+  <summary>{{ heading }} ({{ people | length }})</summary>
+  <ol class="report-people-list">
+    {% for r in people %}<li><bdi>{{ r.display_name }}</bdi>{% if r.email %} <span class="muted">{{ r.email }}</span>{% else %} <span class="muted">(no email: signs in with a PIN)</span>{% endif %}{% if r.name_pending %} <span class="tag" title="Added by email alone. This name is made from the address until they sign in and type their own.">name not typed yet</span>{% endif %}</li>{% endfor %}
+  </ol>
+  <p class="mini-hint">Someone missing, extra, or misspelled? {% if fix_href %}<a href="{{ fix_href }}">Change the list</a>{% else %}Change it under “See or change the list” below{% endif %}: fix a name or email, add a student, or remove one.</p>
+</details>
+{% endif %}

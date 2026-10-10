@@ -31,6 +31,7 @@
     <p class="lead-line">
       <strong>{{ counts.roster | plural('student') }}</strong> on your list{% if counts.roster_with_email == counts.roster %}, all with email addresses: each confirms it's them with an emailed code.{% elif counts.roster_with_email %}: {{ counts.roster_with_email }} with email addresses (they get an emailed code); the rest sign in with a PIN.{% else %}, without email addresses: they sign in by name and a PIN.{% endif %}
     </p>
+    {% with people=on_list, heading="Who's on your list", fix_href=tab_href(sheet.id, 'class-list') %}{% include "_roster_people.html" %}{% endwith %}
     <div class="setup-actions">
       <a class="btn btn-secondary" href="{{ about_url }}"><span aria-hidden="true">←</span> Back</a>
       <a class="btn btn-primary btn-large" href="{{ url_for('teach.setup', sid=sheet.id, step='share') }}">Next: share the link <span aria-hidden="true">→</span></a>

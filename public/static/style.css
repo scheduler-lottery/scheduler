@@ -3121,3 +3121,13 @@ details.guide:not([open]) { padding-bottom: 20px; }
 .arrived-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
 .callout-warn { border-color: var(--danger); background: var(--danger-bg); }
 .callout-warn p:last-child { margin-bottom: 0; }
+
+/* Who a class list just added, by name (_roster_people.html). */
+.report-people { margin: 10px 0 12px; }
+.report-people > summary { cursor: pointer; color: var(--accent-strong); font-weight: 650; }
+.report-people-list {
+  max-height: 280px; overflow: auto; margin: 8px 0 6px; padding: 8px 12px 8px 2.4em; line-height: 1.55;
+  font-size: 0.92rem; border: 1px solid var(--border); border-radius: 10px; background: var(--card-bg);
+}
+.report-people-list .muted { font-size: 0.88em; }
+.report-people .mini-hint { margin: 4px 0 0; }

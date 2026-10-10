@@ -1068,8 +1068,9 @@ def setup(sid):
         "subject": f"Rank your presentation days for {sheet['title']}",
         "body": f"Hi everyone,\n\n{announcement}\n\nThanks!\n",
     } if announcement and emails else None
+    on_list = [r for r in sheets.get_roster(sid) if not r["is_test"]] if step == "students" else []
     return render_template(
-        "teach_setup.html", sheet=sheet, step=step, counts=counts, canvas=canvas, report=report,
+        "teach_setup.html", sheet=sheet, step=step, counts=counts, canvas=canvas, report=report, on_list=on_list,
         share_url=share_url, announcement=announcement, invite=invite, days=sheets.get_days(sid),
         deadline=deadlines.describe(sheet["closes_at"], _zone()) if sheet["closes_at"] else "",
         me=me["email"], mail_default=mail_default, setup=True,
@@ -1161,6 +1162,7 @@ def _sheet_page(sid, tab):
     report = session.get("roster_report")
     if not (report and report.get("sid") == sid):
         report = None
+    report_added = _who_was_added(sheet, report)
     undo = session.pop("undo", None)
     if undo and undo.get("sid") != sid:
         undo = None
@@ -1263,6 +1265,7 @@ def _sheet_page(sid, tab):
         current_algorithm=sheet["algorithm"] if sheet["algorithm"] in ALGORITHMS else DEFAULT_ALGORITHM,
         snapshots=sheets.recent_snapshots(sid),
         report=report,
+        report_added=report_added,
         undo=undo,
         handoff=handoff,
         stuck=stuck,
@@ -1475,6 +1478,19 @@ def _apply_roster(sheet, students, mode, message, tips, warn, source_label, sect
     session["roster_report"] = {
         "sid": sheet["id"], "message": message, "tips": tips[:8], "warn": warn or problems, "undo": snap_id,
     }
+
+
+def _who_was_added(sheet, report):
+    """The students the class list just reported on brought in: those not on
+    the list before it (its restore point), or everyone, for a first list."""
+    if not report:
+        return []
+    before = set()
+    if report.get("undo"):
+        snap = sheets.get_snapshot(report["undo"], sheet["owner_id"])
+        if snap:
+            before = {r["name_key"] for r in json.loads(snap["data"]).get("roster", []) if not r.get("is_test")}
+    return [r for r in sheets.get_roster(sheet["id"]) if not r["is_test"] and r["name_key"] not in before]
 
 
 @bp.route("/s/<sid>/roster", methods=["POST"])

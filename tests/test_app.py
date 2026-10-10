@@ -2772,7 +2772,8 @@ def test_a_list_of_emails_alone_works_and_each_student_types_their_name(prof, br
     sid = prof.create_sheet(allow_unlisted=False)
     prof.post(f"/teach/s/{sid}/roster", {"pasted": "alex.johnson@school.edu, ajones7@school.edu"})
     page = html(prof.get(f"/teach/s/{sid}"))
-    assert "Alex Johnson" in page and "Ajones" in page and page.count("name not typed yet") == 2
+    assert "Alex Johnson" in page and "Ajones" in page
+    assert page.count("name not typed yet") == 4  # on the list, and under "Who was added"
     # Alexis signs in with her email, and types her name before anything else.
     alexis = browser()
     assert alexis.post(f"/c/{sid}/login", {"name": "ajones7@school.edu"}).headers["Location"].endswith("/verify")
@@ -3228,6 +3229,25 @@ def test_canvas_text_that_isnt_a_class_list_never_becomes_students():
     names = parse_roster(b'[{"name":"Alex Kim"},{"name":"Sam Lee"}]')
     assert [s["display_name"] for s in names.students] == ["Alex Kim", "Sam Lee"]
     assert "doesn't look like a class list" in parse_roster(("[" * 100000 + "]" * 100000).encode()).error
+
+
+def test_after_a_list_goes_in_the_instructor_sees_who_came_over(prof):
+    sid = prof.create_sheet(allow_unlisted=False)
+    key = _button_key(prof)
+    prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=3, key=key), "setup": "1"})
+    setup = text(prof.get(f"/teach/s/{sid}/setup?step=students"))
+    assert "Who's on your list (3)" in setup and "Student 0 s0@u.school.edu" in setup and "Change the list" in setup
+    sid = prof.create_sheet(title="Another", allow_unlisted=False)
+    prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=3, key=key)})
+    page = text(prof.get(f"/teach/s/{sid}"))
+    assert "Who was added (3)" in page
+    # Adding to the list: only the new ones are named.
+    more = json.dumps({"type": "scheduler-class-list", "v": 2, "key": key, "courseId": "4242", "course": "C",
+                       "students": [{"name": f"Student {i}", "email": f"s{i}@u.school.edu"} for i in range(5)]})
+    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": more})
+    prof.post(r.headers["Location"], {"action": "add"})
+    page = text(prof.get(f"/teach/s/{sid}"))
+    assert "Who was added (2)" in page and "Student 4 s4@u.school.edu" in page.split("Who was added")[1][:200]
 
 
 def test_canvas_names_written_last_first_are_turned_round_not_cut(prof):
