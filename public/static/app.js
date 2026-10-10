@@ -210,6 +210,10 @@
     });
   });
 
+  // A link to something folded away (a "Modify this" section): unfold it.
+  var opened = location.hash && document.getElementById(location.hash.slice(1));
+  if (opened && opened.tagName === "DETAILS") opened.open = true;
+
   // Emailing the class the link counts as sharing it, as copying it does.
   document.querySelectorAll("[data-compose][data-mark-shared]").forEach(function (link) {
     link.addEventListener("click", function () {

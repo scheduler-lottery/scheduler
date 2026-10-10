@@ -2850,3 +2850,18 @@ def test_the_ranking_options_each_show_the_same_small_example(browser):
     page = text(browser().get("/how-it-works"))
     assert page.count("In the example") == 3 and "Ana and Ben want Monday most" in page
     assert "Everyone gets their first choice." in page and "Everyone gets their second choice." in page
+
+
+def test_the_schedule_tab_shows_the_days_and_seats_and_warns_before_changing_ranked_days(prof, browser):
+    sid = prof.create_sheet(days=("Mon", "Tue", "Wed"), capacity=2)
+    page = raw(prof.get(f"/teach/s/{sid}/schedule"))
+    assert page.count('class="day-sheet"') == 3 and page.count('class="slot open"') == 6  # 3 days × 2 seats, blank
+    assert "<summary>Modify this</summary>" in page and "Nobody has ranked yet" in page
+    assert "data-confirm-click" not in page.split("Modify this")[1].split("</details>")[0]
+    browser().sign_in_student(sid, "Pat Doe").rank(sid, day_keys(sid))
+    page = html(prof.get(f"/teach/s/{sid}/schedule"))
+    assert "1 student has already ranked these days" in page
+    assert 'data-confirm-click="1 student has already ranked these days. Change the days anyway?"' in page
+    prof.post(f"/teach/s/{sid}/close-and-schedule")
+    page = raw(prof.get(f"/teach/s/{sid}/schedule"))
+    assert "Pat Doe" in page and page.count('class="slot open"') == 5 and 'class="slot filled' in page

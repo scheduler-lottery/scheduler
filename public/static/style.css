@@ -2933,3 +2933,42 @@ input[type="date"] {
 .algo-verdict.is-bad { color: var(--amber); }
 .algo-technical { margin: 12px 0 0; }
 @media (max-width: 480px) { .ex-days { grid-template-columns: 1fr; } }
+
+/* The Schedule tab's days, as calendar pages, each with its seats: blank
+   until there's a schedule, then filled in. */
+.board-lead { margin: 4px 0 12px; color: var(--muted); }
+.day-board { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; margin: 8px 0 18px; }
+.day-sheet {
+  display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 14px;
+  background: var(--card-bg); overflow: hidden; box-shadow: var(--shadow-sm);
+}
+.day-sheet.over { border-color: var(--danger); }
+.day-sheet-head {
+  display: grid; justify-items: center; margin: 0; padding: 8px 10px 10px;
+  background: var(--accent-soft); color: var(--accent-strong); border-bottom: 1px solid var(--border);
+}
+.day-sheet-weekday, .day-sheet-month {
+  font-family: var(--font-small); font-size: 0.74rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.day-sheet-date {
+  font-family: var(--font-display); font-size: 2.1rem; line-height: 1.05;
+  font-weight: calc(var(--w-num) + var(--display-boost));
+}
+.day-sheet-label { font-weight: 650; padding: 6px 0; }
+.day-slots { list-style: none; counter-reset: seat; margin: 0; padding: 10px 12px 4px; display: grid; gap: 6px; }
+.slot { counter-increment: seat; position: relative; min-height: 30px; padding: 4px 0 4px 26px; line-height: 1.35; }
+.slot::before {
+  content: counter(seat); position: absolute; left: 0; top: 5px; width: 18px; text-align: right;
+  font-family: var(--font-small); font-size: 0.78rem; color: var(--muted);
+}
+.slot.open::after {
+  content: ""; position: absolute; left: 26px; right: 0; bottom: 6px; border-bottom: 1.5px dashed var(--border-strong);
+}
+.slot.filled { font-weight: 600; }
+.slot.filled .tag { font-weight: 500; }
+.slot.flagged { color: var(--danger); }
+.day-sheet-count { margin: auto 12px 10px; padding-top: 6px; font-family: var(--font-small); font-size: 0.8rem; color: var(--muted); }
+.modify-days { margin: 4px 0 18px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); }
+.modify-days > summary { cursor: pointer; font-weight: 650; color: var(--accent-strong); }
+.modify-days[open] > summary { margin-bottom: 12px; }
+.modify-days .warn-box { margin-top: 0; }

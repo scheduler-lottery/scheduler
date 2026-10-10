@@ -1,6 +1,43 @@
 {% extends "sheet_admin.html" %}
 {# The Schedule tab: running the bidding. Close sign-ups, make the
    schedule, see it day by day, move people, publish. #}
+{# The days you picked, as calendar pages, each with its seats: blank
+   until there's a schedule, then who's on that day. #}
+{% macro day_board(filled) %}
+<div class="day-board">
+  {% for d in days %}
+  {% set people = by_day[d.key] if filled else [] %}
+  {% set parts = d.date | day_parts %}
+  <div class="day-sheet{{ ' over' if filled and day_counts[d.key] > sheet.capacity_per_day }}">
+    <p class="day-sheet-head">
+      {% if parts %}<span class="day-sheet-weekday">{{ parts.weekday }}</span><span class="day-sheet-date">{{ parts.day }}</span><span class="day-sheet-month">{{ parts.month }}</span>
+      {% else %}<span class="day-sheet-label">{{ d.label }}</span>{% endif %}
+    </p>
+    <ol class="day-slots">
+      {% for a in people %}
+      <li class="slot filled{{ ' flagged' if a.cant or a.over }}">
+        <bdi>{{ a.name }}</bdi>
+        {% if a.choice %}<span class="tag" title="Where this day was on their list">choice #{{ a.choice }}</span>{% endif %}
+        {% if a.cant %}<span class="tag tag-danger">said they can't do this day</span>{% endif %}
+        {% if a.squeezed %}<span class="tag tag-danger">squeezed onto a full day</span>{% endif %}
+        {% if not a.ranked and not a.is_test %}<span class="tag">didn't rank</span>{% endif %}
+        {% if a.method == 'manual' %}<span class="tag">moved by you</span>{% endif %}
+        {% if a.ranked and not a.choice %}<span class="tag tag-warn">day added after they ranked</span>{% endif %}
+        {% if a.is_test %}<span class="tag">test</span>{% endif %}
+        {% if a.unlisted and counts.roster %}<span class="tag tag-warn">not on class list</span>{% endif %}
+        {% if a.note %}<div class="comment-note">“{{ a.note }}”</div>{% endif %}
+      </li>
+      {% endfor %}
+      {% for i in range([sheet.capacity_per_day - people | length, 0] | max) %}
+      <li class="slot open"><span class="visually-hidden">Open seat</span></li>
+      {% endfor %}
+    </ol>
+    <p class="day-sheet-count">{{ people | length }} of {{ sheet.capacity_per_day | plural('seat') }}</p>
+  </div>
+  {% endfor %}
+</div>
+{% endmacro %}
+
 {% block sheet_body %}
 <p class="tab-lead">
   {% if counts.roster %}<strong>{{ counts.listed_submissions }} of {{ counts.roster }}</strong> on your list {{ 'has' if counts.listed_submissions == 1 else 'have' }} ranked{% else %}<strong>{{ counts.submissions | plural('person has', 'people have') }}</strong> ranked{% endif %},
@@ -24,28 +61,48 @@
   </div>
   {% endif %}
 
-  <div class="settings-row">
-    <form method="post" action="{{ url_for('teach.set_capacity', sid=sheet.id) }}" class="capacity-row">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label for="capacity">Seats per day:</label>
-      <input type="number" id="capacity" name="capacity" min="1" max="500" value="{{ sheet.capacity_per_day }}">
-      <button type="submit" class="btn btn-secondary btn-small">Update</button>
-    </form>
-    {% if counts.roster %}
-    <form method="post" action="{{ url_for('teach.set_unranked', sid=sheet.id) }}" class="capacity-row">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      {% if sheet.include_unranked %}
-      <span>Students who don't rank get the seats that are left.</span>
-      <input type="hidden" name="include_unranked" value="0">
-      <button type="submit" class="btn-link">Leave them off the schedule instead</button>
-      {% else %}
-      <span>Students who don't rank are left off the schedule.</span>
-      <input type="hidden" name="include_unranked" value="1">
-      <button type="submit" class="btn-link">Give them the leftover seats instead</button>
-      {% endif %}
-    </form>
+  {% if not has_schedule %}
+  <p class="board-lead">Your {{ days | length | plural('day') }}, with {{ sheet.capacity_per_day | plural('seat') }} each. The seats fill in once you make the schedule.</p>
+  {{ day_board(False) }}
+  {% endif %}
+
+  {% set ranked = counts.listed_submissions + counts.unlisted_submissions %}
+  <details class="modify-days" id="capacity">
+    <summary>Modify this</summary>
+    {% if ranked %}
+    <div class="warn-box">
+      <p><strong>{{ ranked | plural('student has', 'students have') }} already ranked these days.</strong> Changing the
+        days changes what they ranked: a day you take away comes off their lists, and a day you add goes to the bottom
+        of their lists until they move it. Changing seats per day is fine.</p>
+    </div>
+    {% else %}
+    <p class="mini-hint">Nobody has ranked yet, so you can change anything here freely.</p>
     {% endif %}
-  </div>
+    <div class="settings-row">
+      <form method="post" action="{{ url_for('teach.set_capacity', sid=sheet.id) }}" class="capacity-row">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="capacity-input">Seats per day:</label>
+        <input type="number" id="capacity-input" name="capacity" min="1" max="500" value="{{ sheet.capacity_per_day }}">
+        <button type="submit" class="btn btn-secondary btn-small">Update</button>
+      </form>
+      <p class="capacity-row"><a class="btn btn-secondary btn-small" href="{{ url_for('teach.edit_sheet', sid=sheet.id) }}#days-field"
+        {% if ranked %}data-confirm-click="{{ ranked | plural('student has', 'students have') }} already ranked these days. Change the days anyway?"{% endif %}>Change the days</a></p>
+      {% if counts.roster %}
+      <form method="post" action="{{ url_for('teach.set_unranked', sid=sheet.id) }}" class="capacity-row">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if sheet.include_unranked %}
+        <span>Students who don't rank get the seats that are left.</span>
+        <input type="hidden" name="include_unranked" value="0">
+        <button type="submit" class="btn-link">Leave them off the schedule instead</button>
+        {% else %}
+        <span>Students who don't rank are left off the schedule.</span>
+        <input type="hidden" name="include_unranked" value="1">
+        <button type="submit" class="btn-link">Give them the leftover seats instead</button>
+        {% endif %}
+      </form>
+      {% endif %}
+    </div>
+  </details>
 
   {% if sheet.bidding_open %}
   <div class="run-row">
@@ -142,32 +199,7 @@
     {% endif %}
     {% if tests_left_out %}<p class="mini-hint">Test students are left out, because real students have ranked.</p>{% endif %}
 
-    <div class="day-columns">
-      {% for d in days %}
-      <div class="day-column{{ ' over' if day_counts[d.key] > sheet.capacity_per_day }}">
-        <h3>{{ d.label }}</h3>
-        <p class="mini-hint">{{ day_counts[d.key] | plural('person', 'people') }} · {{ sheet.capacity_per_day | plural('seat') }}</p>
-        <ul class="assign-list">
-          {% for a in by_day[d.key] %}
-          <li class="{{ 'flagged' if a.cant or a.over }}">
-            <bdi>{{ a.name }}</bdi>
-            {% if a.choice %}<span class="tag" title="Where this day was on their list">choice #{{ a.choice }}</span>{% endif %}
-            {% if a.cant %}<span class="tag tag-danger">said they can't do this day</span>{% endif %}
-            {% if a.squeezed %}<span class="tag tag-danger">squeezed onto a full day</span>{% endif %}
-            {% if not a.ranked and not a.is_test %}<span class="tag">didn't rank</span>{% endif %}
-            {% if a.method == 'manual' %}<span class="tag">moved by you</span>{% endif %}
-            {% if a.ranked and not a.choice %}<span class="tag tag-warn">day added after they ranked</span>{% endif %}
-            {% if a.is_test %}<span class="tag">test</span>{% endif %}
-            {% if a.unlisted and counts.roster %}<span class="tag tag-warn">not on class list</span>{% endif %}
-            {% if a.note %}<div class="comment-note">“{{ a.note }}”</div>{% endif %}
-          </li>
-          {% else %}
-          <li class="muted">Nobody</li>
-          {% endfor %}
-        </ul>
-      </div>
-      {% endfor %}
-    </div>
+    {{ day_board(True) }}
 
     <h3 class="move-heading">Move a student</h3>
     <form method="post" action="{{ url_for('teach.move_student', sid=sheet.id) }}" class="manual-move-row">

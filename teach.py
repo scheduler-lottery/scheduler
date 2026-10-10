@@ -13,7 +13,7 @@ import os
 import re
 import unicodedata
 from collections import Counter
-from datetime import timedelta
+from datetime import date, timedelta
 from itertools import zip_longest
 
 from flask import (
@@ -960,6 +960,17 @@ SCHEDULE_ANCHORS = {"schedule", "publish", "no-day", "algorithm", "capacity", "m
 SETTINGS_ANCHORS = {"settings", "backups", "danger"}
 TAB_TEMPLATES = {"class": "sheet_tab_class.html", "schedule": "sheet_tab_schedule.html",
                  "settings": "sheet_tab_settings.html"}
+
+
+@bp.app_template_filter("day_parts")
+def day_parts(date_iso):
+    """{weekday: "Tue", day: 27, month: "Oct"} for a day's date ("2026-10-27"),
+    for the Schedule tab's calendar pages; None for a day without a date."""
+    try:
+        day = date.fromisoformat((date_iso or "")[:10])
+    except ValueError:
+        return None
+    return {"weekday": day.strftime("%a"), "day": day.day, "month": day.strftime("%b")}
 
 
 @bp.app_template_global()
