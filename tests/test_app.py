@@ -2844,3 +2844,9 @@ def test_workos_sends_invitations_once_the_owner_has_tested_them(prof, browser, 
     assert sent["alex.johnson@school.edu"]["state"] == "revoked"
     assert "already used" in html(browser().post("/invite", {"invitation_token": token}))
     assert q(prof.app, "SELECT COUNT(*) FROM invitations WHERE sheet_id = :sid", sid=sid) == 1  # Sam's, still out
+
+
+def test_the_ranking_options_each_show_the_same_small_example(browser):
+    page = text(browser().get("/how-it-works"))
+    assert page.count("In the example") == 3 and "Ana and Ben want Monday most" in page
+    assert "Everyone gets their first choice." in page and "Everyone gets their second choice." in page

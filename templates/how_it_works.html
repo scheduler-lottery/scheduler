@@ -78,13 +78,34 @@
       but no change could give it to her without displacing a student the draw placed ahead of her.
     </p>
     <h3>Options available to instructors</h3>
-    {% for algo_id, algo in algorithms.items() %}
-    <div class="algo-card">
-      <h4>{{ algo.label }}</h4>
-      <p class="algo-desc">{{ algo.description }}</p>
-      <p class="mini-hint">{{ algo.technical }}</p>
+    <p>Each option below runs the same small example: four students and two days, with two seats a day.
+      <strong>Ana and Ben</strong> want Monday most; <strong>Cleo and Dev</strong> want Tuesday most.</p>
+    <div class="algo-options">
+      {% for algo_id, algo in algorithms.items() %}
+      {% set ex = examples[algo_id] %}
+      <article class="algo-option{{ ' is-recommended' if algo_id == 'da_independent' }}{{ ' is-compare' if algo.compare_only }}">
+        <h4 class="algo-option-title">{{ algo.label }}</h4>
+        <p class="algo-desc">{{ algo.description }}</p>
+        <div class="algo-example">
+          <p class="algo-example-label">In the example</p>
+          <p class="algo-draw">{{ ex.draw }}</p>
+          <div class="ex-days">
+            {% for d in ex.days %}
+            <div class="ex-day">
+              <span class="ex-day-name">{{ d.day }}</span>
+              {% for p in d.people %}<span class="ex-person{{ ' is-first' if p.first else ' is-second' }}">{{ p.name }}<span class="visually-hidden">{{ ' (first choice)' if p.first else ' (second choice)' }}</span></span>{% endfor %}
+            </div>
+            {% endfor %}
+          </div>
+          <p class="algo-verdict{{ ' is-bad' if 'second' in ex.verdict }}">{{ ex.verdict }}</p>
+        </div>
+        <p class="mini-hint algo-technical">{{ algo.technical }}</p>
+      </article>
+      {% endfor %}
     </div>
-    {% endfor %}
+    {% if examples.da_single_lottery.verdict == examples.da_independent.verdict %}
+    <p class="mini-hint">Here the first two options give the same schedule. In a real class, with more students and days, their results differ a little: one shared order is the same line for every day, while a draw for each day gives a student unlucky on one day a fresh chance on the next.</p>
+    {% endif %}
     <p class="mini-hint">
       The matching is computed with <a href="https://github.com/daffidwilde/matching" target="_blank" rel="noopener">matching</a>,
       a peer-reviewed open-source Python library for problems of this kind.

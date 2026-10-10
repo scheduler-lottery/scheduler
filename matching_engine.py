@@ -133,8 +133,6 @@ def _draw(seed, *parts):
 def _solve(students, day_keys, seats, algorithm, seed):
     """Deferred acceptance over each student's acceptable days, with
     `seats` = {day: seats available}. Returns {key: day}."""
-    from matching.games import HospitalResident  # numpy is slow to import; most pages never need it
-
     open_days = {d for d in day_keys if seats.get(d, 0) > 0}
     prefs = {s["key"]: [d for d in s["pref"] if d in open_days] for s in students}
     keys = [k for k, p in prefs.items() if p]
@@ -142,11 +140,22 @@ def _solve(students, day_keys, seats, algorithm, seed):
         return {}
     shared = algorithm == "da_single_lottery"
     priority = {d: sorted(keys, key=lambda k: _draw(seed, "all" if shared else d, k)) for d in open_days}
-    wants = {d: {k for k in keys if d in prefs[k]} for d in open_days}
-    hospital_prefs = {d: [k for k in priority[d] if k in wants[d]] for d in open_days}
-    used_days = [d for d in day_keys if d in open_days and hospital_prefs[d]]
+    return solve_with({k: prefs[k] for k in keys}, priority, seats, algorithm, day_keys)
+
+
+def solve_with(prefs, priority, seats, algorithm, day_keys):
+    """Deferred acceptance for students' lists `prefs` ({key: [days]}) and
+    each day's draw `priority` ({day: [keys]}). Returns {key: day}."""
+    from matching.games import HospitalResident  # numpy is slow to import; most pages never need it
+
+    keys = [k for k, p in prefs.items() if p]
+    wants = {d: {k for k in keys if d in prefs[k]} for d in priority}
+    hospital_prefs = {d: [k for k in priority[d] if k in wants[d]] for d in priority}
+    used_days = [d for d in day_keys if d in priority and hospital_prefs[d] and seats.get(d, 0) > 0]
+    if not keys or not used_days:
+        return {}
     game = HospitalResident.create_from_dictionaries(
-        {k: prefs[k] for k in keys},
+        {k: [d for d in prefs[k] if d in used_days] for k in keys},
         {d: hospital_prefs[d] for d in used_days},
         {d: seats[d] for d in used_days},
     )
@@ -156,6 +165,53 @@ def _solve(students, day_keys, seats, algorithm, seed):
         for resident in residents:
             assigned[resident.name] = hospital.name
     return assigned
+
+
+# A small example for the "How days are assigned" page: four students, two
+# days with two seats each, and the same draws for every option (one shared
+# order, for the option with one draw). The tests check `results` against
+# the solver, so the page can't drift from what the site does.
+EXAMPLE = {
+    "days": ["Monday", "Tuesday"],
+    "seats": 2,
+    "rankings": {"Ana": ["Monday", "Tuesday"], "Ben": ["Monday", "Tuesday"],
+                 "Cleo": ["Tuesday", "Monday"], "Dev": ["Tuesday", "Monday"]},
+    "draws": {
+        "da_independent": {"Monday": ["Cleo", "Dev", "Ana", "Ben"], "Tuesday": ["Ana", "Ben", "Cleo", "Dev"]},
+        "da_single_lottery": {"Monday": ["Cleo", "Dev", "Ana", "Ben"], "Tuesday": ["Cleo", "Dev", "Ana", "Ben"]},
+        "da_day_favorable": {"Monday": ["Cleo", "Dev", "Ana", "Ben"], "Tuesday": ["Ana", "Ben", "Cleo", "Dev"]},
+    },
+    "results": {
+        "da_independent": {"Ana": "Monday", "Ben": "Monday", "Cleo": "Tuesday", "Dev": "Tuesday"},
+        "da_single_lottery": {"Ana": "Monday", "Ben": "Monday", "Cleo": "Tuesday", "Dev": "Tuesday"},
+        "da_day_favorable": {"Ana": "Tuesday", "Ben": "Tuesday", "Cleo": "Monday", "Dev": "Monday"},
+    },
+}
+
+
+def example_views():
+    """EXAMPLE, ready to show: for each option, its draw in words, who's on
+    each day (and whether it was their first choice), and a one-line
+    verdict."""
+    views = {}
+    for algo, result in EXAMPLE["results"].items():
+        draws = EXAMPLE["draws"][algo]
+        if algo == "da_single_lottery":
+            draw = "One order for every day: " + ", ".join(draws["Monday"]) + "."
+        else:
+            draw = " ".join(f"{day}'s draw: {', '.join(order)}." for day, order in draws.items())
+        firsts = sum(1 for name, day in result.items() if EXAMPLE["rankings"][name][0] == day)
+        verdict = ("Everyone gets their first choice." if firsts == len(result) else
+                   "Everyone gets their second choice." if firsts == 0 else
+                   f"{firsts} of {len(result)} get their first choice.")
+        views[algo] = {
+            "draw": draw,
+            "days": [{"day": day, "people": [{"name": name, "first": EXAMPLE["rankings"][name][0] == day}
+                                             for name, got in result.items() if got == day]}
+                     for day in EXAMPLE["days"]],
+            "verdict": verdict,
+        }
+    return views
 
 
 def _place(students, day_keys, cap, algorithm, seed, unranked, existing):

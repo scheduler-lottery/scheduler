@@ -176,3 +176,15 @@ def test_filling_never_uses_a_cant_do_day_for_someone_with_options():
     days = ["a", "b"]
     students = build_student_prefs([submission("cy", "ab", excluded="b")], days)
     assert fill_open_seats(students, days, 1, {"x": "a"}, seed=1) == []  # only "b" has room, and Cy can't do it
+
+
+def test_the_how_it_works_example_is_what_the_solver_does():
+    from matching_engine import EXAMPLE, example_views, solve_with
+
+    seats = {d: EXAMPLE["seats"] for d in EXAMPLE["days"]}
+    for algo, expected in EXAMPLE["results"].items():
+        assert solve_with(EXAMPLE["rankings"], EXAMPLE["draws"][algo], seats, algo, EXAMPLE["days"]) == expected, algo
+    views = example_views()
+    assert views["da_independent"]["verdict"] == "Everyone gets their first choice."
+    assert views["da_day_favorable"]["verdict"] == "Everyone gets their second choice."
+    assert views["da_single_lottery"]["draw"].startswith("One order for every day")

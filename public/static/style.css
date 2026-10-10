@@ -2902,3 +2902,34 @@ input[type="date"] {
 .quick-add-row { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
 .quick-add-row textarea { flex: 1 1 320px; min-height: 2.9em; resize: vertical; }
 .owner-steps { margin: 6px 0 12px; padding-left: 1.3em; line-height: 1.55; }
+
+/* "How days are assigned": the options, each with the same small example. */
+.algo-options { display: grid; gap: 18px; margin: 16px 0 14px; }
+.algo-option {
+  padding: 20px 22px; border: 1px solid var(--border); border-radius: 16px; background: var(--card-bg);
+  box-shadow: var(--shadow-sm);
+}
+.algo-option.is-recommended { border: 1.5px solid var(--accent); }
+.algo-option.is-compare { background: var(--surface-soft); }
+.algo-option-title { margin: 0 0 8px; }
+.algo-option .algo-desc { margin: 0 0 14px; font-size: 0.97rem; color: var(--text); }
+.algo-example { padding: 14px 16px; border-radius: 12px; background: var(--surface-soft); }
+.algo-option.is-compare .algo-example { background: var(--card-bg); }
+.algo-example-label {
+  margin: 0 0 6px; font-family: var(--font-small); font-size: 0.74rem; font-weight: 600;
+  letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted);
+}
+.algo-draw { margin: 0 0 12px; font-family: var(--font-small); font-size: 0.9rem; color: var(--muted); }
+.ex-days { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.ex-day {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--card-bg);
+}
+.ex-day-name { flex-basis: 100%; font-weight: 650; }
+.ex-person { padding: 3px 10px; border-radius: var(--radius-full); font-size: 0.9rem; }
+.ex-person.is-first { background: var(--success-bg); color: var(--success); }
+.ex-person.is-second { background: var(--amber-soft); color: var(--amber); }
+.algo-verdict { margin: 12px 0 0; font-weight: 650; color: var(--success); }
+.algo-verdict.is-bad { color: var(--amber); }
+.algo-technical { margin: 12px 0 0; }
+@media (max-width: 480px) { .ex-days { grid-template-columns: 1fr; } }
