@@ -51,11 +51,13 @@ def read(raw):
     if not raw:
         return None
     if isinstance(raw, str):
-        if len(raw.encode("utf-8")) > MAX_BYTES:
+        # A real list is one array of flat objects: anything nested deeper
+        # (which could exhaust the parser) isn't one.
+        if len(raw.encode("utf-8")) > MAX_BYTES or raw.count("[") + raw.count("{") > 2 * MAX_STUDENTS + 10:
             return None
         try:
             data = json.loads(raw)
-        except ValueError:
+        except (ValueError, RecursionError):
             return None
     else:
         data = raw
@@ -76,11 +78,12 @@ def read(raw):
     if not students:
         return None
     course_id = str(data.get("courseId") or "")
+    key = str(data.get("key") or "")
     version = data.get("v")
     return {"course": _text(data.get("course"), 200) or "your Canvas course",
             "course_id": course_id if re.fullmatch(r"\d{1,15}", course_id) else "",
             "host": _text(data.get("host"), 200).lower(),
-            "key": _text(data.get("key"), 64),
+            "key": key if re.fullmatch(r"[A-Za-z0-9]{1,64}", key) else "",
             "v": version if isinstance(version, int) else 1,
             "students": students}
 
@@ -109,7 +112,7 @@ def sent_by(data, instructor_id):
     """Did this instructor's own button send this list?"""
     import hmac
     expected = button_key(instructor_id)
-    return bool(expected) and hmac.compare_digest(data.get("key") or "", expected)
+    return bool(expected) and hmac.compare_digest(str(data.get("key") or "").encode(), expected.encode())
 
 
 def sweep():
@@ -119,11 +122,21 @@ def sweep():
 def store(data, origin):
     """Keep it for a signed-in instructor to pick up, with the site that
     really sent it (the post's Origin, not what the list says). Returns its
-    id, or None when too many are waiting already. Commits."""
+    id, or None when too many are waiting already. A real list is opened
+    (claimed) within moments of arriving, so when the room runs out, the
+    oldest lists nobody opened make way: a flood of posts can't keep real
+    ones out. Commits."""
     sweep()
-    if (db.scalar("SELECT COUNT(*) FROM canvas_imports") or 0) >= MAX_WAITING:
-        db.commit()
-        return None
+    waiting = db.scalar("SELECT COUNT(*) FROM canvas_imports") or 0
+    if waiting >= MAX_WAITING:
+        oldest = [r["id"] for r in db.rows(
+            "SELECT id FROM canvas_imports WHERE claimed_by IS NULL ORDER BY created_at LIMIT :n",
+            n=waiting - MAX_WAITING + 1)]
+        if len(oldest) < waiting - MAX_WAITING + 1:
+            db.commit()
+            return None
+        for old in oldest:
+            forget(old)
     iid = new_id(22)
     kept = {k: data[k] for k in ("course", "course_id", "key", "v", "students")}
     db.run("INSERT INTO canvas_imports (id, data, origin, created_at) VALUES (:id, :data, :origin, :at)",
@@ -159,6 +172,14 @@ def load(iid, instructor_id):
 
 def forget(iid):
     db.run("DELETE FROM canvas_imports WHERE id = :id", id=iid)
+
+
+def wait_longer(iid, instructor_id):
+    """Their list, kept another half hour from now (while they make a sheet
+    for it). Commits."""
+    db.run("UPDATE canvas_imports SET created_at = :at WHERE id = :id AND claimed_by = :me",
+           at=iso(), id=iid, me=instructor_id)
+    db.commit()
 
 
 @functools.lru_cache(maxsize=1)

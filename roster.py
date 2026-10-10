@@ -410,14 +410,20 @@ def parse_roster(data):
 CANVAS_SIGNED_OUT = ("That's Canvas saying you're signed out. Sign in to Canvas, open the page again, then copy and "
                      "paste it here.")
 CANVAS_NOT_ALLOWED = "That's Canvas saying you can't see that course's class list. Is it a course you teach?"
+CANVAS_SAID_NO = "That's Canvas saying it couldn't show that page. Open your course's class list in Canvas again."
+CANVAS_PARTIAL = "Only part of Canvas's page came across. Copy all of it (Ctrl A, then Ctrl C) and paste it again."
+CANVAS_COURSES = ("That's your list of Canvas courses, not a class list. Under “Copy and paste instead”, paste it "
+                  "in that box: it takes you on to the students.")
 
 
 def _canvas_api_people(text):
     """A copy of what Canvas's API shows in the browser (a course's users, as
     JSON; once it started "while(1);", and a copy may carry a little text
     around it): its people as (name, email) pairs, keeping nothing else. A
-    message, if it's Canvas saying no; None if it isn't from Canvas."""
-    body = text.strip()
+    message, if it's Canvas saying no, Canvas's list of courses, or only
+    part of a page; None if it isn't from Canvas."""
+    original = text.strip()
+    body = original
     if body.startswith("while(1);"):
         body = body[len("while(1);"):].strip()
     if body.startswith("{") and '"errors"' in body[:500]:
@@ -426,10 +432,13 @@ def _canvas_api_people(text):
             return CANVAS_SIGNED_OUT
         if "not authorized" in lowered or "unauthorized" in lowered:
             return CANVAS_NOT_ALLOWED
-        return None
+        return CANVAS_SAID_NO
     start, end = body.find("["), body.rfind("]")
-    if start < 0 or end < start or start > 200:
+    if start < 0 or start > 200:
         return None
+    looks_like_canvas = original.startswith("while(1);") or body[start:start + 2] == "[{"
+    if end < start:
+        return CANVAS_PARTIAL if looks_like_canvas and '"name"' in body[:2000] else None
     body = body[start:end + 1]
     if body.replace(" ", "") == "[]":
         return []
@@ -437,9 +446,13 @@ def _canvas_api_people(text):
         return None
     try:
         people = json.loads(body)
-    except ValueError:
-        return None
+    except (ValueError, RecursionError):
+        return CANVAS_PARTIAL if looks_like_canvas else None
     if not isinstance(people, list) or not all(isinstance(p, dict) for p in people):
+        return None
+    if any("course_code" in p or "enrollment_term_id" in p for p in people):
+        return CANVAS_COURSES
+    if not any(k in p for p in people for k in ("sortable_name", "login_id", "short_name", "email")):
         return None
     out = []
     for person in people:

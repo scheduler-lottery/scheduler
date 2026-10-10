@@ -5,16 +5,17 @@
 {% set canvas_host = canvas.domain if canvas else 'canvas.instructure.com' %}
 <div class="canvas-guide" data-canvas-guide data-sheet="{{ sheet.id }}" data-host="{{ canvas_host }}"
      data-list-url="{{ url_for('teach.canvas_list_here', sid=sheet.id) }}"{% if setup %} data-setup="1"{% endif %}
-     data-canvas-course-id="{{ sheet.canvas_course_id or '' }}">
+     data-canvas-course-id="{{ sheet.canvas_course_id or '' }}"
+     data-button-key="{{ canvas_button_key() }}" data-button-v="{{ canvas_button_version() }}">
   <section class="canvas-easy" aria-labelledby="canvas-easy-title-{{ sheet.id }}">
     <h4 class="canvas-easy-title" id="canvas-easy-title-{{ sheet.id }}">The easy way: one button</h4>
     <div class="canvas-easy-known" data-button-known hidden>
-      <p class="canvas-easy-lead"><strong>Click Send to Scheduler in your bookmarks bar.</strong> Canvas opens in a new tab: click it again there{% if sheet.canvas_course %}, on {{ sheet.canvas_course }}{% else %} and pick this class{% endif %}. You'll come right back here with the list.</p>
+      <p class="canvas-easy-lead"><strong>Click Send to Scheduler in your bookmarks bar.</strong> Canvas opens in a new tab: click it again there{% if sheet.canvas_course %}, on {{ sheet.canvas_course }}{% else %} and pick this class{% endif %}. You'll come right back here with the list.<span data-safari-only hidden> (In Safari, clicking it here does nothing: press Open Canvas, then click Send to Scheduler in Canvas.)</span></p>
       <button type="button" class="btn btn-secondary btn-small" data-canvas-tab>Open Canvas</button>
     </div>
     <ol class="canvas-easy-steps" data-button-new>
       <li>
-        <p><strong>Show your bookmarks bar.</strong> Press <kbd data-key-mod>Ctrl</kbd> <kbd>Shift</kbd> <kbd>B</kbd>. <span data-safari-only hidden>In Safari: in the View menu, choose Show Favorites Bar.</span> A thin bar appears under the address bar.</p>
+        <p><strong>Find your bookmarks bar</strong>: a thin row of bookmarks just under the address bar. Not there? Press <kbd data-key-mod>Ctrl</kbd> <kbd>Shift</kbd> <kbd>B</kbd><span data-safari-only hidden> (or, in Safari, choose View → Show Favorites Bar)</span>. If a bar you had disappears, it was already showing: press the same keys again.</p>
       </li>
       <li>
         <p><strong>Drag this button up onto that bar.</strong> Hold the mouse button down on it, move it up, then let go. You only do this once.</p>
@@ -49,7 +50,7 @@
     <p class="canvas-easy-safe">The button reads only your students' names and email addresses, and changes nothing in Canvas. A small Send to Scheduler box shows at the top right of Canvas while it works.</p>
     <details class="canvas-readd" data-button-known hidden>
       <summary>Lost the button? Add it again</summary>
-      <p class="mini-hint">Show your bookmarks bar (<kbd data-key-mod>Ctrl</kbd> <kbd>Shift</kbd> <kbd>B</kbd>), then drag this up onto it:</p>
+      <p class="mini-hint">Drag this up onto your bookmarks bar, the thin row just under the address bar. (No bar? Press <kbd data-key-mod>Ctrl</kbd> <kbd>Shift</kbd> <kbd>B</kbd>.)</p>
       <a class="bookmarklet" href="{{ canvas_button() }}" data-bookmarklet>
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 3.5h10a1 1 0 0 1 1 1V21l-6-4-6 4V4.5a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
         Send to Scheduler</a>

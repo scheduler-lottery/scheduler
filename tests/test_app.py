@@ -2991,7 +2991,7 @@ def test_a_list_from_canvas_can_start_a_new_sheet(prof, browser):
     canvas = browser()
     waiting = _from_canvas(canvas.client, _canvas_list(n=4, key=_button_key(prof))).headers["Location"]
     assert prof.post(waiting, {"sheet": "new"}).headers["Location"].endswith("/teach/new")
-    assert "goes into this sheet as soon as it's made" in html(prof.get("/teach/new"))
+    assert "goes into this sheet when you finish here" in html(prof.get("/teach/new"))
     r = prof.post("/teach/new", {"title": "From Canvas", "day_date": [a_date("Mon", 0), a_date("Tue", 1)],
                                  "day_key": ["", ""], "capacity": "2"})
     sid = re.search(r"/teach/s/([^/#?]+)", r.headers["Location"]).group(1)
@@ -3025,9 +3025,15 @@ def test_lists_from_canvas_are_checked_limited_and_swept(prof, browser, monkeypa
     assert "/teach/canvas-import/" in _from_canvas(canvas.client, _canvas_list()).headers["Location"]
     r = _from_canvas(canvas.client, _canvas_list())
     assert r.headers["Location"].endswith("why=busy") and not r.headers.getlist("Set-Cookie")
-    # However many networks send them, only so many wait at once.
+    # However many networks send them, only so many wait at once: the oldest nobody opened make way, and
+    # only when every waiting list is someone's is a new one turned away.
     monkeypatch.setattr(app_module, "CANVAS_IMPORTS_PER_HOUR", 100)
     monkeypatch.setattr(canvas_import, "MAX_WAITING", 2)  # the two above
+    newest = _from_canvas(canvas.client, _canvas_list()).headers["Location"]
+    assert "/teach/canvas-import/" in newest and q(prof.app, "SELECT COUNT(*) FROM canvas_imports") == 2
+    other = _from_canvas(canvas.client, _canvas_list()).headers["Location"]
+    prof.get(newest)
+    prof.get(other)  # both opened: theirs
     assert _from_canvas(canvas.client, _canvas_list()).headers["Location"].endswith("why=busy")
     # Old lists go as soon as another arrives, and an old one can't be opened.
     with prof.app.app_context():
@@ -3060,6 +3066,97 @@ def test_a_list_handed_to_the_page_by_the_canvas_window_goes_in(prof):
     r = prof.post(f"/teach/s/{other}/canvas-list", {"list": _canvas_list(n=2), "how": "copied"})
     assert r.headers["Location"].endswith(f"/teach/s/{other}#class-list")
     assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=other) == 2
+
+
+def test_lists_canvas_couldnt_have_sent_are_turned_away_quietly(prof, browser):
+    canvas = browser()
+    deep = json.dumps({"type": "scheduler-class-list", "students": []})[:-2] + "[" * 60000 + "]" * 60000 + "]}"
+    r = _from_canvas(canvas.client, deep)
+    assert r.status_code == 303 and r.headers["Location"].endswith("why=list")
+    assert q(prof.app, "SELECT COUNT(*) FROM error_log") == 0
+    # A key that isn't one of ours is no key: the list is flagged, nothing breaks.
+    odd = json.dumps({"type": "scheduler-class-list", "key": "é", "course": "X", "students": [{"name": "A B"}]})
+    waiting = _from_canvas(canvas.client, odd).headers["Location"]
+    assert "Did you just click" in text(prof.get(waiting))
+    sid = prof.create_sheet(allow_unlisted=False)
+    assert "/roster/review/" in prof.post(f"/teach/s/{sid}/canvas-list", {"list": odd}).headers["Location"]
+
+
+def test_a_list_from_canvas_goes_to_the_sheet_tied_to_its_course(prof, browser):
+    canvas = browser()
+    key = _button_key(prof)
+    a = prof.create_sheet(title="LAW 310", allow_unlisted=False)
+    b = prof.create_sheet(title="Evidence", allow_unlisted=False)
+    prof.post(f"/teach/s/{a}/canvas-list", {"list": _canvas_list(n=3, key=key, course_id="111", course="LAW 310")})
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=a) == "111"
+    prof.get(f"/teach/s/{b}")  # B's class list was the last one open
+    prof.get(f"/teach/s/{a}/schedule")  # (other tabs don't count)
+    waiting = _from_canvas(canvas.client, _canvas_list(key=key, course_id="111", course="LAW 310")).headers["Location"]
+    page = raw(prof.get(waiting))
+    assert re.search(rf'value="{a}" required checked', page) and not re.search(rf'value="{b}" required checked', page)
+    assert "its list is from LAW 310" in page
+    # A course no sheet is tied to: the sheet last open, since it isn't tied to another.
+    waiting = _from_canvas(canvas.client, _canvas_list(key=key, course_id="222", course="BIO 101")).headers["Location"]
+    assert re.search(rf'value="{b}" required checked', raw(prof.get(waiting)))
+    # The wrong course for a tied sheet: a second look first, and backing out leaves it tied as it was.
+    r = prof.post(f"/teach/s/{a}/canvas-list", {"list": _canvas_list(n=3, key=key, course_id="222", course="BIO 101")})
+    assert "/roster/review/" in r.headers["Location"]
+    review = text(prof.get(r.headers["Location"]))
+    assert "came from LAW 310 in Canvas; this one is from BIO 101" in review
+    prof.post(r.headers["Location"], {"action": "cancel"})
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=a) == "111"
+    # Even an empty sheet tied to another course gets the second look.
+    c = prof.create_sheet(title="Seminar", allow_unlisted=False)
+    with prof.app.app_context():
+        db.run("UPDATE sheets SET canvas_course_id = '333', canvas_course = 'SEM 1' WHERE id = :s", s=c)
+        db.commit()
+    r = prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=2, key=key, course_id="444")})
+    assert "/roster/review/" in r.headers["Location"]
+    prof.post(r.headers["Location"], {"action": "replace"})
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=c) == "444"
+
+
+def test_the_button_teaches_the_site_which_canvas_is_theirs(prof, browser):
+    assert q(prof.app, "SELECT canvas_host FROM instructors WHERE email = 'prof@school.edu'") is None
+    sid = prof.create_sheet(allow_unlisted=False)
+    waiting = _from_canvas(browser().client, _canvas_list(key=_button_key(prof)),
+                           origin="https://canvas.myschool.edu").headers["Location"]
+    prof.post(waiting, {"sheet": sid})
+    assert q(prof.app, "SELECT canvas_host FROM instructors WHERE email = 'prof@school.edu'") == "canvas.myschool.edu"
+    assert 'data-host="canvas.myschool.edu"' in raw(prof.get(f"/teach/s/{sid}"))  # "Update from Canvas" goes there
+
+
+def test_a_list_waiting_for_a_new_sheet_gets_time_to_make_it(prof, browser):
+    from datetime import timedelta
+    from util import iso, now
+
+    waiting = _from_canvas(browser().client, _canvas_list(n=2, key=_button_key(prof))).headers["Location"]
+    prof.get(waiting)
+    with prof.app.app_context():
+        db.run("UPDATE canvas_imports SET created_at = :t", t=iso(now() - timedelta(minutes=25)))
+        db.commit()
+    prof.post(waiting, {"sheet": "new"})
+    with prof.app.app_context():
+        assert db.scalar("SELECT created_at FROM canvas_imports") > iso(now() - timedelta(minutes=1))
+        db.run("UPDATE canvas_imports SET created_at = :old", old=PASSED)  # but left far too long
+        db.commit()
+    r = prof.post("/teach/new", {"title": "Late", "day_date": [a_date("Mon", 0), a_date("Tue", 1)],
+                                 "day_key": ["", ""], "capacity": "2"})
+    assert "waited more than half an hour" in follow(prof, r)
+
+
+def test_canvas_text_that_isnt_a_class_list_never_becomes_students():
+    from roster import parse_roster
+
+    courses = 'while(1);[{"id":1,"name":"LAW 310 Computer Science and Law","course_code":"LAW310"}]'
+    assert "list of Canvas courses" in parse_roster(courses.encode()).error
+    assert "couldn't show that page" in parse_roster(b'{"errors":[{"message":"The specified resource does not exist."}]}').error
+    assert "signed out" in parse_roster(b'{"errors":[{"message":"user authorization required"}]}').error
+    cut = '[{"id":0,"name":"Student 0","sortable_name":"0, S","email":"s0@x.edu"},{"id":1,"name":"Stu'
+    assert "Only part" in parse_roster(cut.encode()).error
+    copied = 'JSON  Raw Data  Headers\n[{"id":0,"name":"Kim, Alex","sortable_name":"Kim, Alex","email":"a@x.edu"}]'
+    result = parse_roster(copied.encode())
+    assert not result.error and [s["display_name"] for s in result.students] == ["Alex Kim"]
 
 
 def test_canvas_names_written_last_first_are_turned_round_not_cut(prof):

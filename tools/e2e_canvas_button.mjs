@@ -178,7 +178,7 @@ try {
     "57 students, from that course, all with emails");
   await sleep(2200);
   check(!(await send("Target.getTargets")).targetInfos.some((t) => t.targetId === tab.targetId), "the Canvas tab closed by itself");
-  await evaluate(me.session, `document.querySelector("[data-canvas-arrived] form").submit()`);
+  await evaluate(me.session, `document.querySelector("[data-canvas-arrived] form").requestSubmit()`);
   check(await until(me.session, `document.readyState === "complete" && /Added 57 students/.test(document.body.innerText)`),
     "Add put 57 students on the sheet");
 
@@ -197,7 +197,7 @@ try {
   await evaluate(canvas2, code1);
   check(await until(me.session, `!document.querySelector("[data-canvas-arrived]").hidden`, 10000), "no picking: the list comes right back");
   check(await evaluate(me.session, `document.querySelector("[data-canvas-arrived]").closest("details").open`), "shown, unfolded");
-  await evaluate(me.session, `document.querySelector("[data-canvas-arrived] form").submit()`);
+  await evaluate(me.session, `document.querySelector("[data-canvas-arrived] form").requestSubmit()`);
   await until(me.session, `document.readyState === "complete" && location.pathname.includes("/roster/review/")`);
   check((await text(me.session)).includes("Check the new class list"), "and a sheet with a list shows what changes first");
 
@@ -212,8 +212,9 @@ try {
   check(!page3.includes("Did you just click"), "with no warning: the instructor's own button sent it");
   check(await evaluate(own.session, `!document.querySelector(".arrived-list b") && document.querySelector(".arrived-list").textContent.includes("<b>and</b>")`),
     "a name that reads like markup stays plain text");
-  check(await evaluate(own.session, `document.querySelector("input[name=sheet][value='${sid}']").checked`),
-    "the sheet they were just on is picked");
+  check(await evaluate(own.session, `![...document.querySelectorAll("input[name=sheet]")].some((r) => r.checked)`)
+    && page3.includes("its list is from 2026FA_BUSCOM_615_SEC1"),
+    "the sheet last open is tied to another Canvas course, so nothing is picked for them, and it says so");
 
   // ---- 4. A list another page sends (no key): flagged, and thrown away.
   const forged = await newPage(`${CANVAS}/courses/202`);
@@ -274,7 +275,7 @@ try {
   check(arrived5.includes("230 students from 2027SP_LAW_610_LECTURE (2027 Spring)"), "230 students, from that course");
   const sent = await evaluate(me.session, `document.querySelector("[data-canvas-arrived] input[name=list]").value`);
   check(!/login_id|sortable_name|"id"/.test(sent), "only names and emails are sent to Scheduler");
-  await evaluate(me.session, `document.querySelector("[data-canvas-arrived] form").submit()`);
+  await evaluate(me.session, `document.querySelector("[data-canvas-arrived] form").requestSubmit()`);
   check(await until(me.session, `document.readyState === "complete" && /Added 230 students/.test(document.body.innerText)`),
     "Add put all 230 on the sheet (" + sid5 + ")");
 
@@ -286,6 +287,33 @@ try {
   await paste(await grab("/api/v1/courses/606/users?enrollment_type[]=student&include[]=email&per_page=100&page=2"));
   check(await until(me.session, `document.querySelector("[data-canvas-arrived]").innerText.includes("100 students from")`),
     "a class of exactly 100: the empty next page ends it");
+
+  // ---- 6. Clicked while the class-list questions are still on their first
+  // step: the Canvas step comes into view, and so does the list.
+  const sid6 = await newSheet("E2E Start Step");
+  await go(me.session, `${SITE}/teach/s/${sid6}/setup?step=students`);
+  await until(me.session, `!!document.querySelector("[data-quiz]") && document.readyState === "complete"`);
+  check(await evaluate(me.session, `!document.querySelector('[data-step="start"]').hidden && document.querySelector('[data-step="canvas"]').hidden`),
+    "a new sheet's questions start at “Do you use Canvas?”");
+  await evaluate(me.session, toFakeCanvas);
+  before = created.length;
+  await evaluate(me.session, code1);
+  check(await until(me.session, `!document.querySelector('[data-step="canvas"]').hidden && document.querySelector("[data-bookmarklet-said]").offsetParent !== null`),
+    "clicking the button there brings the Canvas step into view, saying so");
+  const tab6 = await opened(before);
+  const canvas6 = await attach(tab6.targetId);
+  await send("Page.enable", {}, canvas6);
+  await until(canvas6, `location.pathname === "/courses" || location.pathname === "/" ? document.readyState === "complete" : false`, 10000);
+  await evaluate(canvas6, code1);
+  await until(canvas6, `!!document.querySelector('[aria-label="Send to Scheduler"]') && document.querySelector('[aria-label="Send to Scheduler"]').innerText.includes("2026FA_LAW_540_SEC20")`);
+  await press(canvas6, "2026FA_LAW_540_SEC20");
+  check(await until(me.session, `document.querySelector("[data-canvas-arrived]").offsetParent !== null && document.querySelector("[data-canvas-arrived]").innerText.includes("8 students")`, 10000),
+    "and the list arrives where it can be seen, with its Add button");
+
+  // ---- 7. An old button (another key): told to drag the new one.
+  await evaluate(me.session, `document.dispatchEvent(new CustomEvent("scheduler-button-check", { detail: { v: 2, key: "oldkey" } }))`);
+  check(await until(me.session, `document.querySelector("[data-bookmarklet-said]").textContent.includes("out of date") && !document.querySelector(".canvas-easy-steps").hidden`),
+    "an out-of-date button is spotted, and the steps to drag a new one show again");
 } catch (err) {
   console.log("FAIL " + err.message);
   failures++;

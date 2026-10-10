@@ -18,7 +18,7 @@
   var SITE = "__SITE__";
   var KEY = "__KEY__";
   if (location.origin === SITE) {
-    document.dispatchEvent(new CustomEvent("scheduler-button-check", { detail: { v: 2 } }));
+    document.dispatchEvent(new CustomEvent("scheduler-button-check", { detail: { v: 2, key: KEY } }));
     return;
   }
   var old = window.__schedulerButton;
@@ -126,10 +126,12 @@
     if (why === "signin") done("Sign in to Canvas first (in this tab), then click Send to Scheduler again.");
     else if (why === "forbidden") done("Canvas didn't let this button see that course's class list. Is it a course you teach?",
       pickAgain ? again : null);
-    else if (why === "missing") done("Canvas couldn't find that course. Open your course in Canvas, then click Send to Scheduler again.");
+    else if (why === "missing" && onCanvas) done("Canvas couldn't find that course. Open your course in Canvas, then click "
+      + "Send to Scheduler again.");
     else if (why === "busy" || why === "offline" || onCanvas) done("Canvas didn't answer just now. Wait a minute, then click "
       + "Send to Scheduler again. If it keeps happening, go back to Scheduler and use “Copy and paste instead”.");
-    else done("This button only works on your school's Canvas. Open Canvas, then click Send to Scheduler again.");
+    else done("This page isn't Canvas yet. If you're still signing in, finish signing in first. When you see your Canvas "
+      + "Dashboard or your course, click Send to Scheduler again.");
   }
 
   // Which course: the one this page is in; else the one the Scheduler page

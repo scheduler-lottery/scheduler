@@ -16,6 +16,7 @@ The pieces:
 
 import base64
 import hmac
+import ipaddress
 import re
 from datetime import timedelta
 
@@ -109,6 +110,12 @@ def local_times(text):
 def canvas_button():
     me = auth.current_instructor()
     return canvas_import.bookmarklet(request.url_root, canvas_import.button_key(me["id"]) if me else "")
+
+
+@app.template_global("canvas_button_key")
+def canvas_button_key():
+    me = auth.current_instructor()
+    return canvas_import.button_key(me["id"]) if me else ""
 
 
 app.add_template_global(lambda: canvas_import.VERSION, "canvas_button_version")
@@ -396,7 +403,8 @@ def how_it_works():
 CANVAS_IMPORTS_PER_HOUR = 30
 CANVAS_IMPORT_PROBLEMS = {
     "list": ("That wasn't a class list", "Open your course in Canvas and click Send to Scheduler again."),
-    "busy": ("Too many class lists at once", "Wait a few minutes, then click Send to Scheduler in Canvas again."),
+    "busy": ("Too many class lists at once", "Wait a few minutes, then click Send to Scheduler in Canvas again. Or, on "
+             "your sheet's Class list page, use “Copy and paste instead”."),
 }
 
 
@@ -408,6 +416,16 @@ def _sender_host():
         origin = request.headers.get("Referer") or ""
     found = re.match(r"https?://([^/?#]+)", origin)
     return found.group(1).lower()[:200] if found else ""
+
+
+def _network(address):
+    """Who to count posts by: the address, or for IPv6 its /64 (one home or
+    office gets a whole /64, so a single address means little)."""
+    try:
+        ip = ipaddress.ip_address(address or "")
+    except ValueError:
+        return address or "unknown"
+    return str(ipaddress.ip_network(f"{ip}/64", strict=False)) if ip.version == 6 else str(ip)
 
 
 @app.route("/canvas-import", methods=["POST"])
@@ -424,7 +442,7 @@ def receive_canvas_list():
         data = None
     if not data:
         return redirect(url_for("canvas_import_problem", why="list"), code=303)
-    network = "n:" + signin.keyed_hash("ip|" + (signin.client_ip() or "unknown"))
+    network = "n:" + signin.keyed_hash("ip|" + _network(signin.client_ip()))
     # Counted first, then checked, so posts at the same moment can't all slip under the limit.
     db.run("INSERT INTO auth_failures (id, scope, subject, client, at) VALUES (:id, 'canvas-import', '', :c, :at)",
            id=new_id(16), c=network, at=iso())
