@@ -13,7 +13,7 @@
 // --enable-unsafe-extension-debugging), the way Chrome's own test tools do,
 // since Chrome no longer takes --load-extension.
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -87,6 +87,25 @@ async function newPage(url) {
   return { targetId, session };
 }
 const text = (session) => evaluate(session, "document.body ? document.body.innerText : ''");
+// SHOTS=dist/store: the Chrome Web Store's 1280x800 screenshots, taken on the way.
+const SHOTS = process.env.SHOTS;
+async function shot(session, name, selector) {
+  if (!SHOTS) return;
+  mkdirSync(SHOTS, { recursive: true });
+  await send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false }, session);
+  // As a professor at Northwestern would see it (the stand-in's address aside).
+  await evaluate(session, `(() => {
+    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+      n.nodeValue = n.nodeValue.replace("127.0.0.1:5077", "canvas.northwestern.edu").replace("not chosen yet", "Northwestern University");
+    }
+    document.querySelector(${JSON.stringify(selector)}).scrollIntoView({ block: "center" });
+  })()`);
+  await sleep(700);
+  const { data } = await send("Page.captureScreenshot", { format: "png" }, session);
+  writeFileSync(join(SHOTS, name), Buffer.from(data, "base64"));
+  await send("Emulation.clearDeviceMetricsOverride", {}, session);
+}
 const press = (session, label) => evaluate(session, `(() => {
   const b = [...document.querySelectorAll("button, a")].find((x) => x.textContent.includes(${JSON.stringify(label)}) && x.offsetParent !== null);
   if (!b) return false; b.click(); return true; })()`);
@@ -125,6 +144,7 @@ try {
     "with the helper installed, the step offers one button: Get my class list from Canvas");
   check(await evaluate(me.session, `!document.querySelector("[data-bookmark-more]").hidden && !document.querySelector("[data-bookmark-more]").open`),
     "the bookmark button is folded away as a fallback");
+  await shot(me.session, "1-one-button.png", "[data-helper]");
 
   // One click. Not signed in to Canvas: a Canvas tab comes up to sign in.
   const before = created.length;
@@ -149,12 +169,15 @@ try {
   await sleep(500);
   const { targetInfos } = await send("Target.getTargets");
   check(!targetInfos.some((t) => t.targetId === canvasTab.targetId), "the Canvas tab the helper opened closed itself");
+  await shot(me.session, "2-pick-the-course.png", "[data-helper-courses]");
   const choices = await evaluate(me.session, `document.querySelector("[data-helper-courses]").textContent`);
   check(choices.includes("2026FA_BUSCOM_615_SEC1 · 2026 Fall · 57 students") && choices.includes("2026FA_LAW_200_TA")
     && !choices.includes("FACULTY_TRAINING"), "courses they teach or TA, with term and size");
   check(choices.indexOf("2026FA_BUSCOM_615_SEC1") < choices.indexOf("2027SP_LAW_610_LECTURE"), "this term's first");
   await press(me.session, "2026FA_BUSCOM_615_SEC1");
   check(await until(me.session, `!document.querySelector("[data-canvas-arrived]").hidden`, 10000), "one click on the course, and the list is here");
+  await shot(me.session, "3-the-class-list.png", "[data-canvas-arrived]");
+  check(await evaluate(me.session, `!document.querySelector("[data-bookmark-more]").open`), "the bookmark fallback stays folded");
   const arrived = await evaluate(me.session, `document.querySelector("[data-canvas-arrived]").innerText`);
   check(arrived.includes("57 students from 2026FA_BUSCOM_615_SEC1 (2026 Fall)") && arrived.includes("All with email addresses"),
     "57 students, with their emails");

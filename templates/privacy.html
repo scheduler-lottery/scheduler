@@ -100,6 +100,25 @@
     </div>
   </section>
 
+  <section class="policy-section" id="canvas" data-reveal>
+    <h2>Class lists from Canvas</h2>
+    <div class="policy-body">
+      <p>An instructor can bring a course's class list over from Canvas in their own browser, signed in to Canvas
+        the usual way. The site never sees a Canvas or school password, and never changes anything in Canvas.</p>
+      <ul>
+        <li><strong>Scheduler Helper</strong> (a browser extension, if the instructor adds it): when the instructor
+          clicks “Get my class list from Canvas” here, it asks Canvas for their courses, then for one course's
+          students, and hands this page each student's name and email address. It reads nothing else, does
+          nothing when not asked, keeps nothing, and sends nothing anywhere but this site.
+          <a href="{{ url_for('helper') }}">More about it</a>.</li>
+        <li><strong>The Send to Scheduler button</strong> (a bookmark) and <strong>copy and paste</strong> do the
+          same by hand: only names and email addresses leave the instructor's browser.</li>
+        <li>A list sent from Canvas waits at most an hour for the instructor to add it, and is deleted if they
+          don't. Once added, it's part of the sheet's class list, kept as described here.</li>
+      </ul>
+    </div>
+  </section>
+
   <section class="policy-section" data-reveal>
     <h2>How long it's kept</h2>
     <div class="policy-body">

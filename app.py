@@ -506,6 +506,13 @@ def privacy():
     return render_template("privacy.html")
 
 
+@app.route("/helper")
+def helper():
+    """What Scheduler Helper (the browser extension) is and does: its store
+    page and the extension itself link here."""
+    return render_template("helper.html")
+
+
 @app.route("/healthz")
 def healthz():
     try:

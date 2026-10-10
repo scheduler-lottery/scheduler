@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Scheduler Helper — {{ app_name }}{% endblock %}
+{% block content %}
+<article class="card prose">
+  <p class="eyebrow">For instructors</p>
+  <h1>Scheduler Helper</h1>
+  <p class="lead">A small browser extension that brings your class list from Canvas into {{ app_name }} with one click,
+    so there's nothing to download, copy, or drag.</p>
+
+  <h2>What it does</h2>
+  <ul>
+    <li>On a sign-up sheet's <strong>Class list</strong> step, you click <strong>Get my class list from Canvas</strong>.</li>
+    <li>The helper asks your school's Canvas for your courses, then for the students in the one you pick. It does
+      that as you, signed in to Canvas the usual way. If you aren't signed in, a Canvas tab opens for you to sign in
+      (with Duo, as always), and it carries on after.</li>
+    <li>It hands {{ app_name }}'s page each student's <strong>name and email address</strong>, and nothing else. You
+      look the list over, and press Add.</li>
+  </ul>
+
+  <h2>What it never does</h2>
+  <ul>
+    <li>It never sees your password, and never changes anything in Canvas.</li>
+    <li>It does nothing until you click that button on {{ app_name }}'s own site. No other site can ask it for
+      anything.</li>
+    <li>It keeps nothing, and sends nothing anywhere but this site.</li>
+  </ul>
+
+  <h2>What Chrome will tell you</h2>
+  <p>When you add it, Chrome says it can “read and change your data on canvas.northwestern.edu”. That's the
+    permission it needs to ask Canvas for your class list; it only ever reads names and emails, and only when you
+    click. Its code is public: <a href="{{ source_url }}/tree/main/extension" rel="noopener">see exactly what it does</a>.</p>
+
+  <h2>Removing it</h2>
+  <p>In Chrome, open the puzzle-piece menu at the top right, find Scheduler Helper, and choose <strong>Remove from
+    Chrome</strong>. You can still bring a class list over by copy and paste.</p>
+
+  <p><a href="{{ url_for('privacy') }}#canvas">Privacy: class lists from Canvas</a></p>
+</article>
+{% endblock %}

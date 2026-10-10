@@ -1040,6 +1040,7 @@
       var bookmarkMore = guide.querySelector("[data-bookmark-more]");
       var helperFirst = function () {
         helperBox.hidden = false;
+        helperBox.after(arrived); // a list shows right under the one button
         if (bookmarkSection && bookmarkMore && bookmarkSection.parentNode !== bookmarkMore) {
           bookmarkMore.appendChild(bookmarkSection);
           bookmarkMore.hidden = false;
