@@ -91,6 +91,14 @@ CONTACT_EMAIL = _env("CONTACT_EMAIL").lower()
 # can check what it does with a class list.
 SOURCE_URL = _env("SOURCE_URL", "https://github.com/scheduler-lottery/scheduler")
 
+# Scheduler Helper, the browser extension that fetches a class list from
+# Canvas when the class-list step asks (extension/): its id(s) in the
+# browser's extension store (more than one if, say, Edge's differs), and the
+# store page that installs it. Until they're set, the class-list step
+# doesn't offer it.
+CANVAS_HELPER_IDS = [i.strip() for i in _env("CANVAS_HELPER_IDS").split(",") if i.strip()]
+CANVAS_HELPER_STORE_URL = _env("CANVAS_HELPER_STORE_URL")
+
 # The credit at the foot of every page. Running your own copy? Set these to
 # yourself (or BUILT_BY to "-" to show no credit).
 BUILT_BY = _env("BUILT_BY", "Nathan Reitinger")

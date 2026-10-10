@@ -252,6 +252,8 @@ def template_globals():
         "code_sender": signin.code_sender(),
         "preload_fonts": _preload_fonts(),
         "codes_by_workos": signin.email_mode() == "workos",
+        "helper_ids": ",".join(settings.CANVAS_HELPER_IDS),
+        "helper_store_url": settings.CANVAS_HELPER_STORE_URL,
         "mail_by_gmail": signin.smtp_ready(),
         # On the general pages a student might wander to (Privacy, How it
         # works), a way back to their class.

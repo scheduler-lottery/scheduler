@@ -141,6 +141,13 @@ def api(data, status=200, link=None):
     return response
 
 
+@app.route("/api/v1/users/self")
+def api_self():
+    if not signed_in():
+        return api(SIGNED_OUT, 401)
+    return api({"id": 1, "name": "Professor", "primary_email": "prof@u.example.edu"})
+
+
 @app.route("/api/v1/courses")
 def api_courses():
     if not signed_in():

@@ -6,8 +6,35 @@
 <div class="canvas-guide" data-canvas-guide data-sheet="{{ sheet.id }}" data-host="{{ canvas_host }}"{% if canvas and canvas.saved %} data-host-saved{% endif %}
      data-list-url="{{ url_for('teach.canvas_list_here', sid=sheet.id) }}"{% if setup %} data-setup="1"{% endif %}
      data-canvas-course-id="{{ sheet.canvas_course_id or '' }}"
-     data-button-key="{{ canvas_button_key() }}" data-button-v="{{ canvas_button_version() }}">
-  <section class="canvas-easy" aria-labelledby="canvas-easy-title-{{ sheet.id }}">
+     data-button-key="{{ canvas_button_key() }}" data-button-v="{{ canvas_button_version() }}"
+     data-helper-ids="{{ helper_ids }}" data-helper-store="{{ helper_store_url }}">
+  {# Scheduler Helper (extension/): with it, one click here fetches the list
+     from Canvas. Shown by app.js once it's installed, or (in Chrome and
+     Edge) with how to add it. #}
+  {% if helper_ids %}
+  <section class="canvas-easy canvas-helper" data-helper hidden aria-labelledby="canvas-helper-title-{{ sheet.id }}">
+    <h4 class="canvas-easy-title" id="canvas-helper-title-{{ sheet.id }}">The easy way: one click</h4>
+    <div data-helper-ready hidden>
+      <button type="button" class="btn btn-primary btn-large" data-helper-go>Get my class list from Canvas</button>
+      <p class="mini-hint">Scheduler Helper fetches it from your Canvas{% if sheet.canvas_course %} ({{ sheet.canvas_course }}){% endif %}: names and email addresses only. If Canvas wants you to sign in, it opens for that, and this page carries on after.</p>
+    </div>
+    <div data-helper-install hidden>
+      <p class="canvas-easy-lead"><strong>Once:</strong> add the free Scheduler Helper to Chrome. Two clicks, and after that your class list comes over with one.</p>
+      <a class="btn btn-primary btn-large" href="{{ helper_store_url or '#' }}" target="_blank" rel="noopener" data-helper-add>Add Scheduler Helper to Chrome</a>
+      <ol class="helper-install-steps">
+        <li>On the page that opens, click <strong>Add to Chrome</strong>.</li>
+        <li>Click <strong>Add extension</strong>. (Chrome says it can “read and change your data on canvas.northwestern.edu”: it only reads your students' names and emails, and only when you click here.)</li>
+        <li>Come back to this tab. It carries on by itself.</li>
+      </ol>
+    </div>
+    <p class="bookmarklet-said" data-helper-said role="status" hidden></p>
+    <div class="canvas-copy-courses" data-helper-courses hidden></div>
+  </section>
+  <details class="canvas-by-hand" data-bookmark-more hidden>
+    <summary>Or: a button for your bookmarks bar</summary>
+  </details>
+  {% endif %}
+  <section class="canvas-easy" data-bookmark-section aria-labelledby="canvas-easy-title-{{ sheet.id }}">
     <h4 class="canvas-easy-title" id="canvas-easy-title-{{ sheet.id }}">The easy way: one button</h4>
     <div class="canvas-easy-known" data-button-known hidden>
       <p class="canvas-easy-lead"><strong>Click Send to Scheduler in your bookmarks bar.</strong> Canvas opens in a new tab: click it again there{% if sheet.canvas_course %}, on {{ sheet.canvas_course }}{% else %} and pick this class{% endif %}. You'll come right back here with the list.<span data-safari-only hidden> (In Safari, clicking it here does nothing: press Open Canvas, then click Send to Scheduler in Canvas.)</span></p>

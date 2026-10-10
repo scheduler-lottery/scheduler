@@ -25,3 +25,6 @@ roslindale-web-fonts/
 *.woff2
 *.ttf
 *.otf
+
+# Built browser extension (tools/build_extension.py)
+dist/

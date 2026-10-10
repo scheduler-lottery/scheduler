@@ -3250,6 +3250,38 @@ def test_after_a_list_goes_in_the_instructor_sees_who_came_over(prof):
     assert "Who was added (2)" in page and "Student 4 s4@u.school.edu" in page.split("Who was added")[1][:200]
 
 
+def test_scheduler_helper_is_offered_only_once_it_exists(prof, monkeypatch):
+    sid = prof.create_sheet(allow_unlisted=False)
+    assert "data-helper-go" not in raw(prof.get(f"/teach/s/{sid}"))  # not published yet: not offered
+    monkeypatch.setattr(settings, "CANVAS_HELPER_IDS", ["abcdefghijklmnopabcdefghijklmnop"])
+    monkeypatch.setattr(settings, "CANVAS_HELPER_STORE_URL", "https://chromewebstore.google.com/detail/x")
+    page = raw(prof.get(f"/teach/s/{sid}"))
+    assert 'data-helper-ids="abcdefghijklmnopabcdefghijklmnop"' in page and "Get my class list from Canvas" in page
+    assert 'href="https://chromewebstore.google.com/detail/x"' in page and "Add Scheduler Helper to Chrome" in page
+    # A list the helper fetched for this page goes in like one copied here.
+    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=3), "how": "helper"})
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 3
+
+
+def test_the_helper_extension_builds_with_least_permissions():
+    import importlib.util
+    import zipfile as zf
+
+    spec = importlib.util.spec_from_file_location("build_extension", "tools/build_extension.py")
+    build = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(build)
+    build.build("store")
+    with zf.ZipFile("dist/scheduler-helper.zip") as z:
+        manifest = json.loads(z.read("manifest.json"))
+        assert sorted(z.namelist()) == ["background.js", "icon-128.png", "icon-16.png", "icon-32.png", "icon-48.png",
+                                        "manifest.json"]
+    assert manifest["permissions"] == ["scripting"] and "key" not in manifest
+    assert manifest["host_permissions"] == ["https://canvas.northwestern.edu/*"]
+    assert manifest["externally_connectable"]["matches"] == ["https://scheduler-lottery.vercel.app/*"]
+    assert not any("127.0.0.1" in h or "localhost" in h for h in json.dumps(manifest).split('"'))
+
+
 def test_canvas_names_written_last_first_are_turned_round_not_cut(prof):
     sid = prof.create_sheet(allow_unlisted=False)
     names = ["Kim, Alex", "Lee, Sam", "Diaz, Maria", "Kim, Jordan"]

@@ -796,7 +796,7 @@
       field("list", JSON.stringify({ type: "scheduler-class-list", v: 2, key: String(list.key || ""),
                                      courseId: String(list.courseId || ""), course: course,
                                      host: origin.replace(/^https?:\/\//, ""), students: people }));
-      if (how === "copied") field("how", "copied");
+      if (how === "copied" || how === "helper") field("how", how); // read from Canvas by this page itself
       if (guide.hasAttribute("data-setup")) field("setup", "1");
       var go = document.createElement("button");
       go.type = "submit";
@@ -1017,6 +1017,164 @@
       copyBox.value = "";
       takePaste(text);
     });
+
+    // Scheduler Helper (extension/): with it installed, one click here gets
+    // the professor's courses and then a course's class list from Canvas,
+    // signed in as them; it asks them to sign in to Canvas if need be. It
+    // answers only this site (its manifest says so). Offered in Chrome and
+    // Edge once it's published (data-helper-ids); otherwise the other ways
+    // stay as they are.
+    var helperBox = guide.querySelector("[data-helper]");
+    var helperIds = (guide.getAttribute("data-helper-ids") || "").split(",").filter(Boolean);
+    var helperId = null;
+    var helperHosts = [];
+    if (helperBox && helperIds.length) {
+      var isChromium = /Chrome\/|Edg\//.test(navigator.userAgent) && !/OPR\//.test(navigator.userAgent);
+      var helperSaid = guide.querySelector("[data-helper-said]");
+      var helperCourses = guide.querySelector("[data-helper-courses]");
+      var helperGo = guide.querySelector("[data-helper-go]");
+      var wantsHelper = false; // pressed "Add Scheduler Helper": go on once it's there
+      var helperSay = function (text) { helperSaid.textContent = text; helperSaid.hidden = !text; };
+      // The bookmark button becomes the fallback, folded away.
+      var bookmarkSection = guide.querySelector("[data-bookmark-section]");
+      var bookmarkMore = guide.querySelector("[data-bookmark-more]");
+      var helperFirst = function () {
+        helperBox.hidden = false;
+        if (bookmarkSection && bookmarkMore && bookmarkSection.parentNode !== bookmarkMore) {
+          bookmarkMore.appendChild(bookmarkSection);
+          bookmarkMore.hidden = false;
+        }
+      };
+      var showReady = function () {
+        helperFirst();
+        guide.querySelector("[data-helper-install]").hidden = true;
+        guide.querySelector("[data-helper-ready]").hidden = false;
+      };
+      var findHelper = function (then) {
+        if (!(window.chrome && chrome.runtime && chrome.runtime.sendMessage)) { then(false); return; }
+        var left = helperIds.length;
+        helperIds.forEach(function (id) {
+          try {
+            chrome.runtime.sendMessage(id, { type: "hello" }, function (answer) {
+              var missing = chrome.runtime.lastError; // (read, so Chrome doesn't log it)
+              left -= 1;
+              if (!missing && answer && answer.ok && !helperId) {
+                helperId = id;
+                helperHosts = answer.hosts || [];
+                then(true);
+              } else if (!left && !helperId) {
+                then(false);
+              }
+            });
+          } catch (err) {
+            left -= 1;
+            if (!left && !helperId) then(false);
+          }
+        });
+      };
+      var lookAgain = function () {
+        if (helperId) return;
+        findHelper(function (found) {
+          if (!found) return;
+          showReady();
+          if (wantsHelper) { wantsHelper = false; helperGo.click(); }
+        });
+      };
+      findHelper(function (found) {
+        if (found) { showReady(); return; }
+        if (isChromium && guide.getAttribute("data-helper-store")) {
+          helperFirst();
+          guide.querySelector("[data-helper-install]").hidden = false;
+        }
+      });
+      guide.querySelector("[data-helper-add]").addEventListener("click", function () {
+        wantsHelper = true;
+        helperSay("When Chrome says Scheduler Helper was added, come back to this tab.");
+      });
+      // Back from the store with it installed (Chrome tells open pages).
+      window.addEventListener("focus", lookAgain);
+      document.addEventListener("visibilitychange", function () { if (!document.hidden) lookAgain(); });
+
+      var ask = function (request, onAnswer) {
+        var port = chrome.runtime.connect(helperId);
+        var beat = setInterval(function () { try { port.postMessage({ type: "ping" }); } catch (err) { /* gone */ } }, 20000);
+        var answered = false;
+        port.onMessage.addListener(function (msg) {
+          if (msg && msg.type === "signin") {
+            helperSay("Sign in to Canvas in the tab that just opened (Duo too). This page carries on by itself after.");
+            return;
+          }
+          answered = true;
+          clearInterval(beat);
+          port.disconnect();
+          onAnswer(msg || {});
+        });
+        port.onDisconnect.addListener(function () {
+          clearInterval(beat);
+          if (!answered) onAnswer({ type: "problem", why: "gone" });
+        });
+        port.postMessage(request);
+      };
+      var trouble = function (why) {
+        helperGo.disabled = false;
+        helperSay(why === "forbidden" ? "Canvas won't share that course's class list with you. Is it a course you teach?"
+          : why === "missing" ? "Canvas couldn't find that course. Try again, and pick it from the list."
+          : why === "signin" || why === "closed" ? "Canvas sign-in didn't finish. Press Get my class list from Canvas to try again."
+          : why === "host" ? "Scheduler Helper doesn't know your school's Canvas yet. Use “Copy and paste instead” below."
+          : "Canvas didn't answer just now. Wait a minute, then try again.");
+      };
+      var getStudents = function (courseId, label) {
+        helperSay("Getting the class list" + (label ? " for " + label : "") + "…");
+        ask({ type: "students", host: host(), courseId: courseId }, function (msg) {
+          helperGo.disabled = false;
+          if (msg.type !== "students") { trouble(msg.why); return; }
+          var c = msg.course || {};
+          var name = (c.name || label || "your Canvas course") + (c.term ? " (" + c.term + ")" : "");
+          if (!msg.students || !msg.students.length) {
+            helperSay(name + " has no students in Canvas yet. If it isn't published, or students just enrolled, Canvas may "
+              + "not list them for a day or two.");
+            return;
+          }
+          helperSay("");
+          showArrived({ course: name, courseId: String(c.id || courseId), students: msg.students }, "https://" + host(),
+                      "helper");
+        });
+      };
+      var current = function (c) {
+        var from = Date.parse(c.start || ""), to = Date.parse(c.end || ""), today = Date.now();
+        return (isNaN(from) || from <= today) && (isNaN(to) || to >= today);
+      };
+      helperGo.addEventListener("click", function () {
+        if (helperHosts.length && helperHosts.indexOf(host()) < 0) { trouble("host"); return; }
+        helperGo.disabled = true;
+        helperCourses.hidden = true;
+        if (savedCourse) { getStudents(savedCourse, ""); return; } // this sheet's course, from last time
+        helperSay("Getting your courses from Canvas…");
+        ask({ type: "courses", host: host() }, function (msg) {
+          helperGo.disabled = false;
+          if (msg.type !== "courses") { trouble(msg.why); return; }
+          var courses = (msg.courses || []).slice().sort(function (a, b) { return (current(b) ? 1 : 0) - (current(a) ? 1 : 0); });
+          if (!courses.length) { helperSay("Canvas doesn't list you as a teacher of any course."); return; }
+          if (courses.length === 1) { getStudents(courses[0].id, courses[0].name); return; }
+          helperSay("");
+          helperCourses.textContent = "";
+          var question = document.createElement("p");
+          question.textContent = "Which course is this sign-up sheet for?";
+          helperCourses.appendChild(question);
+          courses.forEach(function (c) {
+            var b = document.createElement("button");
+            b.type = "button";
+            b.className = "quiz-choice";
+            b.textContent = c.name + (c.term ? " · " + c.term : "")
+              + (typeof c.students === "number" ? " · " + c.students + (c.students === 1 ? " student" : " students") : "")
+              + (c.published ? "" : " (not published yet)");
+            b.addEventListener("click", function () { helperCourses.hidden = true; getStudents(c.id, c.name); });
+            helperCourses.appendChild(b);
+          });
+          helperCourses.hidden = false;
+        });
+      });
+    }
 
     // The drop box (for a downloaded file) shows on this step only with the
     // download steps open.

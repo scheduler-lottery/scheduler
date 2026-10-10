@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Scheduler Helper",
+  "short_name": "Scheduler",
+  "version": "1.0.0",
+  "description": "Brings a course's class list (student names and emails) from your Canvas into Scheduler, when you ask on Scheduler's page.",
+  "background": { "service_worker": "background.js" },
+  "permissions": ["scripting"],
+  "host_permissions": ["https://canvas.northwestern.edu/*"],
+  "externally_connectable": { "matches": ["https://scheduler-lottery.vercel.app/*"] },
+  "icons": { "16": "icon-16.png", "32": "icon-32.png", "48": "icon-48.png", "128": "icon-128.png" },
+  "homepage_url": "https://scheduler-lottery.vercel.app/helper"
+}

@@ -1608,8 +1608,10 @@ def canvas_list_here(sid):
     if not data:
         flash("That class list from Canvas didn't come through. Click Send to Scheduler in Canvas again.", "error")
         return _list_back(sheet)
+    # Copied and pasted here, or fetched by Scheduler Helper for this page:
+    # this page read it from Canvas itself.
     return _take_canvas_list(sheet, data, setup=bool(request.form.get("setup")),
-                             copied=request.form.get("how") == "copied")
+                             copied=request.form.get("how") in ("copied", "helper"))
 
 
 @bp.route("/canvas-import/<iid>", methods=["GET", "POST"])
