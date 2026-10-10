@@ -24,6 +24,7 @@ from xml.etree import ElementTree
 from util import clean_name, find_email, fold, normalize_name, valid_email
 
 MAX_ROWS = 3000
+MAX_ZIPPED_BYTES = 5 * 1024 * 1024  # each file inside a ZIP, unpacked
 
 # Header names, after folding (lowercase, no accents, punctuation as spaces).
 FULL_NAME_HEADERS = (
@@ -322,6 +323,33 @@ def _not_a_list(data):
     return ""
 
 
+def _parse_zipped(data, names):
+    """A ZIP of CSV files (Canvas's Course Analytics downloads its student
+    list that way): the class list in it, from the file with the most
+    students with emails. Each file is read only up to MAX_ZIPPED_BYTES."""
+    found = []
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        for name in names[:20]:
+            info = z.getinfo(name)
+            if info.file_size > MAX_ZIPPED_BYTES:
+                continue
+            with z.open(info) as handle:
+                inner = handle.read(MAX_ZIPPED_BYTES + 1)
+            if len(inner) > MAX_ZIPPED_BYTES or inner.startswith(b"PK"):
+                continue
+            result = parse_roster(inner)
+            # Only a real list of people: Course Analytics' other files (grades
+            # by assignment) would otherwise read as a list of "names".
+            if not result.error and result.students and (result.name_column or result.with_email):
+                found.append(result)
+    if not found:
+        return RosterResult(error=(
+            "That ZIP file has no class list in it. In Canvas's Course Analytics, open the Students tab, then "
+            "click its download button. " + PASTE_INSTEAD
+        ))
+    return max(found, key=lambda r: (r.with_email, bool(r.name_column), len(r.students)))
+
+
 def parse_roster(data):
     """Parse uploaded or pasted bytes into a RosterResult. Never raises on
     bad input — problems come back in .error, worded for the instructor."""
@@ -341,6 +369,9 @@ def parse_roster(data):
                 "That's an Apple Numbers file. In Numbers, choose File → Export To → CSV…, then drop that file "
                 "here. " + PASTE_INSTEAD
             ))
+        tables = [n for n in names if n.lower().endswith((".csv", ".tsv", ".txt")) and not n.startswith("__MACOSX/")]
+        if tables and not any(n.startswith("xl/") for n in names):
+            return _parse_zipped(data, tables)
         try:
             sheets = _xlsx_sheets(data)
         except (zipfile.BadZipFile, ElementTree.ParseError, KeyError, ValueError):

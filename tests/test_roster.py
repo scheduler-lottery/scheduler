@@ -241,3 +241,24 @@ def test_the_class_list_can_be_on_another_excel_tab():
     result = parse_roster(buf.getvalue())
     assert [s["display_name"] for s in result.students] == ["Ana Lima"] and result.tab == 2
     assert any("tab 2" in t for t in describe(result)[1])
+
+
+def test_a_zip_from_canvas_course_analytics_works():
+    import io
+    import zipfile
+
+    from conftest import CANVAS_ROSTER
+
+    def zipped(files):
+        out = io.BytesIO()
+        with zipfile.ZipFile(out, "w") as z:
+            for name, text in files.items():
+                z.writestr(name, text)
+        return out.getvalue()
+
+    grades = "Assignment Name,Due Date,Average Score,Points Possible\\nEssay 1,2026-10-01,88,100\\n"
+    result = parse_roster(zipped({"course_grade.csv": grades, "students.csv": CANVAS_ROSTER, "__MACOSX/._x.csv": "x"}))
+    assert not result.error and names(result) == ["Alex Johnson", "Sam Lee", "Riya Patel"] and result.with_email == 3
+    # Only the grades: no class list in it, and the message says where the list is.
+    result = parse_roster(zipped({"course_grade.csv": grades}))
+    assert "no class list in it" in result.error and "Students tab" in result.error

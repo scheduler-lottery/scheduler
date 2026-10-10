@@ -55,32 +55,97 @@
     <h3 class="quiz-q" tabindex="-1">Get your class list from Canvas</h3>
     <p class="quiz-school">Your school's Canvas: <strong data-school-name>{{ canvas.name if canvas else 'not chosen yet' }}</strong>
       <button type="button" class="btn-link" data-go="school">Change</button></p>
-    {# Signing in to Canvas often lands on Canvas's home page instead of
-       where a link pointed, so the two Canvas links are separate steps, and
-       when this tab is looked at again it says what's next (app.js). #}
-    <ol class="guide-steps" data-canvas-steps>
-      <li data-canvas-step="signin"><strong>Sign in to Canvas, and open your course.</strong>
-        <a class="btn btn-secondary btn-small" data-canvas-home data-canvas-went="signin" href="https://{{ canvas.domain if canvas else 'canvas.instructure.com' }}/courses" target="_blank" rel="noopener">Open Canvas</a>
-        <span class="mini-hint">It opens in a new tab: sign in there if it asks. This page stays right here.</span></li>
-      <li data-canvas-step="course"><strong>Copy your course's address</strong> from the top of the browser, and paste it here:
-        <div class="canvas-open" data-canvas-guide data-sheet="{{ sheet.id }}">
-          <label for="canvas-course" class="visually-hidden">Your Canvas course address</label>
-          <input type="text" id="canvas-course" placeholder="e.g., https://canvas.myschool.edu/courses/123456" autocomplete="off" spellcheck="false">
-          <p class="mini-hint" data-canvas-status>We'll remember it on this computer for this sheet.</p>
-        </div></li>
-      <li data-canvas-step="list"><strong>Open the student list and download it.</strong>
-        <a class="btn btn-primary btn-small" id="canvas-open" data-canvas-went="list" href="https://{{ canvas.domain if canvas else 'canvas.instructure.com' }}/courses" target="_blank" rel="noopener">Open my class's student list</a>
-        <span class="mini-hint" data-canvas-where>It opens Canvas's New Analytics page for your course.</span>
-        Then click <strong>Download CSV</strong>, the download icon at the top right of the student table.
-        <span class="mini-hint canvas-retry">Landed on Canvas's home page instead? That happens right after signing in. Click the button again: now it goes straight there.</span></li>
-      <li data-canvas-step="drop"><strong>Drag the downloaded file</strong> (usually <code>students.csv</code>, in your Downloads folder) into the box below.</li>
-    </ol>
-    <p class="canvas-welcome" data-canvas-welcome role="status" hidden></p>
+    {# Canvas won't show inside another site's page, so it opens in a window
+       of its own beside this one, and these steps (with pictures of where to
+       click) stay in view on the left (app.js). Signing in there often ends
+       on Canvas's Dashboard instead of where a link pointed, so the steps
+       start from the Dashboard. #}
+    {% set canvas_host = canvas.domain if canvas else 'canvas.instructure.com' %}
+    {% set come_back = url_for('teach.setup', sid=sheet.id, step='students', _external=True) if setup else url_for('teach.sheet', sid=sheet.id, _external=True) ~ '#class-list' %}
+    <div class="canvas-guide" data-canvas-guide data-sheet="{{ sheet.id }}" data-host="{{ canvas_host }}">
+      <div class="canvas-guide-top">
+        <button type="button" class="btn btn-primary" data-canvas-beside>Open Canvas beside this page</button>
+        <a class="link-muted" data-canvas-home data-canvas-went="signin" href="https://{{ canvas_host }}/courses" target="_blank" rel="noopener">or in a new tab</a>
+        <button type="button" class="btn btn-secondary btn-small canvas-guide-done" data-canvas-close hidden>Done with Canvas</button>
+      </div>
+      <ol class="canvas-steps" data-canvas-steps>
+        <li class="canvas-step" data-canvas-step="signin">
+          <p><strong>Sign in, then click your course.</strong> If Canvas asks, sign in. You'll land on your Dashboard: click the card for this class.</p>
+          <svg class="canvas-pic" viewBox="0 0 360 132" role="img" aria-label="Canvas's Dashboard: the card for your course, to click">
+            <rect class="pic-frame" x="0.5" y="0.5" width="359" height="131" rx="10"/>
+            <rect class="pic-nav" x="0.5" y="0.5" width="38" height="131" rx="10"/>
+            <circle class="pic-dot" cx="19.5" cy="22" r="7"/><circle class="pic-dot" cx="19.5" cy="48" r="7"/><circle class="pic-dot" cx="19.5" cy="74" r="7"/><circle class="pic-dot" cx="19.5" cy="100" r="7"/>
+            <text class="pic-heading" x="54" y="27">Dashboard</text>
+            <rect class="pic-card" x="54" y="40" width="88" height="78" rx="7"/><rect class="pic-card-top" x="54" y="40" width="88" height="38" rx="7"/>
+            <rect class="pic-card is-target" x="152" y="40" width="88" height="78" rx="7"/><rect class="pic-card-top is-target-top" x="152" y="40" width="88" height="38" rx="7"/>
+            <text class="pic-small" x="160" y="96">Your course</text>
+            <rect class="pic-card" x="250" y="40" width="88" height="78" rx="7"/><rect class="pic-card-top" x="250" y="40" width="88" height="38" rx="7"/>
+            <path class="pic-pointer" d="M222 92 l0 22 l6 -6 l5 11 l4 -2 l-5 -11 l8 0 z"/>
+          </svg>
+        </li>
+        <li class="canvas-step" data-canvas-step="analytics">
+          <p><strong>Click Course Analytics</strong> in the course's menu on the left. (Some schools call it New Analytics. No menu? Click the three-line menu button at the top left.)</p>
+          <svg class="canvas-pic" viewBox="0 0 360 150" role="img" aria-label="The course menu, with Course Analytics near the bottom, to click">
+            <rect class="pic-frame" x="0.5" y="0.5" width="359" height="149" rx="10"/>
+            <rect class="pic-nav" x="0.5" y="0.5" width="38" height="149" rx="10"/>
+            <circle class="pic-dot" cx="19.5" cy="22" r="7"/><circle class="pic-dot" cx="19.5" cy="48" r="7"/><circle class="pic-dot" cx="19.5" cy="74" r="7"/>
+            <text class="pic-small" x="54" y="22">Home</text><text class="pic-small" x="54" y="39">Announcements</text>
+            <text class="pic-small" x="54" y="56">Assignments</text><text class="pic-small" x="54" y="73">Grades</text>
+            <text class="pic-small" x="54" y="90">People</text><text class="pic-small" x="54" y="107">Files</text>
+            <rect class="pic-target" x="48" y="114" width="112" height="22" rx="6"/>
+            <text class="pic-small is-strong" x="54" y="129">Course Analytics</text>
+            <path class="pic-pointer" d="M142 124 l0 22 l6 -6 l5 11 l4 -2 l-5 -11 l8 0 z"/>
+            <rect class="pic-line" x="186" y="20" width="150" height="9" rx="4"/><rect class="pic-line" x="186" y="40" width="120" height="7" rx="3"/>
+            <rect class="pic-line" x="186" y="56" width="140" height="7" rx="3"/><rect class="pic-line" x="186" y="72" width="96" height="7" rx="3"/>
+          </svg>
+        </li>
+        <li class="canvas-step" data-canvas-step="list">
+          <p><strong>Click the Students tab, then the download button</strong>: an arrow pointing down, next to Chart Options. A file downloads, <code>students.csv</code> or a <code>.zip</code>. Either one works.</p>
+          <svg class="canvas-pic" viewBox="0 0 360 120" role="img" aria-label="Course Analytics: first the Students tab, then the download button next to Chart Options">
+            <rect class="pic-frame" x="0.5" y="0.5" width="359" height="119" rx="10"/>
+            <text class="pic-heading" x="14" y="27">Course Analytics</text>
+            <text class="pic-tiny" x="14" y="52">Course Grade</text><text class="pic-tiny" x="80" y="52">Weekly Online Activity</text>
+            <text class="pic-tiny is-strong" x="190" y="52">Students</text><text class="pic-tiny" x="244" y="52">Reports</text>
+            <rect class="pic-underline" x="188" y="57" width="44" height="3" rx="1.5"/>
+            <circle class="pic-badge" cx="238" cy="38" r="8"/><text class="pic-badge-text" x="238" y="41.5">1</text>
+            <rect class="pic-box" x="14" y="76" width="168" height="24" rx="5"/><text class="pic-tiny" x="22" y="92">All Sections</text>
+            <rect class="pic-box" x="190" y="76" width="26" height="24" rx="5"/><path class="pic-icon" d="M196 83 h14 v10 h-14 z M196 83 l7 6 l7 -6"/>
+            <rect class="pic-target" x="222" y="74" width="30" height="28" rx="6"/>
+            <path class="pic-icon is-strong" d="M237 81 v10 M233 87 l4 4 l4 -4 M231 95 h12"/>
+            <rect class="pic-box" x="260" y="76" width="86" height="24" rx="5"/><text class="pic-tiny" x="268" y="92">Chart Options</text>
+            <circle class="pic-badge" cx="252" cy="70" r="8"/><text class="pic-badge-text" x="252" y="73.5">2</text>
+          </svg>
+        </li>
+        <li class="canvas-step" data-canvas-step="drop">
+          <p><strong>Drag that file into the box below</strong>, or click the box and choose it from your Downloads folder.</p>
+        </li>
+      </ol>
+      <p class="canvas-welcome" data-canvas-welcome role="status" hidden></p>
+      <details class="canvas-more">
+        <summary>Faster next time: your course's address</summary>
+        <p class="mini-hint">On any page of your course in Canvas, copy the address from the top of the browser and paste it here. Then the Canvas button opens your course directly.</p>
+        <label for="canvas-course" class="visually-hidden">Your Canvas course address</label>
+        <input type="text" id="canvas-course" placeholder="e.g., https://canvas.myschool.edu/courses/123456" autocomplete="off" spellcheck="false">
+        <p class="mini-hint" data-canvas-status>We'll remember it on this computer for this sheet.</p>
+      </details>
+      <details class="canvas-more">
+        <summary>Have an AI assistant do it</summary>
+        <p class="mini-hint">An AI assistant that can use your web browser (Claude in Chrome, for example) can do these steps for you, signed in as you. Copy these instructions and give them to it:</p>
+        <label for="canvas-ai" class="visually-hidden">Instructions for an AI assistant</label>
+        <textarea id="canvas-ai" class="announcement" rows="10" readonly>Please get the class list for my course "{{ sheet.title }}" from Canvas and add it to my Scheduler sign-up sheet.
+1. Open https://{{ canvas_host }}/courses and click the course that matches "{{ sheet.title }}". If Canvas asks me to sign in, stop and let me do that first.
+2. In the course's menu on the left, click "Course Analytics" (it may be called "New Analytics").
+3. Click the "Students" tab, then the download button (an arrow pointing down, next to "Chart Options"). It downloads students.csv or a .zip file.
+4. Go to {{ come_back }} and add that downloaded file to the box that says "Drag your class list here" (click the box to choose the file).
+Don't change anything else in Canvas or in Scheduler.</textarea>
+        <button type="button" class="btn btn-secondary btn-small" data-copy="#canvas-ai">Copy the instructions</button>
+      </details>
+    </div>
     <details class="quiz-help">
       <summary>Stuck?</summary>
-      <p><strong>No Download CSV button?</strong> In New Analytics, open the <strong>Reports</strong> tab and click <strong>Run Report</strong> next to <strong>Class Roster</strong>. That file works too.</p>
-      <p><strong>No New Analytics in the course menu?</strong> Go to <strong>Settings → Navigation</strong>, drag it into the visible list, and click <strong>Save</strong>.</p>
-      <p><strong>Can't download the list at all?</strong> Copy it from <a data-canvas-people href="https://{{ canvas.domain if canvas else 'canvas.instructure.com' }}/courses" target="_blank" rel="noopener">your course's People page</a> instead: select the whole table, copy it, and paste it under <button type="button" class="btn-link" data-go="paste">Type or paste your students</button>.</p>
+      <p><strong>No download button?</strong> In Course Analytics, open the <strong>Reports</strong> tab and click <strong>Run Report</strong> next to <strong>Class Roster</strong>. That file works too.</p>
+      <p><strong>No Course Analytics in the course menu?</strong> Go to <strong>Settings → Navigation</strong>, drag it into the visible list, and click <strong>Save</strong>.</p>
+      <p><strong>Can't download the list at all?</strong> Copy it from <a data-canvas-people href="https://{{ canvas_host }}/courses" target="_blank" rel="noopener">your course's People page</a> instead: select the whole table, copy it, and paste it under <button type="button" class="btn-link" data-go="paste">Type or paste your students</button>.</p>
       <p><strong>Students missing?</strong> The course has to be published, and Canvas can take a day or two to add new enrollments.</p>
       <p><strong>Afterwards</strong>, delete the downloaded file: it holds grades and more that this site doesn't keep.</p>
     </details>

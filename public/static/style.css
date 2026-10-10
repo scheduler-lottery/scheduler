@@ -3002,3 +3002,57 @@ input[type="date"] {
 .next-step:not([open]) .fold-peek { display: inline; }
 details.guide:not([open]) { padding-bottom: 20px; }
 .card[id], .fold-card { scroll-margin-top: 92px; }  /* a link to a card lands below the top bar */
+
+/* Canvas: steps with pictures of where to click (drawn like Canvas, in this
+   site's colors), and, while Canvas is open in its own window on the right,
+   the steps and the file box in a panel on the left. */
+.canvas-guide-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 8px 0 16px; }
+.canvas-guide-done { margin-left: auto; }
+.canvas-guide-done[hidden] { display: none; }
+.canvas-steps { margin: 0 0 12px; padding: 0; list-style: none; counter-reset: canvas-step; display: grid; gap: 14px; }
+.canvas-step { counter-increment: canvas-step; position: relative; padding-left: 38px; }
+.canvas-step::before {
+  content: counter(canvas-step); position: absolute; left: 0; top: 0; width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; background: var(--accent); color: var(--on-accent);
+  font-family: var(--font-small); font-size: 0.85rem; font-weight: 700;
+}
+.canvas-step > p { margin: 2px 0 8px; line-height: 1.5; }
+.canvas-step.is-next { border-radius: 12px; outline: 2px solid var(--accent); outline-offset: 6px; }
+.canvas-pic { display: block; width: 100%; max-width: 420px; height: auto; }
+.pic-frame { fill: var(--card-bg); stroke: var(--border); }
+.pic-nav { fill: var(--surface-strong); }
+.pic-dot { fill: var(--border-strong); }
+.pic-heading { font-family: var(--font-display); font-size: 15px; fill: var(--text); }
+.pic-small { font-family: var(--font-small); font-size: 11px; fill: var(--muted); }
+.pic-tiny { font-family: var(--font-small); font-size: 9.5px; fill: var(--muted); }
+.pic-small.is-strong, .pic-tiny.is-strong { fill: var(--accent-strong); font-weight: 700; }
+.pic-card { fill: var(--surface-soft); stroke: var(--border); }
+.pic-card-top { fill: var(--surface-strong); }
+.pic-card.is-target { stroke: var(--accent); stroke-width: 2.5; }
+.pic-card-top.is-target-top { fill: var(--accent-soft); }
+.pic-target { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+.pic-pointer { fill: var(--text); stroke: var(--card-bg); stroke-width: 1.2; }
+.pic-line { fill: var(--surface-strong); }
+.pic-box { fill: var(--card-bg); stroke: var(--border-strong); }
+.pic-icon { fill: none; stroke: var(--muted); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.pic-icon.is-strong { stroke: var(--accent-strong); stroke-width: 2; }
+.pic-underline { fill: var(--accent); }
+.pic-badge { fill: var(--accent); }
+.pic-badge-text { font-family: var(--font-small); font-size: 10px; font-weight: 700; fill: var(--on-accent); text-anchor: middle; }
+.canvas-more { margin: 10px 0; }
+.canvas-more > summary { cursor: pointer; font-weight: 650; color: var(--accent-strong); }
+.canvas-more[open] > summary { margin-bottom: 8px; }
+.canvas-more textarea { width: 100%; font-size: 0.9rem; }
+.canvas-step code { font-size: 0.85em; }
+@media (min-width: 900px) {
+  /* The box for the file stays in view at the bottom of the panel. */
+  .canvas-beside [data-quiz-drop] {
+    position: sticky; bottom: -18px; z-index: 1; margin: 12px -18px -18px; padding: 12px 18px 18px;
+    background: var(--card-bg); border-top: 1px solid var(--border);
+  }
+  .canvas-beside [data-quiz] {
+    position: fixed; z-index: 66; top: 76px; left: 16px; bottom: 16px; width: min(38vw, 520px);
+    margin: 0; padding: 18px; overflow-y: auto; overscroll-behavior: contain;
+    border: 1px solid var(--border); border-radius: 16px; background: var(--card-bg); box-shadow: var(--shadow-lg);
+  }
+}

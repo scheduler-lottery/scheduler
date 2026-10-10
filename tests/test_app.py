@@ -2752,9 +2752,13 @@ def test_setup_parts_link_back_and_the_sheet_is_a_draft_until_set_up(prof):
 
 def test_messages_can_be_closed_and_canvas_steps_pick_up_after_signing_in(prof, browser):
     sid = prof.create_sheet(allow_unlisted=False)
-    page = raw(prof.get(f"/teach/s/{sid}"))
-    assert 'data-canvas-went="signin"' in page and 'data-canvas-went="list"' in page
+    page = html(prof.get(f"/teach/s/{sid}"))
+    assert "Open Canvas beside this page" in page and 'data-canvas-went="signin"' in page  # or in a tab
+    assert page.count('class="canvas-pic"') == 3 and "Click Course Analytics" in page  # where to click, drawn
     assert "data-canvas-welcome" in page and "data-canvas-people" in page
+    # Instructions for an AI assistant: the class, its Canvas, and the way back here.
+    ai = re.search(r'<textarea id="canvas-ai"[^>]*>(.*?)</textarea>', page, re.S).group(1)
+    assert "CS & Law presentations" in ai and "/courses" in ai and f"/teach/s/{sid}#class-list" in ai
     r = prof.post(f"/teach/s/{sid}/roster", {"pasted": ""})
     page = raw(prof.get(r.headers["Location"]))
     assert 'data-flash-stack' in page and 'class="flash-close" aria-label="Close this message"' in page

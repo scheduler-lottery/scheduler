@@ -490,17 +490,19 @@
     }
   });
 
-  // The Canvas step: from the course's address, a link straight to its
-  // student list (New Analytics), remembered on this computer per sheet.
+  // The Canvas step. Canvas won't show inside another site's page, so
+  // "Open Canvas beside this page" opens it in a window of its own on the
+  // right of the screen, and the steps (with pictures) move to a panel on
+  // the left, with the box to drop the file in. A course address, if one was
+  // pasted (remembered on this computer per sheet), opens the course itself.
   var guide = document.querySelector("[data-canvas-guide]");
-  var openLink = document.getElementById("canvas-open");
-  if (guide && openLink) {
+  if (guide) {
     var quizBox = guide.closest("[data-quiz]");
     var courseInput = document.getElementById("canvas-course");
     var status = guide.querySelector("[data-canvas-status]");
-    var where = document.querySelector("[data-canvas-where]");
+    var people = document.querySelector("[data-canvas-people]");
     var courseKey = "canvas-course-" + guide.getAttribute("data-sheet");
-    // The New Analytics tool's number at schools we know of. Pasting a New
+    // Course Analytics' tool number at schools we know of. Pasting a Course
     // Analytics address teaches this computer the number for that school.
     var KNOWN_TOOLS = { "canvas.northwestern.edu": "48685" };
     var learned = {};
@@ -510,14 +512,21 @@
       var m = (raw || "").trim().match(/^(?:https?:\/\/)?([a-z0-9.-]+\.[a-z]{2,})\/courses\/(\d+)(?:\/external_tools\/(\d+))?/i);
       return m ? { host: m[1].toLowerCase(), course: m[2], tool: m[3] } : null;
     };
+    var host = function () {
+      return (quizBox && quizBox.getAttribute("data-canvas-host")) || store("canvas-host") || guide.getAttribute("data-host");
+    };
+    // Where Canvas should open: Course Analytics, the course, or the list
+    // of courses.
+    var canvasUrl = function () {
+      var found = readCourse(courseInput.value);
+      if (!found) return "https://" + host() + "/courses";
+      var tool = found.tool || learned[found.host] || KNOWN_TOOLS[found.host];
+      return "https://" + found.host + "/courses/" + found.course
+        + (tool ? "/external_tools/" + tool + "?launch_type=course_navigation" : "");
+    };
     var applyCourse = function (save) {
       var found = readCourse(courseInput.value);
       if (!found) {
-        var host = (quizBox && quizBox.getAttribute("data-canvas-host")) || store("canvas-host") || "canvas.instructure.com";
-        openLink.href = "https://" + host + "/courses";
-        openLink.setAttribute("aria-disabled", "true"); // until there's a course to open
-        openLink.textContent = "Open my class's student list";
-        where.textContent = "Paste your course's address above first, and this button goes straight to its student list.";
         status.textContent = courseInput.value.trim()
           ? "That doesn't look like a course address. It should have /courses/ and a number in it."
           : "We'll remember it on this computer for this sheet.";
@@ -527,63 +536,70 @@
         learned[found.host] = found.tool;
         store("canvas-tools", JSON.stringify(learned));
       }
-      var tool = found.tool || learned[found.host] || KNOWN_TOOLS[found.host];
-      openLink.href = "https://" + found.host + "/courses/" + found.course
-        + (tool ? "/external_tools/" + tool + "?launch_type=course_navigation" : "");
       if (people) people.href = "https://" + found.host + "/courses/" + found.course + "/users";
-      openLink.removeAttribute("aria-disabled");
-      openLink.textContent = "Open my class's student list";
-      where.textContent = tool
-        ? "It opens New Analytics for your course."
-        : "It opens your course. Click New Analytics (or Course Analytics) in the course menu on the left.";
-      status.textContent = "Got it: course " + found.course + " at " + found.host + ".";
+      status.textContent = "Got it: course " + found.course + ". The Canvas button opens it directly now.";
       if (save) {
         store(courseKey, courseInput.value.trim());
         store("canvas-host", found.host);
       }
     };
     courseInput.value = store(courseKey) || "";
-    var people = document.querySelector("[data-canvas-people]");
     applyCourse(false);
     courseInput.addEventListener("input", function () { applyCourse(true); });
-    // Without a course address, the button would only open Canvas's list
-    // of courses: point at step 2 instead.
-    openLink.addEventListener("click", function (e) {
-      if (openLink.getAttribute("aria-disabled") !== "true") return;
-      e.preventDefault();
-      status.textContent = "Paste your course's address here first, and that button goes straight to its student list.";
-      courseInput.focus();
+
+    // Canvas beside this page: a window on the right, sized so the steps
+    // fit on the left. It can't see this page (no opener), and this page
+    // only notices when it's closed.
+    var beside = guide.querySelector("[data-canvas-beside]");
+    var done = guide.querySelector("[data-canvas-close]");
+    var helper = null;
+    var watching = null;
+    var guideOn = function (on) {
+      document.documentElement.classList.toggle("canvas-beside", on);
+      done.hidden = !on;
+    };
+    beside.addEventListener("click", function () {
+      var url = canvasUrl();
+      var width = Math.min(screen.availWidth - 380, Math.max(760, Math.round(screen.availWidth * 0.6)));
+      var left = (screen.availLeft || 0) + screen.availWidth - width;
+      helper = window.open("", "scheduler-canvas", "popup=yes,width=" + width + ",height=" + screen.availHeight
+        + ",left=" + left + ",top=" + (screen.availTop || 0));
+      if (!helper) { // pop-up windows blocked: a tab will do
+        window.open(url, "_blank", "noopener");
+        return;
+      }
+      try { helper.opener = null; } catch (err) { /* fine */ }
+      helper.location.href = url;
+      guideOn(true);
+      clearInterval(watching);
+      watching = setInterval(function () {
+        if (!helper || helper.closed) { clearInterval(watching); guideOn(false); }
+      }, 1000);
+    });
+    done.addEventListener("click", function () {
+      guideOn(false);
+      if (helper && !helper.closed) helper.close();
     });
 
-    // Back from Canvas (this tab looked at again): say what's next, right
-    // where it's needed. Signing in there often ends on Canvas's home page
-    // instead of where the link pointed, so that's covered too.
+    // Back from Canvas in a tab (this tab looked at again): point at the
+    // last step, the box for the file.
     var canvasSteps = document.querySelector("[data-canvas-steps]");
     var welcome = document.querySelector("[data-canvas-welcome]");
-    var went = "";
+    var went = false;
     document.querySelectorAll("[data-canvas-went]").forEach(function (link) {
-      link.addEventListener("click", function () {
-        if (link.getAttribute("aria-disabled") !== "true") went = link.getAttribute("data-canvas-went");
-      });
+      link.addEventListener("click", function () { went = true; });
     });
     var cameBack = function () {
       if (!went || document.visibilityState === "hidden" || !welcome) return;
-      var next = went === "signin" && !readCourse(courseInput.value) ? "course" : went === "signin" ? "list" : "drop";
-      went = "";
-      welcome.textContent = {
-        course: "Welcome back. Signed in to Canvas? In that tab, open your course, copy the address from the top of the browser, and paste it in step 2.",
-        list: "Welcome back. You're signed in to Canvas, so “Open my class's student list” in step 3 goes straight there now.",
-        drop: "Welcome back. Downloaded the student list? Drag the file into the box below. If Canvas showed its home page instead, click “Open my class's student list” again: you're signed in now, so it goes straight there.",
-      }[next];
+      went = false;
+      welcome.textContent = "Welcome back. Downloaded the student list? Drag the file into the box below. "
+        + "Not there yet? The pictures above show where to click in Canvas.";
       welcome.hidden = false;
       canvasSteps.querySelectorAll("[data-canvas-step]").forEach(function (li) {
-        li.classList.toggle("is-next", li.getAttribute("data-canvas-step") === next);
+        li.classList.toggle("is-next", li.getAttribute("data-canvas-step") === "drop");
       });
-      var target = next === "course" ? courseInput : next === "list" ? openLink : document.querySelector("[data-quiz-drop]");
-      if (target) {
-        target.scrollIntoView({ block: "center", behavior: "smooth" });
-        if (target === courseInput) courseInput.focus({ preventScroll: true });
-      }
+      var box = document.querySelector("[data-quiz-drop]");
+      if (box) box.scrollIntoView({ block: "center", behavior: "smooth" });
     };
     document.addEventListener("visibilitychange", cameBack);
     window.addEventListener("focus", cameBack);
