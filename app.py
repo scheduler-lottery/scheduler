@@ -27,6 +27,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 import auth
 import db
+import deadlines
 import maintenance
 import owner
 import settings
@@ -106,6 +107,18 @@ app.add_template_filter(initials, "initials")
 app.add_template_filter(local_times, "local_times")
 app.add_template_filter(autolink, "autolink")
 app.add_template_filter(lambda n, word, many=None: plural(n, word, many), "plural")
+
+
+@app.template_filter("zone_name")
+def zone_name(zone):
+    """"Denver time (MDT)" for "America/Denver", as the Settings window says it."""
+    city = (zone or "").rsplit("/", 1)[-1].replace("_", " ")
+    short = deadlines.zone_label(zone)
+    if not city or city == short:
+        return short or city
+    return f"{city} time ({short})" if short and short[0] not in "+-" and short != zone else f"{city} time"
+
+
 # Usage totals for the owner's page. Teardown functions run last-registered
 # first, so this one runs after the request's own connection is closed.
 app.teardown_appcontext(usage.save)
@@ -185,6 +198,19 @@ def _preload_fonts():
     return [url_for("site_font", name=name) for name in (heading, "yalenew-roman.woff2") if name in uploaded]
 
 
+def _has_sheets(instructor):
+    """Is there anything on this instructor's "My sheets" page: a sheet
+    (archived or not), or a deleted one they can still bring back? Until
+    there is, the top bar greys "My sheets" out and says why."""
+    if not instructor:
+        return False
+    try:
+        return bool(db.scalar("SELECT 1 FROM sheets WHERE owner_id = :me LIMIT 1", me=instructor["id"])
+                    or sheets.deleted_sheets(instructor["id"]))
+    except Exception:  # noqa: BLE001 - a plain link, as before
+        return True
+
+
 @app.context_processor
 def template_globals():
     try:
@@ -195,6 +221,7 @@ def template_globals():
         "app_name": settings.APP_NAME,
         "instructor": instructor,
         "is_owner": auth.is_owner(instructor),
+        "has_sheets": _has_sheets(instructor),
         "csrf_token": auth.csrf_token,
         "nav_sheet": g.get("sheet"),
         "nav_student": g.get("student"),

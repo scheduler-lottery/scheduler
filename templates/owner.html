@@ -128,5 +128,66 @@
   {% else %}
   <p class="muted">None.</p>
   {% endif %}
+
+  <section class="danger-zone" id="start-fresh">
+    <h2>Start fresh</h2>
+    {% if everything.sheets or everything.accounts or everything.backups %}
+    <p>Delete everything instructors and students have made so far, such as the sheets from testing, so the site starts
+      empty. The site's own setup stays. A warning explains exactly what goes, and nothing happens until you type DELETE.</p>
+    <button type="button" class="btn btn-danger" data-popover-target="delete-everything" aria-haspopup="dialog" aria-expanded="false">Delete everything so far…</button>
+    {% else %}
+    <p>There's nothing to delete: no sign-up sheets, saved backups or other instructor accounts.</p>
+    {% endif %}
+  </section>
 </div>
+
+{% if everything.sheets or everything.accounts or everything.backups %}
+<div id="delete-everything" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="delete-everything-title" aria-describedby="delete-everything-lead">
+  <div class="modal-dialog appearance-dialog danger-dialog">
+    <button type="button" class="modal-close" data-popover-close aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+    <div class="warning-mark danger-mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 3.5L2.8 19.5a1 1 0 0 0 .87 1.5h16.66a1 1 0 0 0 .87-1.5L12 3.5z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+        <path d="M12 9.5v5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+        <circle cx="12" cy="17.6" r="1.1" fill="currentColor"/>
+      </svg>
+    </div>
+    <h2 id="delete-everything-title" class="modal-title">Delete everything so far?</h2>
+    <p class="danger-lead" id="delete-everything-lead">This can't be undone. No backup is kept: the saved backups are deleted too.</p>
+
+    <section class="appearance-group" aria-labelledby="wipe-gone">
+      <h3 class="group-label" id="wipe-gone">Deleted for good</h3>
+      <ul class="wipe-list wipe-gone">
+        <li><strong>{{ everything.sheets | plural('sign-up sheet') }}</strong>, with their days and schedules. Students' links stop working.</li>
+        <li><strong>{{ everything.students | plural('student') }}</strong> on class lists, and <strong>{{ everything.rankings | plural('ranking') }}</strong></li>
+        <li><strong>{{ everything.backups | plural('saved backup') }}</strong>, including recently deleted sheets</li>
+        <li><strong>{{ everything.accounts | plural('other instructor account') }}</strong>. They can sign up again, and start over.</li>
+        <li>Sign-in codes and links not used yet</li>
+      </ul>
+    </section>
+
+    <section class="appearance-group" aria-labelledby="wipe-kept">
+      <h3 class="group-label" id="wipe-kept">Kept</h3>
+      <ul class="wipe-list wipe-kept">
+        <li>Your own account: you stay signed in</li>
+        <li>Switched-off accounts, which stay switched off</li>
+        <li>The site's fonts, its sign-in email setup, the usage meters and the error log</li>
+      </ul>
+    </section>
+
+    <form method="post" action="{{ url_for('owner.delete_everything') }}" class="wipe-form" data-type-to-confirm="DELETE">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="wipe-confirm" class="field-label">To delete everything, type <strong>DELETE</strong> in capital letters:</label>
+      <input type="text" id="wipe-confirm" name="confirm" autocomplete="off" autocapitalize="characters" spellcheck="false" required placeholder="DELETE">
+      <div class="appearance-foot">
+        <button type="button" class="btn btn-secondary" data-popover-close>Cancel, keep everything</button>
+        <span class="appearance-status"></span>
+        <button type="submit" class="btn btn-danger">Delete everything</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

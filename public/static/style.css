@@ -977,7 +977,19 @@ body.is-dragging .rank-item:not(.dragging) { pointer-events: none; }
 .admin-card { max-width: 100%; }
 .admin-header { display: flex; justify-content: space-between; align-items: center; }
 .status-row { display: flex; align-items: center; gap: 14px; margin: 16px 0; flex-wrap: wrap; }
-.status-pill { padding: 6px 14px; border-radius: var(--radius-full); font-size: 0.85rem; font-weight: 700; }
+.status-pill { padding: 6px 14px; border-radius: var(--radius-full); font-size: 0.85rem; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+.status-pill.pending { background: var(--amber-soft); color: var(--amber); }
+/* A pill that explains itself: hover it (or focus its row) for why, and
+   what's next. Right-aligned, since pills sit at the right edge. */
+.status-tip { position: relative; cursor: help; }
+.status-tip .tip-bubble {
+  left: auto; right: -4px; transform: translateY(3px);
+  white-space: normal; font-family: var(--font-small); font-size: 0.86rem; letter-spacing: 0;
+}
+.status-tip .tip-bubble::after { left: auto; right: 22px; margin-left: 0; }
+.status-tip:hover .tip-bubble,
+.status-tip:focus-visible .tip-bubble,
+.sheet-item:focus-visible .status-tip .tip-bubble { opacity: 1; visibility: visible; transform: translateY(0); }
 .status-pill.open { background: var(--success-bg); color: var(--success); }
 .status-pill.closed { background: var(--danger-bg); color: var(--danger); }
 .submission-count { color: var(--muted); font-size: 0.9rem; }
@@ -2404,35 +2416,161 @@ summary.card-heading::marker, summary.card-heading::-webkit-details-marker { fon
 }
 
 /* =============================================================
-   Settings: a labeled button in the top bar, and the panel it opens
-   (who you're signed in as, Appearance, and a plain "Sign out").
+   The top bar's words. The page you're on is a raised pill; "My
+   sheets" is greyed until there's a sheet; Settings is a gear and a
+   word. On phones, shorter words.
    ============================================================= */
+button.icon-dock-label { border: 0; background: none; font-family: inherit; cursor: pointer; }
+.icon-dock-label[aria-current="page"] {
+  background: var(--card-bg); color: var(--text);
+  box-shadow: 0 1px 3px rgba(17, 17, 26, 0.12), inset 0 0 0 1px var(--border);
+}
+.icon-dock-label.dock-empty { color: var(--muted); font-weight: 500; }
+.icon-dock-label.dock-empty:hover,
+.icon-dock-label.dock-empty[aria-expanded="true"] { background: var(--surface-soft); color: var(--text); }
+.label-short { display: none; }
+.no-sheets-pop { left: 0; right: auto; width: min(270px, calc(100vw - 32px)); padding: 16px; }
+.no-sheets-title {
+  margin: 0 0 4px; font-family: var(--font-display); font-size: 1.25rem; line-height: 1.15;
+  font-weight: calc(var(--w-h3) + var(--display-boost)); letter-spacing: var(--track-h3);
+}
+.no-sheets-text { margin: 0 0 12px; font-family: var(--font-small); font-size: 0.9rem; line-height: 1.45; color: var(--muted); }
+.no-sheets-text:last-child { margin-bottom: 0; }
+.no-sheets-pop .btn { display: flex; justify-content: center; text-align: center; }
+
 .settings-btn {
   display: inline-flex; align-items: center; gap: 7px;
-  height: 38px; padding: 0 15px 0 11px;
-  border: 1.5px solid var(--text); border-radius: var(--radius-full);
-  background: transparent; color: var(--text);
-  font: inherit; font-size: 0.86rem; font-weight: 650; white-space: nowrap;
+  height: 38px; padding: 0 14px 0 11px;
+  border: 0; border-radius: var(--radius-full);
+  background: none; color: var(--text);
+  font: inherit; font-size: 0.86rem; font-weight: 600; white-space: nowrap;
   cursor: pointer; flex-shrink: 0;
 }
 .settings-btn svg { width: 17px; height: 17px; }
-.settings-btn:hover, .settings-btn[aria-expanded="true"] { background: var(--text); color: var(--bg); }
-.settings-menu { min-width: 280px; max-width: min(340px, calc(100vw - 24px)); padding: 14px 10px 10px; }
-.settings-label {
-  margin: 0 8px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--muted);
-}
-.settings-who { margin: 3px 8px 0; font-weight: 650; overflow-wrap: anywhere; }
-.settings-sub {
-  margin: 3px 8px 8px; padding-bottom: 12px; border-bottom: 1px solid var(--border);
-  font-size: 0.82rem; color: var(--muted);
-}
-.settings-signout { margin: 8px 0 0; padding: 10px 2px 2px; border-top: 1px solid var(--border); }
-.settings-signout .btn { display: flex; align-items: center; gap: 8px; }
-.settings-signout svg { width: 16px; height: 16px; }
+.settings-btn:hover, .settings-btn[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent-strong); }
+.settings-btn:active { transform: scale(0.96); }
 @media (max-width: 640px) {
-  .settings-btn { height: 34px; padding: 0 11px 0 9px; font-size: 0.78rem; }
+  .settings-btn { height: 34px; padding: 0 10px 0 9px; font-size: 0.78rem; }
 }
+@media (max-width: 560px) {
+  .label-long { display: none; }
+  .label-short { display: inline; }
+}
+@media (max-width: 400px) {
+  .settings-word { display: none; }
+  .settings-btn { width: 36px; padding: 0; justify-content: center; }
+}
+
+/* =============================================================
+   The Settings and "How ranking works" windows, laid out like
+   Appearance: small capital headings, cards with a picture each,
+   and the buttons along the bottom.
+   ============================================================= */
+.group-label {
+  margin: 0 0 10px; font-family: var(--font-small); font-size: 0.78rem; font-weight: 600; line-height: 1.3;
+  letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted);
+}
+.settings-dialog { max-width: 600px; }
+.account-card {
+  display: flex; align-items: center; gap: 14px; padding: 14px 16px;
+  border: 1px solid var(--border); border-radius: 14px; background: var(--card-bg);
+}
+.account-mark {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 44px; height: 44px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-btn-1), var(--accent-btn-2)); color: var(--on-accent);
+  font-family: var(--font-display); font-size: 1.2rem; font-weight: 500; letter-spacing: 0.01em;
+}
+.account-text { min-width: 0; }
+.account-name { margin: 0; font-size: 1.05rem; font-weight: 650; line-height: 1.3; overflow-wrap: anywhere; }
+.account-sub { margin: 2px 0 0; font-family: var(--font-small); font-size: 0.88rem; line-height: 1.4; color: var(--muted); }
+
+.settings-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 12px; }
+.settings-tile {
+  display: block; padding: 0; border: 0; background: none; color: var(--text);
+  font: inherit; text-align: center; text-decoration: none; cursor: pointer;
+}
+.tile-art {
+  position: relative; display: flex; align-items: center; justify-content: center; height: 64px;
+  border-radius: 12px; border: 1px solid var(--border); background: var(--card-bg); color: var(--accent-strong);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.tile-art svg { width: 26px; height: 26px; }
+.settings-tile:hover .tile-art { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(17, 17, 26, 0.1); border-color: var(--accent); }
+.settings-tile:hover .choice-name { color: var(--accent-strong); }
+.settings-tile:focus-visible { outline: none; }
+.settings-tile:focus-visible .tile-art { outline: 3px solid var(--accent); outline-offset: 3px; }
+/* Appearance's card is a little picture of the look you have now. */
+.tile-theme {
+  --p-bg: var(--bg); --p-card: var(--card-bg); --p-border: var(--border); --p-text: var(--text); --p-accent: var(--accent);
+  display: block; padding: 17px 10px 8px; background: var(--p-bg); overflow: hidden;
+}
+.tile-theme .tp-card { padding: 6px 8px; }
+.tile-theme .tp-line { height: 4px; margin-bottom: 4px; }
+.settings-dialog .appearance-foot form { margin: 0; }
+.settings-signout .btn { display: inline-flex; align-items: center; gap: 8px; }
+.settings-signout svg { width: 16px; height: 16px; }
+
+.ranking-dialog { max-width: 660px; }
+.ranking-lead { margin: -2px 0 18px; font-size: 1.02rem; line-height: 1.5; color: var(--muted); }
+.ranking-steps {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;
+}
+.ranking-step { display: block; text-align: center; }
+.ranking-step .tile-art { margin-bottom: 9px; }
+.step-num {
+  position: absolute; top: 6px; left: 6px; display: flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--on-accent);
+  font-family: var(--font-small); font-size: 0.74rem; font-weight: 700; line-height: 1;
+}
+.step-name { display: block; font-size: 0.95rem; font-weight: 650; line-height: 1.25; }
+.step-text { display: block; margin-top: 3px; font-family: var(--font-small); font-size: 0.84rem; line-height: 1.4; color: var(--muted); }
+.ranking-facts { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
+.ranking-facts li { position: relative; padding-left: 28px; font-size: 0.97rem; line-height: 1.45; }
+.ranking-facts li::before {
+  content: ""; position: absolute; left: 0; top: 0.2em; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--accent-soft);
+}
+.ranking-facts li::after {
+  content: ""; position: absolute; left: 6.5px; top: calc(0.2em + 4px); width: 4px; height: 8px;
+  border: solid var(--accent-strong); border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.foot-link { font-family: var(--font-small); font-size: 0.92rem; color: var(--accent-strong); text-decoration: none; }
+.foot-link:hover { text-decoration: underline; }
+@media (max-width: 560px) {
+  .ranking-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .settings-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* The owner's "Delete everything": a red section, and a warning window
+   listing what goes and what stays, above the word to type. */
+.danger-zone > h2 { margin: 0 0 6px; color: var(--danger); }
+.danger-dialog { max-width: 560px; }
+.danger-dialog .modal-title { text-align: center; padding: 0 26px; }
+.warning-mark.danger-mark { background: var(--danger-bg); color: var(--danger); }
+.danger-lead { margin: -2px 0 20px; text-align: center; color: var(--danger); font-weight: 600; line-height: 1.45; }
+.wipe-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.wipe-list li { position: relative; padding-left: 28px; font-size: 0.95rem; line-height: 1.45; }
+.wipe-list li::before {
+  content: ""; position: absolute; left: 0; top: 0.2em; width: 18px; height: 18px; border-radius: 50%;
+}
+.wipe-gone li::before { background: var(--danger-bg); }
+.wipe-gone li::after {
+  content: "\00d7"; position: absolute; left: 0; top: 0.2em; width: 18px; height: 18px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--danger); font: 700 15px/1 var(--font-sans);
+}
+.wipe-kept li::before { background: var(--success-bg); }
+.wipe-kept li::after {
+  content: ""; position: absolute; left: 6.5px; top: calc(0.2em + 4px); width: 4px; height: 8px;
+  border: solid var(--success); border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.wipe-form { display: grid; gap: 8px; }
+.wipe-form input[name="confirm"] { font-size: 1.05rem; letter-spacing: 0.08em; }
+.wipe-form .appearance-foot { margin-top: 12px; }
+.danger-dialog .btn-danger { background: var(--danger); color: #fff; }
+.danger-dialog .btn-danger:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
 
 /* Instructor sign-in problems: front and center. A refused address gets a
    warning page of its own; a mistyped one, a box right above the field. */
@@ -2588,3 +2726,23 @@ input[type="date"] {
 /* A radio or checkbox choice inside a form field: its lead phrase is the
    <strong>, the rest reads as normal text. */
 .field label.choice { display: flex; font-weight: 400; }
+
+/* The deadline picker's time: buttons in the calendar's own style. */
+.time-pick { display: grid; gap: 8px; margin: 18px 0 4px; }
+.time-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.time-row-label { min-width: 70px; font-size: 0.85rem; color: var(--muted); }
+.time-pill {
+  min-width: 44px; min-height: 38px; padding: 6px 10px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--card-bg); color: var(--text);
+  font: inherit; cursor: pointer;
+}
+.time-pill:hover { border-color: var(--accent); }
+.time-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.time-pill[aria-pressed="true"] {
+  background: linear-gradient(135deg, var(--accent-btn-1), var(--accent-btn-2));
+  border-color: transparent; color: var(--on-accent); font-weight: 700;
+}
+.cal-day:disabled { cursor: default; opacity: 0.55; }
+.cal-day:disabled:hover { border-color: var(--border); }
+.deadline-row[hidden], [data-deadline-chip][hidden], [data-deadline-open][hidden] { display: none; }
+[data-theme^="contrast"] .time-pill { border: 2px solid var(--border); }

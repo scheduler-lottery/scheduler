@@ -68,11 +68,12 @@ def to_utc(day, clock, zone):
 
 
 def local_parts(closes_at, zone):
-    """("2026-10-10", "17:00") for a stored deadline, in the instructor's zone."""
+    """("2026-10-10", "17:15") for a stored deadline, in the instructor's zone
+    (to the quarter hour, as the picker offers)."""
     if not closes_at:
         return "", "17:00"
     local = in_zone(closes_at, zone)
-    return local.date().isoformat(), f"{local.hour:02d}:{30 if local.minute >= 30 else 0:02d}"
+    return local.date().isoformat(), f"{local.hour:02d}:{local.minute // 15 * 15:02d}"
 
 
 def describe(closes_at, zone):

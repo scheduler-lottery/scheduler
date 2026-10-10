@@ -46,10 +46,15 @@
 
 {% endmacro %}
 {% macro f_rank_by() %}
-    <div class="field deadline-field" id="deadline-field" data-deadline-field>
+    <div class="field deadline-field" id="deadline-field" data-deadline-field data-zone="{{ deadline_zone }}">
       <label for="close_date">Sign-ups close <span class="muted">(optional)</span></label>
-      <p class="field-help">Pick a date and a time. Leave it empty if you'd rather close sign-ups yourself.</p>
-      <div class="deadline-row">
+      <p class="field-help">Pick a date and a time, or leave it empty if you'd rather close sign-ups yourself.</p>
+      {# With JavaScript: the deadline as a chip, and a calendar in a pop-up
+         (calendar.js). Without it: the plain date box and time menu below. #}
+      <ul class="day-chips" data-deadline-chip hidden></ul>
+      <button type="button" class="btn btn-primary" data-popover-target="deadline-calendar" aria-haspopup="dialog"
+              data-deadline-open hidden>Pick a date and time</button>
+      <div class="deadline-row" data-deadline-native>
         <input type="date" id="close_date" name="close_date" value="{{ form.close_date }}" min="{{ today }}">
         <label for="close_time" class="visually-hidden">Time</label>
         <select id="close_time" name="close_time">
@@ -210,6 +215,40 @@
     <div class="form-actions">
       <button type="button" class="btn btn-primary" data-popover-close>Done</button>
       <button type="button" class="btn btn-ghost btn-small" data-cal-clear>Clear all</button>
+    </div>
+  </div>
+</div>
+<div id="deadline-calendar" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="deadline-calendar-title">
+  <div class="modal-dialog modal-wide modal-calendar">
+    <button type="button" class="modal-close" data-popover-close aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+    <h2 id="deadline-calendar-title" class="modal-title">When should sign-ups close?</h2>
+    <p class="modal-body">Pick a date, then a time. Sign-ups close by themselves then ({{ deadline_zone }}), and you can always reopen them.</p>
+    <div class="cal-nav">
+      <button type="button" class="btn btn-ghost btn-small" data-dcal-prev aria-label="Earlier months">‹ Earlier</button>
+      <button type="button" class="btn btn-ghost btn-small" data-dcal-next aria-label="Later months">Later ›</button>
+    </div>
+    <div class="cal-months" data-deadline-calendar></div>
+    <div class="time-pick">
+      <div class="time-row" role="group" aria-label="Hour">
+        <span class="time-row-label">Hour</span>
+        {% for h in range(1, 13) %}<button type="button" class="time-pill" data-hour="{{ h }}" aria-pressed="false">{{ h }}</button>{% endfor %}
+      </div>
+      <div class="time-row" role="group" aria-label="Minutes">
+        <span class="time-row-label">Minutes</span>
+        {% for m in ('00', '15', '30', '45') %}<button type="button" class="time-pill" data-minute="{{ m }}" aria-pressed="false">:{{ m }}</button>{% endfor %}
+      </div>
+      <div class="time-row" role="group" aria-label="Morning or afternoon">
+        <span class="time-row-label"></span>
+        <button type="button" class="time-pill" data-half="am" aria-pressed="false">AM</button>
+        <button type="button" class="time-pill" data-half="pm" aria-pressed="false">PM</button>
+      </div>
+    </div>
+    <p class="cal-summary" data-dcal-summary aria-live="polite"></p>
+    <div class="form-actions">
+      <button type="button" class="btn btn-primary" data-popover-close>Done</button>
+      <button type="button" class="btn btn-ghost btn-small" data-dcal-clear>No deadline</button>
     </div>
   </div>
 </div>

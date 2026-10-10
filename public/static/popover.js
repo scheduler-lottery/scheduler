@@ -1,16 +1,23 @@
 (function () {
-  function closeDropdowns() {
-    document.querySelectorAll(".popover-dropdown.open").forEach(function (el) {
-      el.classList.remove("open");
-      var trigger = document.querySelector('[data-popover-target="' + el.id + '"]');
-      if (trigger) trigger.setAttribute("aria-expanded", "false");
+  var opener = null; // what opened the window that's open, to return focus to
+
+  function close(el) {
+    el.classList.remove("open");
+    document.querySelectorAll('[data-popover-target="' + el.id + '"]').forEach(function (trigger) {
+      if (trigger.hasAttribute("aria-expanded")) trigger.setAttribute("aria-expanded", "false");
     });
   }
 
+  function closeDropdowns() {
+    document.querySelectorAll(".popover-dropdown.open").forEach(close);
+  }
+
   function closeModals() {
-    document.querySelectorAll(".modal-overlay.open").forEach(function (el) {
-      el.classList.remove("open");
-    });
+    var open = document.querySelectorAll(".modal-overlay.open");
+    open.forEach(close);
+    // Back to the button that opened it, unless that was inside a window
+    // that's now closed too (Appearance, opened from Settings).
+    if (open.length && opener && opener.offsetParent !== null) opener.focus({ preventScroll: true });
   }
 
   function closeTips() {
@@ -40,12 +47,17 @@
       var id = trigger.getAttribute("data-popover-target");
       var el = document.getElementById(id);
       if (!el) return;
+      // A link that opens a window (with a page as its no-script fallback)
+      // opens the window instead.
+      if (trigger.tagName === "A") e.preventDefault();
       var wasOpen = el.classList.contains("open");
+      opener = null;
       closeDropdowns();
       closeModals();
       if (!wasOpen) {
         el.classList.add("open");
         trigger.setAttribute("aria-expanded", "true");
+        opener = trigger;
         var focusable = el.querySelector("button, a, [tabindex]");
         if (focusable) focusable.focus({ preventScroll: true });
       }
@@ -60,9 +72,7 @@
     }
 
     if (!e.target.closest(".popover-dropdown")) closeDropdowns();
-    if (e.target.classList && e.target.classList.contains("modal-overlay")) {
-      e.target.classList.remove("open");
-    }
+    if (e.target.classList && e.target.classList.contains("modal-overlay")) closeModals();
   });
 
   document.addEventListener("keydown", function (e) {

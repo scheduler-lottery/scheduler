@@ -12,7 +12,7 @@
   <ul class="sheet-list">
     {% for s in sheets %}
     <li class="sheet-row">
-      <a class="sheet-item" href="{{ url_for('teach.sheet', sid=s.id) }}">
+      <a class="sheet-item" href="{{ url_for('teach.sheet', sid=s.id) }}" aria-describedby="status-{{ s.id }}">
         <span class="sheet-main">
           <span class="sheet-title">{{ s.title }}</span>
           <span class="sheet-meta">
@@ -22,10 +22,13 @@
             {% if s.same_title %}· link code <code>{{ s.id }}</code>{% endif %}
           </span>
         </span>
+        {# One short word; hovering (or focusing the row) says why, and what's next. #}
         {% if s.bidding_open and not s.roster_count and not s.allow_unlisted %}
-        <span class="status-pill closed">Waiting for class list</span>
+        <span class="status-pill pending status-tip">Pending<span class="tip-bubble" role="tooltip" id="status-{{ s.id }}">Waiting for your class list, so students can't sign in yet. You're on step 2 of 3: add your students. Step 3 is sharing the link.</span></span>
+        {% elif s.bidding_open %}
+        <span class="status-pill open status-tip">Open<span class="tip-bubble" role="tooltip" id="status-{{ s.id }}">Students can rank their days now{% if s.roster_count %}: {{ s.listed_count }} of {{ s.roster_count }} have{% endif %}. Once everyone has, close sign-ups and make the schedule.</span></span>
         {% else %}
-        <span class="status-pill {{ 'open' if s.bidding_open else 'closed' }}">{{ 'Open' if s.bidding_open else 'Closed' }}</span>
+        <span class="status-pill closed status-tip">Closed<span class="tip-bubble" role="tooltip" id="status-{{ s.id }}">Sign-ups are closed, so rankings can't change. {% if s.published_at %}The schedule is published.{% elif s.assigned_count %}The schedule is made: publish it so students see their day.{% else %}Next: make the schedule.{% endif %}</span></span>
         {% endif %}
       </a>
       <span class="sheet-actions">

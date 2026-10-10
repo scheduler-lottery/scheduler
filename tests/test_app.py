@@ -43,6 +43,11 @@ def q(app, sql, **params):
         return db.scalar(sql, **params)
 
 
+def db_rows(app, sql, **params):
+    with app.app_context():
+        return db.rows(sql, **params)
+
+
 def init_data(page):
     return json.loads(re.search(r'id="init-data" type="application/json">(.*?)</script>', page, re.S).group(1))
 
@@ -2522,3 +2527,110 @@ def test_the_professor_hears_once_when_everyone_has_ranked(prof, browser):
     assert len(told) == 1 and "everyone has ranked" in told[0].subject and "All 3 students" in told[0].body
     browser().sign_in_student(sid, "Riya Patel").rank(sid, [keys[1], keys[0]])  # a change of mind: no second email
     assert len([m for m in prof.outbox[sent:] if m.to == ["prof@school.edu"]]) == 1
+
+
+# -- the top bar: My sheets, How ranking works, Settings ----------------------
+
+def test_my_sheets_is_greyed_out_until_there_is_a_sheet(browser):
+    newcomer = browser().sign_in_instructor("new@school.edu")
+    page = raw(newcomer.get("/teach/"))
+    assert 'class="icon-dock-label dock-empty" data-popover-target="no-sheets"' in page
+    assert "No sheets yet" in page and "Make my first sheet" in page
+    assert "You're making your first one" in html(newcomer.get("/teach/new"))
+    newcomer.create_sheet()
+    page = raw(newcomer.get("/teach/"))
+    assert "No sheets yet" not in page
+    assert 'class="icon-dock-label" aria-current="page">My sheets</a>' in page  # you're on it
+    assert 'aria-current="page"' not in raw(newcomer.get("/teach/new"))
+
+
+def test_settings_is_a_window_with_who_you_are_and_sign_out(prof, browser):
+    page = raw(prof.get("/teach/"))
+    window = page[page.index('<div id="settings"'):page.index('<div id="ranking-help"')]
+    assert 'role="dialog"' in window and "Signed in as" in window
+    assert "prof<wbr>@school.edu" in window  # long addresses break at the @
+    assert 'action="/teach/logout"' in window and "Sign out" in window and "Make my first sheet" in window
+    assert "Site owner page" not in window
+    sid = prof.create_sheet()
+    assert "My sign-up sheets" in raw(prof.get("/teach/"))
+    student = browser().sign_in_student(sid, "Pat Doe")
+    page = raw(student.get(f"/c/{sid}/home"))
+    window = page[page.index('<div id="settings"'):page.index('<div id="ranking-help"')]
+    assert "Pat Doe" in window and f'action="/c/{sid}/logout"' in window and "prof@school.edu" not in window
+    assert 'id="settings"' not in raw(browser().get("/"))  # nobody to be signed in as
+    owner = browser().sign_in_instructor("owner@gmail.com")
+    assert "Site owner page" in raw(owner.get("/teach/"))
+
+
+def test_time_zones_are_named_plainly():
+    import app as app_module
+
+    assert app_module.zone_name("America/Denver") in ("Denver time (MDT)", "Denver time (MST)")
+    assert app_module.zone_name("America/Argentina/Buenos_Aires").startswith("Buenos Aires time")
+    assert app_module.zone_name("UTC") == "UTC"
+
+
+def test_how_ranking_works_is_a_word_button_with_its_own_window(browser):
+    page = raw(browser().get("/"))
+    assert 'data-popover-target="ranking-help"' in page and "How ranking works" in page
+    assert 'aria-label="How days are assigned"' not in page  # the puzzling icon is gone
+    window = page[page.index('<div id="ranking-help"'):]
+    assert 'role="dialog"' in window and "Ties get a fair draw" in window and 'href="/how-it-works"' in window
+    assert "As the instructor" not in window
+
+
+def test_a_sheet_waiting_for_its_list_says_pending_and_why(prof):
+    sid = prof.create_sheet(allow_unlisted=False)
+    page = html(prof.get("/teach/"))
+    assert ">Pending<" in page and "Waiting for class list" not in page
+    assert "You're on step 2 of 3: add your students" in page
+    assert f'aria-describedby="status-{sid}"' in page and f'id="status-{sid}"' in page
+    prof.upload(sid)
+    page = html(prof.get("/teach/"))
+    assert ">Open<" in page and "Students can rank their days now: 0 of 3 have" in page
+
+
+# -- the owner's "Delete everything" -------------------------------------------
+
+def test_the_owner_can_delete_everything_but_only_by_typing_DELETE(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    browser().sign_in_student(sid, "Sam Lee")
+    keys = day_keys(sid)
+    browser().sign_in_student(sid, "Alex Johnson").rank(sid, keys)
+    other = browser().sign_in_instructor("other@school.edu")
+    other.create_sheet(title="Other class")
+    switched_off = browser().sign_in_instructor("abuser@school.edu")
+    switched_off.create_sheet(title="Spam")
+    owner = browser().sign_in_instructor("owner@gmail.com")
+    owner.create_sheet(title="Owner's test")
+    owner.post("/owner/account", {"email": "abuser@school.edu", "action": "disable"})
+    owner.post("/owner/fonts", {"fonts": [(io.BytesIO(b"wOF2" + b"\x00" * 64), "yalenew-roman.woff2")]},
+               content_type="multipart/form-data")
+    app = prof.app
+
+    page = text(owner.get("/owner/"))
+    assert "Start fresh" in page and "Delete everything so far" in page
+    assert "4 sign-up sheets" in page and "3 students on class lists" in page and "1 ranking" in page
+    assert "2 other instructor accounts" in page  # prof and other: not the owner, not the switched-off one
+
+    # Not the owner: no such page.
+    assert prof.post("/owner/delete-everything", {"confirm": "DELETE"}).status_code == 404
+    # Anything but DELETE, in capitals: nothing happens.
+    for typed in ("", "delete", "Delete", "DELETE everything"):
+        said = follow(owner, owner.post("/owner/delete-everything", {"confirm": typed}))
+        assert "Nothing was deleted" in said
+    assert q(app, "SELECT COUNT(*) FROM sheets") == 4
+
+    said = text(follow(owner, owner.post("/owner/delete-everything", {"confirm": " DELETE "})))
+    assert "Deleted everything: 4 sign-up sheets, 3 students on class lists, 1 ranking" in said
+    assert "2 other instructor accounts" in said
+    for table in ("sheets", "sheet_days", "roster", "submissions", "assignments", "snapshots", "login_codes"):
+        assert q(app, f"SELECT COUNT(*) FROM {table}") == 0, table
+    emails = {r["email"]: r["disabled"] for r in db_rows(app, "SELECT email, disabled FROM instructors")}
+    assert emails == {"owner@gmail.com": 0, "abuser@school.edu": 1}  # the switched-off one stays off
+    assert q(app, "SELECT COUNT(*) FROM site_assets") == 1  # the site's setup stays
+    assert owner.get("/owner/").status_code == 200  # still signed in
+    assert "There's nothing to delete" in text(owner.get("/owner/"))
+    assert browser().get(f"/c/{sid}").status_code == 404
+    assert prof.get("/teach/").headers["Location"].endswith("/teach/login")  # signed out: no account now

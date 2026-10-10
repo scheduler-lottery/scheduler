@@ -78,6 +78,17 @@
       if (!window.confirm(btn.getAttribute("data-confirm-click"))) e.preventDefault();
     });
   });
+  // Something drastic (the owner's "Delete everything") waits until its
+  // word is typed exactly; the server checks the same word.
+  document.querySelectorAll("form[data-type-to-confirm]").forEach(function (form) {
+    var word = form.getAttribute("data-type-to-confirm");
+    var typed = form.querySelector('input[name="confirm"]');
+    var go = form.querySelector('[type="submit"]');
+    if (!typed || !go) return;
+    function sync() { go.disabled = typed.value.trim() !== word; }
+    typed.addEventListener("input", sync);
+    sync();
+  });
 
   // Timestamps are stored in UTC; show them in the reader's own time zone.
   document.querySelectorAll("time[data-local]").forEach(function (el) {

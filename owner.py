@@ -17,8 +17,8 @@ import settings
 import signin
 import sitesecrets
 import usage
-from auth import owner_required
-from util import iso, valid_email
+from auth import current_instructor, owner_required
+from util import iso, plural, valid_email
 
 bp = Blueprint("owner", __name__, url_prefix="/owner")
 
@@ -34,6 +34,18 @@ SITE_FONTS = (
     "oldstyle7-roman.woff2",  # subtitles and lead lines
 )
 MAX_FONT_BYTES = 600 * 1024
+
+# What "Delete everything" empties, children first: every sheet with its
+# days, class list, rankings, schedule and saved copies, and every sign-in
+# not yet used. Instructor accounts go too, but for the owner's own and
+# switched-off ones (which stay off). The site's setup stays: fonts, the
+# WorkOS key and the rest of app_state, usage, the error log, and the rate
+# limits (email_log, auth_failures), which clear themselves within two
+# days. So do remote_users, so the daily job still deletes WorkOS's copies.
+EVERYTHING = (
+    "name_pins", "assignments", "submissions", "roster", "sheet_days", "sheets", "snapshots",
+    "pending_uploads", "student_signouts", "login_codes", "login_links",
+)
 _uploaded = {"at": 0.0, "names": frozenset()}
 
 
@@ -47,6 +59,18 @@ def uploaded_fonts():
             names = frozenset()
         _uploaded.update(at=time.monotonic(), names=names)
     return _uploaded["names"]
+
+
+def everything_counts(owner_id):
+    """What "Delete everything" would delete, for its warning."""
+    count = lambda sql, **params: db.scalar(sql, **params) or 0  # noqa: E731
+    return {
+        "sheets": count("SELECT COUNT(*) FROM sheets"),
+        "students": count("SELECT COUNT(*) FROM roster WHERE is_test = 0"),
+        "rankings": count("SELECT COUNT(*) FROM submissions"),
+        "backups": count("SELECT COUNT(*) FROM snapshots"),
+        "accounts": count("SELECT COUNT(*) FROM instructors WHERE id <> :me AND disabled = 0", me=owner_id),
+    }
 
 
 @bp.route("/")
@@ -91,6 +115,7 @@ def index():
             "sender": signin.code_sender(),
         },
         smtp_from=settings.SMTP_FROM if settings.SMTP_HOST else "",
+        everything=everything_counts(current_instructor()["id"]),
     )
 
 
@@ -187,4 +212,33 @@ def clear_errors():
     db.run("DELETE FROM error_log")
     db.commit()
     flash("Cleared the error log.", "success")
+    return redirect(url_for("owner.index"))
+
+
+@bp.route("/delete-everything", methods=["POST"])
+@owner_required
+def delete_everything():
+    """Start fresh (say, after testing): delete everything instructors and
+    students have made. Only when DELETE is typed, in capitals, in the
+    warning window that explains it. Nothing is saved first; it can't be
+    undone."""
+    if request.form.get("confirm", "").strip() != "DELETE":
+        flash("Nothing was deleted. To delete everything, type DELETE in capital letters.", "error")
+        return redirect(url_for("owner.index", _anchor="start-fresh"))
+    me = current_instructor()["id"]
+    gone = everything_counts(me)
+    try:
+        for table in EVERYTHING:
+            db.run(f"DELETE FROM {table}")  # noqa: S608 - a fixed list of names
+        db.run("DELETE FROM instructors WHERE id <> :me AND disabled = 0", me=me)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    flash(
+        f"Deleted everything: {plural(gone['sheets'], 'sign-up sheet')}, {plural(gone['students'], 'student')} "
+        f"on class lists, {plural(gone['rankings'], 'ranking')}, {plural(gone['backups'], 'saved backup')} and "
+        f"{plural(gone['accounts'], 'other instructor account')}. Your account and the site's setup are still here.",
+        "success",
+    )
     return redirect(url_for("owner.index"))
