@@ -410,6 +410,10 @@ select,
   padding: 20px;
 }
 .modal-overlay.open { display: flex; }
+/* The page behind an open window doesn't scroll (popover.js). */
+.page-frozen, .page-frozen body { overflow: hidden; }
+.page-frozen body { padding-right: var(--scrollbar-gap, 0px); }
+.modal-dialog { overscroll-behavior: contain; }
 .modal-dialog {
   position: relative;
   width: 100%;
@@ -2694,15 +2698,14 @@ button.icon-dock-label { border: 0; background: none; font-family: inherit; curs
    Setting up a new sheet: one question per screen.
    ============================================================= */
 /* The whole setup's progress (the questions, then the students and the
-   link): step N of 8, about how long is left, a bar, and its three parts. */
+   link): step N of 8, a bar, and its three parts. */
 .setup-progress {
   margin: 6px 0 22px; padding: 14px 16px 12px;
   border: 1px solid var(--border); border-radius: 14px; background: var(--surface-soft);
 }
 .setup-progress-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 14px; }
-.setup-progress-step, .setup-progress-left { margin: 0; font-family: var(--font-small); font-size: 0.9rem; }
+.setup-progress-step { margin: 0; font-family: var(--font-small); font-size: 0.9rem; }
 .setup-progress-step strong { font-weight: 650; }
-.setup-progress-left { color: var(--muted); }
 .setup-bar {
   -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 8px; margin: 10px 0 11px;
   border: 0; border-radius: 999px; background: var(--surface-strong); color: var(--accent); overflow: hidden;
@@ -2727,6 +2730,24 @@ button.icon-dock-label { border: 0; background: none; font-family: inherit; curs
   content: ""; position: absolute; left: 5px; top: calc(0.2em + 2.5px); width: 3px; height: 6.5px;
   border: solid var(--on-accent); border-width: 0 1.8px 1.8px 0; transform: rotate(45deg);
 }
+
+/* The class's name while it's set up: a dashed "Draft" pill. */
+.draft-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: -2px 0 16px; }
+.draft-pill {
+  display: inline-flex; align-items: center; gap: 10px; max-width: 100%; margin: 0; padding: 6px 16px 6px 6px;
+  border: 1.5px dashed var(--amber); border-radius: var(--radius-full); background: var(--amber-soft);
+}
+.draft-badge {
+  flex-shrink: 0; padding: 3px 10px; border-radius: var(--radius-full); background: var(--amber); color: var(--card-bg);
+  font-family: var(--font-small); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.draft-title {
+  min-width: 0; overflow-wrap: anywhere; font-family: var(--font-display); font-size: 1.15rem; line-height: 1.25;
+  font-weight: calc(var(--w-h3) + var(--display-boost)); color: var(--text);
+}
+.draft-note { margin: 0; font-family: var(--font-small); font-size: 0.86rem; color: var(--muted); }
+.setup-part a { color: inherit; text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 0.2em; }
+.setup-part a:hover { color: var(--accent-strong); text-decoration-color: currentColor; }
 
 /* The setup page: the students step, then sharing. */
 .setup-step > .wizard-q { margin-top: 2px; }
@@ -2770,22 +2791,37 @@ input[type="date"] {
    <strong>, the rest reads as normal text. */
 .field label.choice { display: flex; font-weight: 400; }
 
-/* The deadline picker's time: buttons in the calendar's own style. */
-.time-pick { display: grid; gap: 8px; margin: 18px 0 4px; }
-.time-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.time-row-label { min-width: 70px; font-size: 0.85rem; color: var(--muted); }
-.time-pill {
-  min-width: 44px; min-height: 38px; padding: 6px 10px; border-radius: 10px;
-  border: 1px solid var(--border); background: var(--card-bg); color: var(--text);
-  font: inherit; cursor: pointer;
+/* The deadline picker: a month beside a list of times to scroll and click
+   (the way scheduling apps pick a time), stacked on narrow screens. */
+.deadline-dialog { max-width: 700px; }
+.dcal-layout { display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 26px; align-items: start; }
+.dcal-time { min-width: 0; margin: 0; padding: 0; border: 0; }
+.dcal-time-head {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px; width: 100%;
+  margin: 0 0 10px; padding: 0; font-weight: 650;
 }
-.time-pill:hover { border-color: var(--accent); }
-.time-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.time-pill[aria-pressed="true"] {
-  background: linear-gradient(135deg, var(--accent-btn-1), var(--accent-btn-2));
-  border-color: transparent; color: var(--on-accent); font-weight: 700;
+.dcal-time-head .muted { font-family: var(--font-small); font-size: 0.85rem; font-weight: 400; }
+.time-list {
+  display: grid; gap: 8px; max-height: 336px; overflow-y: auto; overscroll-behavior: contain;
+  padding: 3px 6px 3px 3px; scroll-padding: 6px;
+}
+.time-slot { display: block; cursor: pointer; }
+.time-slot > span {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 44px;
+  padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 12px; background: var(--card-bg);
+  color: var(--accent-strong); font-weight: 650; line-height: 1.2;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.time-slot small { font-family: var(--font-small); font-size: 0.75rem; font-weight: 400; color: var(--muted); }
+.time-slot:hover > span { border-color: var(--accent); }
+.choice-input:checked + span { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.choice-input:checked + span small { color: inherit; opacity: 0.85; }
+.choice-input:focus-visible + span { outline: 3px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 640px) {
+  .dcal-layout { grid-template-columns: 1fr; gap: 16px; }
+  .time-list { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 220px; }
 }
 .cal-day:disabled { cursor: default; opacity: 0.55; }
 .cal-day:disabled:hover { border-color: var(--border); }
 .deadline-row[hidden], [data-deadline-chip][hidden], [data-deadline-open][hidden] { display: none; }
-[data-theme^="contrast"] .time-pill { border: 2px solid var(--border); }
+[data-theme^="contrast"] .time-slot > span { border: 2px solid var(--border); }

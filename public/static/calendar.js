@@ -247,9 +247,10 @@
   renderCalendar();
 })();
 
-// The deadline picker: the same calendar, for one date, and the time as
-// buttons (hour, minutes, AM or PM). It fills the form's plain date box and
-// time menu, which stay as they are when JavaScript is off.
+// The deadline picker: the same calendar, one month at a time, for one
+// date, and beside it the times as a list to scroll and click. It fills
+// the form's plain date box and time menu, which stay as they are when
+// JavaScript is off.
 (function () {
   var field = document.querySelector("[data-deadline-field]");
   var dialog = document.getElementById("deadline-calendar");
@@ -278,22 +279,20 @@
   }
   var TODAY = isoOf(new Date());
 
-  // The time, as 24-hour parts, from the time menu ("17:00").
-  var parts = (timeSelect.value || "17:00").split(":");
-  var hour24 = +parts[0];
-  var minute = parts[1] || "00";
+  // The time: the time menu holds it ("17:00"); the list shows it.
+  var timeList = dialog.querySelector("[data-time-list]");
+  var dayHead = dialog.querySelector("[data-dcal-day]");
   function timeLabel() {
-    return (hour24 % 12 || 12) + ":" + minute + " " + (hour24 < 12 ? "AM" : "PM");
+    var option = timeSelect.options[timeSelect.selectedIndex];
+    return option ? option.textContent.trim() : "";
   }
-  function writeTime() {
-    var value = pad(hour24) + ":" + minute;
-    if (!timeSelect.querySelector('option[value="' + value + '"]')) {
-      var option = document.createElement("option");
-      option.value = value;
-      option.textContent = timeLabel();
-      timeSelect.appendChild(option);
-    }
-    timeSelect.value = value;
+  function showChosenTime() {
+    var chosen = timeList.querySelector('input[value="' + timeSelect.value + '"]');
+    if (!chosen) return;
+    chosen.checked = true;
+    // In the middle of the list, so the times around it show too.
+    var slot = chosen.closest(".time-slot");
+    timeList.scrollTop = slot.offsetTop - timeList.offsetTop - (timeList.clientHeight - slot.offsetHeight) / 2;
   }
 
   var view = dateInput.value ? dateOf(dateInput.value) : new Date();
@@ -332,7 +331,7 @@
 
   function renderCalendar() {
     months.innerHTML = "";
-    for (var m = 0; m < 2; m++) {
+    for (var m = 0; m < 1; m++) {
       var monthStart = new Date(view.getFullYear(), view.getMonth() + m, 1);
       var box = document.createElement("div");
       box.className = "cal-month";
@@ -371,15 +370,7 @@
   }
 
   function renderTime() {
-    dialog.querySelectorAll("[data-hour]").forEach(function (b) {
-      b.setAttribute("aria-pressed", String(+b.getAttribute("data-hour") === (hour24 % 12 || 12)));
-    });
-    dialog.querySelectorAll("[data-minute]").forEach(function (b) {
-      b.setAttribute("aria-pressed", String(b.getAttribute("data-minute") === minute));
-    });
-    dialog.querySelectorAll("[data-half]").forEach(function (b) {
-      b.setAttribute("aria-pressed", String(b.getAttribute("data-half") === (hour24 < 12 ? "am" : "pm")));
-    });
+    dayHead.textContent = dateInput.value ? "Time on " + labelOf(dateInput.value) : "Time";
     summary.textContent = dateInput.value
       ? "Sign-ups close " + labelOf(dateInput.value) + " at " + timeLabel() + (zone ? " " + zone : "") + "."
       : "Pick a date. The time is " + timeLabel() + (zone ? " " + zone : "") + ".";
@@ -402,23 +393,14 @@
     if (again) again.focus();
   });
 
-  dialog.addEventListener("click", function (e) {
-    var b = e.target.closest(".time-pill");
-    if (!b) return;
-    var pm = hour24 >= 12;
-    if (b.hasAttribute("data-hour")) {
-      var h = +b.getAttribute("data-hour") % 12;
-      hour24 = pm ? h + 12 : h;
-    } else if (b.hasAttribute("data-minute")) {
-      minute = b.getAttribute("data-minute");
-    } else if (b.hasAttribute("data-half")) {
-      var wantPm = b.getAttribute("data-half") === "pm";
-      if (wantPm !== pm) hour24 = (hour24 + 12) % 24;
-    }
-    writeTime();
+  timeList.addEventListener("change", function (e) {
+    if (e.target.name !== "deadline-time") return;
+    timeSelect.value = e.target.value;
     renderChip();
     renderTime();
   });
+  // Opening the picker: the chosen time in view (once the window shows).
+  openButton.addEventListener("click", function () { setTimeout(showChosenTime, 0); });
 
   dialog.querySelector("[data-dcal-prev]").addEventListener("click", function () {
     view = new Date(view.getFullYear(), view.getMonth() - 1, 1);

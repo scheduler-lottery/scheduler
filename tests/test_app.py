@@ -2640,13 +2640,13 @@ def test_the_owner_can_delete_everything_but_only_by_typing_DELETE(prof, browser
 
 def test_a_new_sheet_goes_on_to_its_students_and_its_link_with_a_progress_bar(prof, browser):
     page = text(prof.get("/teach/new"))
-    assert "Step 1 of 8" in page and "About 7 minutes left" in page and "About the class" in page
+    assert "Step 1 of 8" in page and "About the class" in page and "minutes left" not in page
     r = prof.post("/teach/new", {"title": "Seminar", "day_date": [a_date("Mon", 0), a_date("Tue", 1)],
                                  "day_key": ["", ""], "capacity": "2"})
     sid = re.search(r"/teach/s/([^/#?]+)", r.headers["Location"]).group(1)
     assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup")
     page = raw(prof.get(f"/teach/s/{sid}/setup"))
-    assert "Step 7 of 8" in text(page) and "About 3 minutes left" in text(page) and "Add your students" in page
+    assert "Step 7 of 8" in text(page) and "Add your students" in page
     assert "Do you use Canvas for this class?" in html_lib.unescape(page)
     assert page.count('name="setup" value="1"') == 3  # the drop box, pasting, and "sign themselves up"
     assert browser().sign_in_instructor("other@school.edu").get(f"/teach/s/{sid}/setup").status_code == 404
@@ -2661,7 +2661,7 @@ def test_a_new_sheet_goes_on_to_its_students_and_its_link_with_a_progress_bar(pr
 
     # With the list in, the setup page is on its last step: sharing.
     page = html(prof.get(f"/teach/s/{sid}/setup"))
-    assert "Step 8 of 8" in page and "About 1 minute left" in page and "Share the link with your class" in page
+    assert "Step 8 of 8" in page and "Share the link with your class" in page
     assert "Copy the message" in page and "Email it to your 3 students" in page
     assert "alex@school.edu, riya@school.edu, sam@school.edu" in page  # the ready-made email's Bcc
     assert "3 students on your list" in text(page) and "Done: go to my class page" in page
@@ -2682,3 +2682,49 @@ def test_setup_problems_and_choices_stay_in_the_setup(prof):
     assert "So there's no list to add" in html(prof.get(f"/teach/s/{sid}/setup?step=students"))
     # On the class page, the same questions don't mention the setup.
     assert 'name="setup"' not in raw(prof.get(f"/teach/s/{sid}"))
+
+
+def test_the_deadline_time_is_a_list_with_end_of_day_and_keeps_an_odd_saved_time(prof):
+    import deadlines
+
+    assert ("23:59", "11:59 PM") in deadlines.TIMES and ("17:30", "5:30 PM") in deadlines.TIMES
+    assert ("17:15", "5:15 PM") in deadlines.slots("17:15") and deadlines.slots("17:00") == deadlines.TIMES
+    page = raw(prof.get("/teach/new"))
+    assert page.count('name="deadline-time"') == len(deadlines.TIMES) and "end of day" in page
+    assert 'value="17:00" class="choice-input" checked' in page
+    from datetime import datetime, timedelta, timezone
+
+    sid = prof.create_sheet()
+    soon = (datetime.now(timezone.utc) + timedelta(days=3)).replace(minute=15, second=0, microsecond=0)
+    _sheet_set(prof.app, sid, closes_at=soon.isoformat())  # a quarter past: not one of the listed times
+    page = raw(prof.get(f"/teach/s/{sid}/edit"))
+    assert 'name="deadline-time" value="' in page
+    with prof.app.app_context():
+        zone = db.scalar("SELECT timezone FROM instructors WHERE email = 'prof@school.edu'") or settings.DEFAULT_TIMEZONE
+        saved = deadlines.local_parts(db.scalar("SELECT closes_at FROM sheets WHERE id = :sid", sid=sid), zone)[1]
+    assert f'<option value="{saved}" selected>' in page  # the time it was saved with, not rounded
+
+
+def test_setup_parts_link_back_and_the_sheet_is_a_draft_until_set_up(prof):
+    r = prof.post("/teach/new", {"title": "Seminar", "day_date": [a_date("Mon", 0), a_date("Tue", 1)],
+                                 "day_key": ["", ""], "capacity": "2"})
+    sid = re.search(r"/teach/s/([^/#?]+)", r.headers["Location"]).group(1)
+    page = raw(prof.get("/teach/new"))
+    assert "Draft" in page and "Untitled class" in page and "Cancel" in page
+    page = raw(prof.get(f"/teach/s/{sid}/setup"))
+    assert 'class="draft-badge">Draft' in page and "Seminar" in page
+    assert f'href="/teach/s/{sid}/edit?setup=1">About the class</a>' in page  # back into the first part
+    assert f'href="/teach/s/{sid}/setup?step=share">Sharing the link</a>' in page
+    assert f'href="/teach/s/{sid}/edit?setup=1"><span aria-hidden="true">←</span> Back</a>' in page
+    # The first part again, on one page, then back to the setup.
+    page = text(prof.get(f"/teach/s/{sid}/edit?setup=1"))
+    assert "Steps 1 to 6 of 8" in page and "Save and continue" in page and "Back without saving" in page
+    form = html(prof.get(f"/teach/s/{sid}/edit?setup=1"))
+    version = re.search(r'name="version" value="([^"]+)"', form).group(1)
+    r = prof.post(f"/teach/s/{sid}/edit", {"title": "Seminar in Law", "day_date": day_dates(sid),
+                                          "day_key": day_keys(sid), "capacity": "3", "version": version,
+                                          "setup": "1"})
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students")
+    assert "Seminar in Law" in raw(prof.get(r.headers["Location"]))
+    # Once set up, the class page doesn't say draft.
+    assert "draft-badge" not in raw(prof.get(f"/teach/s/{sid}"))

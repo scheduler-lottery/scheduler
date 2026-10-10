@@ -247,9 +247,19 @@
     sync();
   });
 
+  // While a sheet is being set up, its name in the "Draft" pill follows
+  // what's typed.
+  var draftTitle = document.querySelector("[data-draft-title]");
+  var titleBox = document.getElementById("title");
+  if (draftTitle && titleBox) {
+    titleBox.addEventListener("input", function () {
+      draftTitle.textContent = titleBox.value.trim() || "Untitled class";
+    });
+  }
+
   // Setting up a new sheet: one question at a time, with Back and Next and
-  // the setup's progress bar ("Step 2 of 8", about how long is left); the
-  // last question creates the sheet. Without JavaScript it's one form.
+  // the setup's progress bar ("Step 2 of 8"); the last question creates the
+  // sheet. Without JavaScript it's one form.
   document.querySelectorAll("form[data-wizard]").forEach(function (form) {
     var steps = Array.prototype.slice.call(form.querySelectorAll("[data-wizard-step]"));
     var progress = form.querySelector("[data-setup-progress]");
@@ -263,11 +273,8 @@
       steps.forEach(function (step, n) { step.hidden = n !== at; });
       if (progress) {
         var number = parseInt(steps[at].getAttribute("data-progress-number"), 10);
-        var left = parseInt(steps[at].getAttribute("data-progress-left"), 10);
         progress.querySelector("[data-progress-step]").textContent =
           "Step " + number + " of " + progress.getAttribute("data-total");
-        progress.querySelector("[data-progress-left]").textContent =
-          "About " + left + (left === 1 ? " minute" : " minutes") + " left";
         progress.querySelector("[data-progress-bar]").value = number - 0.5;
       }
       back.hidden = at === 0;

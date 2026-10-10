@@ -42,8 +42,22 @@ def time_label(hour, minute):
     return f"{hour % 12 or 12}:{minute:02d} {'AM' if hour < 12 else 'PM'}"
 
 
-# Every half hour, for the time menu: ("17:00", "5:00 PM").
-TIMES = [(f"{h:02d}:{m:02d}", time_label(h, m)) for h in range(24) for m in (0, 30)]
+# The times to choose from: every half hour ("17:00", "5:00 PM"), and a
+# minute to midnight, for "by the end of the day".
+TIMES = [(f"{h:02d}:{m:02d}", time_label(h, m)) for h in range(24) for m in (0, 30)] + [("23:59", "11:59 PM")]
+
+
+def slots(chosen):
+    """TIMES, plus the chosen time ("17:15") if it isn't one of them (a
+    deadline saved before), in order."""
+    if not chosen or chosen in dict(TIMES):
+        return TIMES
+    try:
+        hour, minute = (int(part) for part in chosen.split(":"))
+        extra = (f"{hour:02d}:{minute:02d}", time_label(hour, minute))
+    except ValueError:
+        return TIMES
+    return sorted(TIMES + [extra])
 
 
 def zone_label(zone):
@@ -68,12 +82,11 @@ def to_utc(day, clock, zone):
 
 
 def local_parts(closes_at, zone):
-    """("2026-10-10", "17:15") for a stored deadline, in the instructor's zone
-    (to the quarter hour, as the picker offers)."""
+    """("2026-10-10", "17:00") for a stored deadline, in the instructor's zone."""
     if not closes_at:
         return "", "17:00"
     local = in_zone(closes_at, zone)
-    return local.date().isoformat(), f"{local.hour:02d}:{local.minute // 15 * 15:02d}"
+    return local.date().isoformat(), f"{local.hour:02d}:{local.minute:02d}"
 
 
 def describe(closes_at, zone):

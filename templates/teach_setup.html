@@ -3,12 +3,19 @@
 {% block content %}
 {# The rest of the setup, after the new-sheet questions: the students, then
    sharing the link, under the same progress bar (teach.setup). #}
+{% set about_url = url_for('teach.edit_sheet', sid=sheet.id, setup=1) %}
 <div class="card setup-card">
   <div class="admin-header">
-    <h1>{{ sheet.title }}</h1>
+    <h1>New sign-up sheet</h1>
     <a class="link-muted" href="{{ url_for('teach.sheet', sid=sheet.id) }}">Finish later</a>
   </div>
-  {% with progress = setup_progress(step) %}{% include "_setup_progress.html" %}{% endwith %}
+  {% with draft_title = sheet.title %}{% include "_draft_name.html" %}{% endwith %}
+  {% with progress = setup_progress(step),
+          part_links = {'About the class': about_url,
+                        'Your students': url_for('teach.setup', sid=sheet.id, step='students'),
+                        'Sharing the link': url_for('teach.setup', sid=sheet.id, step='share')} %}
+  {% include "_setup_progress.html" %}
+  {% endwith %}
 
   {% if step == 'students' %}
   <section class="setup-step" aria-labelledby="setup-q">
@@ -25,6 +32,7 @@
       <strong>{{ counts.roster | plural('student') }}</strong> on your list{% if counts.roster_with_email == counts.roster %}, all with email addresses: each confirms it's them with an emailed code.{% elif counts.roster_with_email %}: {{ counts.roster_with_email }} with email addresses (they get an emailed code); the rest sign in with a PIN.{% else %}, without email addresses: they sign in by name and a PIN.{% endif %}
     </p>
     <div class="setup-actions">
+      <a class="btn btn-secondary" href="{{ about_url }}"><span aria-hidden="true">←</span> Back</a>
       <a class="btn btn-primary btn-large" href="{{ url_for('teach.setup', sid=sheet.id, step='share') }}">Next: share the link <span aria-hidden="true">→</span></a>
     </div>
     <details class="replace-list">
@@ -34,6 +42,7 @@
     {% elif sheet.allow_unlisted %}
     <p class="lead-line">You chose to let students sign themselves up: anyone with your link adds their own name and picks a PIN. So there's no list to add.</p>
     <div class="setup-actions">
+      <a class="btn btn-secondary" href="{{ about_url }}"><span aria-hidden="true">←</span> Back</a>
       <a class="btn btn-primary btn-large" href="{{ url_for('teach.setup', sid=sheet.id, step='share') }}">Next: share the link <span aria-hidden="true">→</span></a>
     </div>
     <details class="more-options">
@@ -45,6 +54,9 @@
     <p class="lead-line">A couple of quick questions, and we'll walk you through it.</p>
     {% include "_class_quiz.html" %}
     <p class="privacy-line">Private: only names and emails are kept, everything is encrypted, and only you can see the list. <button type="button" class="btn-link" data-popover-target="privacy-details" aria-haspopup="dialog">How it's protected</button></p>
+    <div class="setup-actions">
+      <a class="btn btn-secondary" href="{{ about_url }}"><span aria-hidden="true">←</span> Back</a>
+    </div>
     <p class="mini-hint setup-skip"><a href="{{ url_for('teach.sheet', sid=sheet.id) }}">Skip for now</a>: you can add your students later, from the class page. Until then, nobody can sign in.</p>
     {% endif %}
   </section>

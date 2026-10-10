@@ -1,0 +1,7 @@
+{# The class's name while it's being set up, in a "Draft" pill, so it's
+   clear the sheet isn't shared yet. Needs `draft_title`; app.js fills in
+   the name as it's typed. #}
+<div class="draft-line">
+  <p class="draft-pill"><span class="draft-badge">Draft</span><span class="draft-title" data-draft-title>{{ draft_title or 'Untitled class' }}</span></p>
+  <p class="draft-note">Not shared with students yet: you're still setting it up.</p>
+</div>

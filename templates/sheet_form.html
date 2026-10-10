@@ -58,7 +58,7 @@
         <input type="date" id="close_date" name="close_date" value="{{ form.close_date }}" min="{{ today }}">
         <label for="close_time" class="visually-hidden">Time</label>
         <select id="close_time" name="close_time">
-          {% for value, label in deadline_times %}<option value="{{ value }}"{{ ' selected' if value == (form.close_time or '17:00') }}>{{ label }}</option>{% endfor %}
+          {% for value, label in deadline_slots(form.close_time or '17:00') %}<option value="{{ value }}"{{ ' selected' if value == (form.close_time or '17:00') }}>{{ label }}</option>{% endfor %}
         </select>
         <span class="muted">{{ deadline_zone }}</span>
         <button type="button" class="btn-link" data-deadline-clear>No deadline</button>
@@ -117,13 +117,16 @@
 {% endmacro %}
 {% block content %}
 <div class="card">
+  {# The intake: making a sheet, or changing its first part's answers from
+     the setup page (in_setup). Either way it's a draft until it's set up. #}
+  {% set intake = mode == 'new' or in_setup %}
   <div class="admin-header">
-    <h1>{{ 'New sign-up sheet' if mode == 'new' else 'Edit sign-up sheet' }}</h1>
-    <a class="link-muted" href="{{ url_for('teach.sheet', sid=sheet.id) if mode == 'edit' else url_for('teach.dashboard') }}">← Back</a>
+    <h1>{{ 'New sign-up sheet' if intake else 'Edit sign-up sheet' }}</h1>
+    {% if mode == 'new' %}<a class="link-muted" href="{{ url_for('teach.dashboard') }}">Cancel</a>
+    {% elif in_setup %}<a class="link-muted" href="{{ url_for('teach.setup', sid=sheet.id, step='students') }}">Back without saving</a>
+    {% else %}<a class="link-muted" href="{{ url_for('teach.sheet', sid=sheet.id) }}">← Back</a>{% endif %}
   </div>
-  {% if mode == 'new' %}
-  <p class="subtitle">A few questions, one at a time. Then your students and the link to share, and it's ready to use.</p>
-  {% endif %}
+  {% if intake %}{% with draft_title = form.title %}{% include "_draft_name.html" %}{% endwith %}{% endif %}
 
   <form method="post" class="form-stack" novalidate{% if mode == 'new' %} data-wizard data-wizard-start="{{ wizard_start or 'name' }}"{% endif %}>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -148,27 +151,27 @@
 
 {% if mode == 'new' %}
     {% with progress = setup_progress(wizard_start or 'name') %}{% include "_setup_progress.html" %}{% endwith %}
-    <section class="wizard-step" data-wizard-step="name" data-progress-number="{{ setup_progress('name').number }}" data-progress-left="{{ setup_progress('name').minutes }}">
+    <section class="wizard-step" data-wizard-step="name" data-progress-number="{{ setup_progress('name').number }}">
       <h2 class="wizard-q" tabindex="-1">What's the class called?</h2>
       {{ f_title() }}
     </section>
-    <section class="wizard-step" data-wizard-step="days" data-progress-number="{{ setup_progress('days').number }}" data-progress-left="{{ setup_progress('days').minutes }}">
+    <section class="wizard-step" data-wizard-step="days" data-progress-number="{{ setup_progress('days').number }}">
       <h2 class="wizard-q" tabindex="-1">Which days can students present?</h2>
       {{ f_days() }}
     </section>
-    <section class="wizard-step" data-wizard-step="seats" data-progress-number="{{ setup_progress('seats').number }}" data-progress-left="{{ setup_progress('seats').minutes }}">
+    <section class="wizard-step" data-wizard-step="seats" data-progress-number="{{ setup_progress('seats').number }}">
       <h2 class="wizard-q" tabindex="-1">How many presentations fit in one day?</h2>
       {{ f_capacity() }}
     </section>
-    <section class="wizard-step" data-wizard-step="deadline" data-progress-number="{{ setup_progress('deadline').number }}" data-progress-left="{{ setup_progress('deadline').minutes }}">
+    <section class="wizard-step" data-wizard-step="deadline" data-progress-number="{{ setup_progress('deadline').number }}">
       <h2 class="wizard-q" tabindex="-1">When should students have ranked by? <span class="muted">(optional)</span></h2>
       {{ f_rank_by() }}
     </section>
-    <section class="wizard-step" data-wizard-step="note" data-progress-number="{{ setup_progress('note').number }}" data-progress-left="{{ setup_progress('note').minutes }}">
+    <section class="wizard-step" data-wizard-step="note" data-progress-number="{{ setup_progress('note').number }}">
       <h2 class="wizard-q" tabindex="-1">Anything students should know? <span class="muted">(optional)</span></h2>
       {{ f_note() }}
     </section>
-    <section class="wizard-step" data-wizard-step="who" data-progress-number="{{ setup_progress('who').number }}" data-progress-left="{{ setup_progress('who').minutes }}">
+    <section class="wizard-step" data-wizard-step="who" data-progress-number="{{ setup_progress('who').number }}">
       <h2 class="wizard-q" tabindex="-1">Who can sign up?</h2>
       {{ f_who() }}
       {{ f_preview() }}
@@ -181,6 +184,14 @@
     </div>
     <p class="mini-hint">Next you'll add your students, then share the link. You can change all of this later.</p>
 {% else %}
+    {% if in_setup %}
+    <input type="hidden" name="setup" value="1">
+    {% with progress = setup_progress('who'), step_label = 'Steps 1 to 6 of 8',
+            part_links = {'Your students': url_for('teach.setup', sid=sheet.id, step='students'),
+                          'Sharing the link': url_for('teach.setup', sid=sheet.id, step='share')} %}
+    {% include "_setup_progress.html" %}
+    {% endwith %}
+    {% endif %}
     {{ f_title() }}
     {{ f_days() }}
     {{ f_capacity() }}
@@ -193,7 +204,11 @@
     </details>
 
     <div class="form-actions">
+      {% if in_setup %}
+      <button type="submit" class="btn btn-primary btn-large">Save and continue <span aria-hidden="true">→</span></button>
+      {% else %}
       <button type="submit" class="btn btn-primary btn-large">Save changes</button>
+      {% endif %}
     </div>
 {% endif %}
   </form>
@@ -219,31 +234,30 @@
   </div>
 </div>
 <div id="deadline-calendar" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="deadline-calendar-title">
-  <div class="modal-dialog modal-wide modal-calendar">
+  <div class="modal-dialog modal-wide modal-calendar deadline-dialog">
     <button type="button" class="modal-close" data-popover-close aria-label="Close">
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
     </button>
     <h2 id="deadline-calendar-title" class="modal-title">When should sign-ups close?</h2>
     <p class="modal-body">Pick a date, then a time. Sign-ups close by themselves then ({{ deadline_zone }}), and you can always reopen them.</p>
-    <div class="cal-nav">
-      <button type="button" class="btn btn-ghost btn-small" data-dcal-prev aria-label="Earlier months">‹ Earlier</button>
-      <button type="button" class="btn btn-ghost btn-small" data-dcal-next aria-label="Later months">Later ›</button>
-    </div>
-    <div class="cal-months" data-deadline-calendar></div>
-    <div class="time-pick">
-      <div class="time-row" role="group" aria-label="Hour">
-        <span class="time-row-label">Hour</span>
-        {% for h in range(1, 13) %}<button type="button" class="time-pill" data-hour="{{ h }}" aria-pressed="false">{{ h }}</button>{% endfor %}
+    {# A month to pick the date from, and beside it the times, as a list
+       to scroll and click (calendar.js). #}
+    <div class="dcal-layout">
+      <div class="dcal-date">
+        <div class="cal-nav">
+          <button type="button" class="btn btn-ghost btn-small" data-dcal-prev aria-label="Earlier month">‹ Earlier</button>
+          <button type="button" class="btn btn-ghost btn-small" data-dcal-next aria-label="Later month">Later ›</button>
+        </div>
+        <div class="cal-months" data-deadline-calendar></div>
       </div>
-      <div class="time-row" role="group" aria-label="Minutes">
-        <span class="time-row-label">Minutes</span>
-        {% for m in ('00', '15', '30', '45') %}<button type="button" class="time-pill" data-minute="{{ m }}" aria-pressed="false">:{{ m }}</button>{% endfor %}
-      </div>
-      <div class="time-row" role="group" aria-label="Morning or afternoon">
-        <span class="time-row-label"></span>
-        <button type="button" class="time-pill" data-half="am" aria-pressed="false">AM</button>
-        <button type="button" class="time-pill" data-half="pm" aria-pressed="false">PM</button>
-      </div>
+      <fieldset class="dcal-time">
+        <legend class="dcal-time-head"><span data-dcal-day>Time</span> <span class="muted">{{ deadline_zone }}</span></legend>
+        <div class="time-list" data-time-list>
+          {% for value, label in deadline_slots(form.close_time or '17:00') %}
+          <label class="time-slot"><input type="radio" name="deadline-time" value="{{ value }}" class="choice-input"{{ ' checked' if value == (form.close_time or '17:00') }}><span>{{ label }}{% if value == '23:59' %}<small>end of day</small>{% endif %}</span></label>
+          {% endfor %}
+        </div>
+      </fieldset>
     </div>
     <p class="cal-summary" data-dcal-summary aria-live="polite"></p>
     <div class="form-actions">

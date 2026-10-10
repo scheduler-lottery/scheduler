@@ -82,4 +82,21 @@
       closeTips();
     }
   });
+
+  // While a window is open, the page behind it stays put: it can't scroll.
+  // The scrollbar's width is kept as padding, so nothing shifts sideways.
+  // Watching the windows' classes catches every way one opens.
+  var root = document.documentElement;
+  function freeze() {
+    var open = !!document.querySelector(".modal-overlay.open");
+    if (open === root.classList.contains("page-frozen")) return;
+    if (open) root.style.setProperty("--scrollbar-gap", window.innerWidth - root.clientWidth + "px");
+    root.classList.toggle("page-frozen", open);
+  }
+  if ("MutationObserver" in window) {
+    var watch = new MutationObserver(freeze);
+    document.querySelectorAll(".modal-overlay").forEach(function (el) {
+      watch.observe(el, { attributes: true, attributeFilter: ["class"] });
+    });
+  }
 })();

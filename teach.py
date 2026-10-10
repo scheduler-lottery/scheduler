@@ -64,7 +64,7 @@ def _deadline_choices():
     """For the deadline picker (sheet_form.html): times, the instructor's
     zone, and today in it."""
     zone = _zone()
-    return {"deadline_times": deadlines.TIMES, "deadline_zone": deadlines.zone_label(zone),
+    return {"deadline_slots": deadlines.slots, "deadline_zone": deadlines.zone_label(zone),
             "today": in_zone(now(), zone).date().isoformat()}
 
 
@@ -419,31 +419,29 @@ def _read_days(form):
 
 # The whole setup, as its progress bar counts it: the questions on the new-
 # sheet form (sheet_form.html), then adding the students and sharing the
-# link (teach_setup.html). Minutes are rough, for "about 5 minutes left".
+# link (teach_setup.html), in three parts.
 SETUP_STEPS = (
-    ("name", "About the class", 0.5),
-    ("days", "About the class", 1),
-    ("seats", "About the class", 0.5),
-    ("deadline", "About the class", 1),
-    ("note", "About the class", 0.5),
-    ("who", "About the class", 0.5),
-    ("students", "Your students", 2),
-    ("share", "Sharing the link", 1),
+    ("name", "About the class"),
+    ("days", "About the class"),
+    ("seats", "About the class"),
+    ("deadline", "About the class"),
+    ("note", "About the class"),
+    ("who", "About the class"),
+    ("students", "Your students"),
+    ("share", "Sharing the link"),
 )
 SETUP_PARTS = ("About the class", "Your students", "Sharing the link")
 
 
 @bp.app_template_global()
 def setup_progress(step):
-    """Where a step sits in the whole setup: its number, its part, and about
-    how many minutes are left, counting this one."""
-    names = [name for name, _part, _minutes in SETUP_STEPS]
+    """Where a step sits in the whole setup: its number, and its part."""
+    names = [name for name, _part in SETUP_STEPS]
     at = names.index(step) if step in names else 0
     part = SETUP_STEPS[at][1]
-    left = sum(minutes for _name, _part, minutes in SETUP_STEPS[at:])
     now_at = SETUP_PARTS.index(part)
     return {
-        "number": at + 1, "total": len(SETUP_STEPS), "part": part, "minutes": max(1, round(left)),
+        "number": at + 1, "total": len(SETUP_STEPS), "part": part,
         "parts": [{"name": name, "state": "done" if i < now_at else "now" if i == now_at else "next"}
                   for i, name in enumerate(SETUP_PARTS)],
     }
@@ -575,7 +573,10 @@ def _form_version(sheet, days):
 
 def _edit_context(sheet, days):
     counts = sheets.counts(sheet["id"])
-    return {"sheet": sheet, "version": _form_version(sheet, days), "counts": counts, "max_days": sheets.MAX_DAYS}
+    # in_setup: changing the first part's answers from the setup page, which
+    # this page then goes back to.
+    return {"sheet": sheet, "version": _form_version(sheet, days), "counts": counts, "max_days": sheets.MAX_DAYS,
+            "in_setup": bool(request.values.get("setup"))}
 
 
 @bp.route("/s/<sid>/edit", methods=["GET", "POST"])
@@ -670,6 +671,8 @@ def edit_sheet(sid):
                     "list already ranked — their rankings are still under Sign-ups; delete them if they shouldn't count.",
                     "info",
                 )
+        if request.form.get("setup"):
+            return redirect(url_for("teach.setup", sid=sheet["id"], step="students"))
         return redirect(url_for("teach.sheet", sid=sheet["id"]))
     form = {
         "title": sheet["title"],
