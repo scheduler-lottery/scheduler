@@ -12,6 +12,7 @@
     <p><strong>Students:</strong> you don't sign in here, and you don't need an account. Open the link your
       instructor shared with you.</p>
   </div>
+  {% if error %}<div class="form-error" role="alert">{{ error | local_times }}</div>{% endif %}
   <form method="post" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="tz" value="" data-timezone>

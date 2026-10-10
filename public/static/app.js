@@ -1,3 +1,34 @@
+// Fonts first: the page (hidden by theme-init.js) shows once the fonts it
+// uses have loaded, or after 2.5 seconds whatever happens, so text never
+// flashes from a stand-in font to the real one. The fonts are asked for by
+// name, so this works the same in a background tab.
+(function () {
+  var root = document.documentElement;
+  if (!root.classList.contains("fonts-loading")) return;
+  var shown = false;
+  var show = function () {
+    if (shown) return;
+    shown = true;
+    root.classList.remove("fonts-loading");
+  };
+  setTimeout(show, 2500);
+  var want = function (face) {
+    return document.fonts.load(face).then(function (found) { return found.length > 0; }, function () { return false; });
+  };
+  var choice = root.getAttribute("data-font");
+  // Headings: the variable Roslindale, or the single weight that stands in
+  // for it until it's uploaded (the sans and easy-to-read choices use their
+  // own font for headings too).
+  var heading = choice === "sans" || choice === "readable" ? Promise.resolve(true)
+    : want("300 16px Roslindale").then(function (ok) { return ok || want("16px 'Roslindale Display Condensed'"); });
+  var text = {
+    oldstyle: ["16px 'Scheduler Text'", "bold 16px 'Scheduler Text'"],
+    sans: ["16px Inter", "600 16px Inter"],
+    readable: ["16px 'Atkinson Hyperlegible'", "bold 16px 'Atkinson Hyperlegible'"],
+  }[choice] || ["16px YaleNew", "bold 16px YaleNew"];
+  Promise.all([heading].concat(text.map(want))).then(show, show);
+})();
+
 // Small behaviors used across the site. Everything here is progressive: the
 // pages still work (if less smoothly) with JavaScript turned off.
 (function () {
@@ -264,5 +295,21 @@
       el.classList.add("reveal");
       rise.observe(el);
     }
+  });
+})();
+
+// A soft light follows the pointer across each block (see style.css). Mice
+// and trackpads only, and not for readers who ask for reduced motion.
+(function () {
+  var ask = function (query) { return window.matchMedia && window.matchMedia(query).matches; };
+  if (ask("(prefers-reduced-motion: reduce)") || !ask("(hover: hover) and (pointer: fine)")) return;
+  document.querySelectorAll(".card").forEach(function (card) {
+    card.addEventListener("pointermove", function (e) {
+      var box = card.getBoundingClientRect();
+      card.style.setProperty("--mx", Math.round(e.clientX - box.left) + "px");
+      card.style.setProperty("--my", Math.round(e.clientY - box.top) + "px");
+      card.classList.add("is-lit");
+    });
+    card.addEventListener("pointerleave", function () { card.classList.remove("is-lit"); });
   });
 })();

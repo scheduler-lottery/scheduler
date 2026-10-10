@@ -28,4 +28,7 @@
   root.setAttribute("data-mode", THEMES[theme]);
   root.setAttribute("data-font", font);
   root.style.setProperty("--text-scale", String(scale / 100));
+  // Hide the page until its fonts are in (app.js shows it), so nothing
+  // flashes from a stand-in font to the real one.
+  if (document.fonts) root.classList.add("fonts-loading");
 })();

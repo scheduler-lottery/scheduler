@@ -8,6 +8,7 @@ no route anywhere that lets the owner open someone else's sheet.
 """
 
 import base64
+import time
 
 from flask import Blueprint, flash, g, redirect, render_template, request, url_for
 
@@ -33,6 +34,19 @@ SITE_FONTS = (
     "oldstyle7-roman.woff2",  # subtitles and lead lines
 )
 MAX_FONT_BYTES = 600 * 1024
+_uploaded = {"at": 0.0, "names": frozenset()}
+
+
+def uploaded_fonts():
+    """Names of the font files uploaded here, remembered for a few minutes
+    per server instance (pages preload them; they change about never)."""
+    if time.monotonic() - _uploaded["at"] > 300:
+        try:
+            names = frozenset(r["name"] for r in db.rows("SELECT name FROM site_assets"))
+        except Exception:  # noqa: BLE001 - no database yet: nothing to preload
+            names = frozenset()
+        _uploaded.update(at=time.monotonic(), names=names)
+    return _uploaded["names"]
 
 
 @bp.route("/")
@@ -128,6 +142,7 @@ def upload_fonts():
             )
             saved.append(name)
     db.commit()
+    _uploaded["at"] = 0.0  # preload the new files from the next page on
     if saved:
         flash(f"Uploaded {len(saved)} font file{'s' if len(saved) != 1 else ''}. Pages use them as soon as they "
               "reload.", "success")

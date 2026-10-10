@@ -175,6 +175,16 @@ def security_headers(response):
     return response
 
 
+def _preload_fonts():
+    """The uploaded font files nearly every page uses, so the browser starts
+    fetching them before it reads the stylesheet: the page waits for its
+    fonts before showing (see app.js), and this keeps that wait short."""
+    uploaded = owner.uploaded_fonts()
+    heading = "roslindale-variable.woff2" if "roslindale-variable.woff2" in uploaded else (
+        "roslindale-display-condensed-regular.woff2")
+    return [url_for("site_font", name=name) for name in (heading, "yalenew-roman.woff2") if name in uploaded]
+
+
 @app.context_processor
 def template_globals():
     try:
@@ -194,6 +204,7 @@ def template_globals():
         "built_by_email": settings.BUILT_BY_EMAIL,
         "built_by_url": settings.BUILT_BY_URL,
         "code_sender": signin.code_sender(),
+        "preload_fonts": _preload_fonts(),
         "codes_by_workos": signin.email_mode() == "workos",
         "mail_by_gmail": signin.smtp_ready(),
         # On the general pages a student might wander to (Privacy, How it

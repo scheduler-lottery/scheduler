@@ -119,6 +119,14 @@ def test_typed_and_pasted_addresses_are_cleaned_or_explained(browser):
                         ("pat@gmail.com", "personal address")):
         assert says in html(browser().post("/teach/login", {"email": typed})), typed
     browser().sign_in_instructor("owner@gmail.com")  # the owner is always allowed
+    # A typo: an error box right above the field.
+    assert '<div class="form-error" role="alert">' in raw(browser().post("/teach/login", {"email": "pat.school.edu"}))
+    # Not a school address: a warning page of its own, front and center.
+    for typed, why in (("pat@gmail.com", "That's a personal address"), ("pat@lawfirm.com", "isn't a school address")):
+        r = browser().post("/teach/login", {"email": typed})
+        page = text(r)
+        assert r.status_code == 403 and "This sign-in is for instructors with a school email" in page, typed
+        assert why in page and typed in page and "ends in .edu" in page and "Are you a student?" in page
 
 
 def test_a_slow_email_never_strands_anyone(browser):

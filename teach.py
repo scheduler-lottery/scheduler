@@ -156,27 +156,26 @@ def login():
     if current_instructor():
         return redirect(url_for("teach.dashboard"))
     email = clean_email_input(request.values.get("email"))
+    error = ""
     if request.method == "POST":
-        problem = email_problem(email, for_instructor=True)
+        problem = email_problem(email)
         if problem:
-            flash(problem, "error")
+            error = problem
         elif not email_allowed(email):
-            contact = settings.CONTACT_EMAIL
-            flash(
-                "Instructor accounts are for school email addresses"
-                + (f" ending in {', '.join(settings.INSTRUCTOR_EMAIL_DOMAINS)}" if "*" not in settings.INSTRUCTOR_EMAIL_DOMAINS else "")
-                + ". Use your school address"
-                + (f" — or, if your school's addresses end differently, write to {contact} to have it added." if contact
-                   else " — or, if your school's addresses end differently, ask whoever runs this site to add it."),
-                "error",
-            )
+            # Front and center: a page of its own, not a passing message.
+            domain = email.rsplit("@", 1)[-1]
+            return render_template(
+                "teach_not_school.html", email=email, personal=domain in PERSONAL_EMAIL_DOMAINS,
+                endings=[] if "*" in settings.INSTRUCTOR_EMAIL_DOMAINS else settings.INSTRUCTOR_EMAIL_DOMAINS,
+                contact=settings.CONTACT_EMAIL,
+            ), 403
         elif db.scalar("SELECT disabled FROM instructors WHERE email = :e", e=email):
-            flash(auth.switched_off_message(), "error")
+            error = auth.switched_off_message()
         else:
             try:
                 issued = _send_instructor_code(email)
             except signin.SendRefused as refused:
-                flash(str(refused), "error")
+                error = str(refused)
             else:
                 session["pending_teach"] = email
                 session["pending_tz"] = _valid_zone(request.form.get("tz"))
@@ -185,7 +184,7 @@ def login():
                 if issued.status == "recent":
                     flash(issued.note, "info")
                 return redirect(url_for("teach.verify"))
-    return render_template("teach_login.html", email=email, domains=settings.INSTRUCTOR_EMAIL_DOMAINS)
+    return render_template("teach_login.html", email=email, domains=settings.INSTRUCTOR_EMAIL_DOMAINS, error=error)
 
 
 def _sign_in(email):

@@ -10,7 +10,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=Fraunces:ital,opsz,wght@0,9..144,200..700;1,9..144,200..700&family=Crimson+Pro:ital,wght@0,400;0,700;1,400;1,700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+{% for href in preload_fonts %}<link rel="preload" href="{{ href }}" as="font" type="font/woff2" crossorigin>
+{% endfor %}<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to the main content</a>
@@ -42,39 +43,47 @@
         {% if nav_sheet.published_at or (nav_sheet.show_preview and nav_sheet.bidding_open) %}
         <a href="{{ url_for('student.schedule', sid=nav_sheet.id) }}" class="icon-dock-label">{{ 'Schedule' if nav_sheet.published_at else 'Draft' }}</a>
         {% endif %}
+      {% elif instructor and not nav_sheet %}
+        <a href="{{ url_for('teach.dashboard') }}" class="icon-dock-label">My sheets</a>
+      {% endif %}
+      {% if (nav_sheet and nav_student) or (instructor and not nav_sheet) %}
+        {# Settings: who you're signed in as, the Appearance window, and a
+           plain "Sign out" button. #}
         <div class="popover-wrap">
-          <button type="button" class="icon-dock-btn icon-dock-avatar" data-popover-target="user-menu"
-                  aria-haspopup="true" aria-expanded="false" aria-label="Account menu for {{ nav_student.n }}">
-            {{ nav_student.n | initials }}
+          <button type="button" class="settings-btn" data-popover-target="user-menu" aria-haspopup="true" aria-expanded="false">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+            <span>Settings</span>
           </button>
-          <div id="user-menu" class="popover-dropdown" role="menu">
-            <div class="popover-name">{{ nav_student.n }}</div>
-            <div class="popover-sub">Signed in to {{ nav_sheet.title }}</div>
+          <div id="user-menu" class="popover-dropdown settings-menu" role="menu" aria-label="Settings">
+            <p class="settings-label">Signed in as</p>
+            {% if nav_sheet and nav_student %}
+            <p class="settings-who">{{ nav_student.n }}</p>
+            <p class="settings-sub">In “{{ nav_sheet.title }}”</p>
             <a class="popover-item" role="menuitem" href="{{ url_for('student.home', sid=nav_sheet.id) }}">My home page for this class</a>
-            <form method="post" action="{{ url_for('student.logout', sid=nav_sheet.id) }}">
+            {% else %}
+            <p class="settings-who">{{ instructor.email }}</p>
+            <p class="settings-sub">Instructor{% if is_owner %}, and this site's owner{% endif %}{% if instructor.timezone %}. Times are shown in {{ instructor.timezone | replace('_', ' ') }}{% endif %}.</p>
+            <a class="popover-item" role="menuitem" href="{{ url_for('teach.dashboard') }}">My sign-up sheets</a>
+            {% if is_owner %}<a class="popover-item" role="menuitem" href="{{ url_for('owner.index') }}">Site owner page</a>{% endif %}
+            {% endif %}
+            <button type="button" class="popover-item" role="menuitem" data-popover-target="appearance">Appearance: theme, text size and font</button>
+            <a class="popover-item" role="menuitem" href="{{ url_for('how_it_works') }}">How days are assigned</a>
+            <a class="popover-item" role="menuitem" href="{{ url_for('privacy') }}">Privacy</a>
+            <form method="post" action="{{ url_for('student.logout', sid=nav_sheet.id) if (nav_sheet and nav_student) else url_for('teach.logout') }}" class="settings-signout">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="popover-item danger" role="menuitem" aria-label="Sign out">
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              Sign out
+              <button type="submit" class="btn btn-secondary btn-block" role="menuitem">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Sign out
               </button>
             </form>
           </div>
         </div>
-      {% elif instructor and not nav_sheet %}
-        <a href="{{ url_for('teach.dashboard') }}" class="icon-dock-label">My sheets</a>
-        {% if is_owner %}<a href="{{ url_for('owner.index') }}" class="icon-dock-label">Site</a>{% endif %}
-        <form method="post" action="{{ url_for('teach.logout') }}" class="dock-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="icon-dock-btn" aria-label="Sign out" title="Sign out">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-        </form>
       {% endif %}
 
       <a href="{{ url_for('how_it_works') }}" class="icon-dock-btn dock-optional" aria-label="How days are assigned" title="How days are assigned">

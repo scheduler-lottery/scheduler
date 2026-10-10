@@ -13,21 +13,21 @@
 /* Roslindale Display Condensed as one variable font: every weight from 200
    to 900, italics (its "ital" axis) and optical sizes (finer when big,
    sturdier when small). The static Regular stands in until it's uploaded. */
-@font-face { font-family: "Roslindale"; src: url("/fonts/roslindale-variable.woff2") format("woff2"); font-weight: 200 900; font-style: normal; font-display: swap; }
-@font-face { font-family: "Roslindale"; src: url("/fonts/roslindale-variable.woff2") format("woff2"); font-weight: 200 900; font-style: italic; font-display: swap; }
-@font-face { font-family: "Roslindale Display Condensed"; src: local("Roslindale Display Condensed Regular"), local("Roslindale-DisplayCondensedRegular"), url("/fonts/roslindale-display-condensed-regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
-@font-face { font-family: "YaleNew"; src: local("YaleNew Regular"), local("YaleNew-Roman"), url("/fonts/yalenew-roman.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
-@font-face { font-family: "YaleNew"; src: local("YaleNew Italic"), local("YaleNew-Italic"), url("/fonts/yalenew-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
-@font-face { font-family: "YaleNew"; src: local("YaleNew Bold"), local("YaleNew-Bold"), url("/fonts/yalenew-bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
-@font-face { font-family: "YaleNew"; src: local("YaleNew Bold Italic"), local("YaleNew-BoldItalic"), url("/fonts/yalenew-bolditalic.woff2") format("woff2"); font-weight: 700; font-style: italic; font-display: swap; }
-@font-face { font-family: "Old Style 7"; src: local("Old Style 7 Std Roman"), local("OldStyle7Std"), url("/fonts/oldstyle7-roman.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Roslindale"; src: url("/fonts/roslindale-variable.woff2") format("woff2"); font-weight: 200 900; font-style: normal; font-display: block; }
+@font-face { font-family: "Roslindale"; src: url("/fonts/roslindale-variable.woff2") format("woff2"); font-weight: 200 900; font-style: italic; font-display: block; }
+@font-face { font-family: "Roslindale Display Condensed"; src: local("Roslindale Display Condensed Regular"), local("Roslindale-DisplayCondensedRegular"), url("/fonts/roslindale-display-condensed-regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+@font-face { font-family: "YaleNew"; src: local("YaleNew Regular"), local("YaleNew-Roman"), url("/fonts/yalenew-roman.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+@font-face { font-family: "YaleNew"; src: local("YaleNew Italic"), local("YaleNew-Italic"), url("/fonts/yalenew-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: block; }
+@font-face { font-family: "YaleNew"; src: local("YaleNew Bold"), local("YaleNew-Bold"), url("/fonts/yalenew-bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: block; }
+@font-face { font-family: "YaleNew"; src: local("YaleNew Bold Italic"), local("YaleNew-BoldItalic"), url("/fonts/yalenew-bolditalic.woff2") format("woff2"); font-weight: 700; font-style: italic; font-display: block; }
+@font-face { font-family: "Old Style 7"; src: local("Old Style 7 Std Roman"), local("OldStyle7Std"), url("/fonts/oldstyle7-roman.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
 
 /* "Scheduler Text" is Old Style 7, which has only a roman, borrowing
    YaleNew's real italic and bold rather than letting browsers fake them. */
-@font-face { font-family: "Scheduler Text"; src: local("Old Style 7 Std Roman"), local("OldStyle7Std"), url("/fonts/oldstyle7-roman.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
-@font-face { font-family: "Scheduler Text"; src: local("YaleNew Italic"), local("YaleNew-Italic"), url("/fonts/yalenew-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
-@font-face { font-family: "Scheduler Text"; src: local("YaleNew Bold"), local("YaleNew-Bold"), url("/fonts/yalenew-bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
-@font-face { font-family: "Scheduler Text"; src: local("YaleNew Bold Italic"), local("YaleNew-BoldItalic"), url("/fonts/yalenew-bolditalic.woff2") format("woff2"); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: "Scheduler Text"; src: local("Old Style 7 Std Roman"), local("OldStyle7Std"), url("/fonts/oldstyle7-roman.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+@font-face { font-family: "Scheduler Text"; src: local("YaleNew Italic"), local("YaleNew-Italic"), url("/fonts/yalenew-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: block; }
+@font-face { font-family: "Scheduler Text"; src: local("YaleNew Bold"), local("YaleNew-Bold"), url("/fonts/yalenew-bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: block; }
+@font-face { font-family: "Scheduler Text"; src: local("YaleNew Bold Italic"), local("YaleNew-BoldItalic"), url("/fonts/yalenew-bolditalic.woff2") format("woff2"); font-weight: 700; font-style: italic; font-display: block; }
 
 :root {
   /* Fonts: Roslindale for every heading and large figure, light, slim and
@@ -1832,34 +1832,34 @@ h1, h2, h3, h4, .card-heading, .modal-title, .brand-name, .next-step-title, .cou
   font-family: var(--font-display); font-optical-sizing: auto; font-kerning: normal;
 }
 h1 {
-  font-size: clamp(2.6rem, 6.2vw, 4rem); line-height: 0.98; margin-bottom: 14px;
+  font-size: clamp(2.05rem, 4.4vw, 2.75rem); line-height: 1.02; margin-bottom: 12px;
   font-weight: calc(var(--w-h1) + var(--display-boost)); letter-spacing: var(--track-h1);
 }
 h2, .card-heading {
-  font-size: clamp(1.85rem, 3.9vw, 2.55rem); line-height: 1.02;
+  font-size: clamp(1.5rem, 2.9vw, 1.85rem); line-height: 1.06;
   font-weight: calc(var(--w-h2) + var(--display-boost)); letter-spacing: var(--track-h2);
 }
-h3 { font-size: 1.55rem; line-height: 1.08; font-weight: calc(var(--w-h3) + var(--display-boost)); letter-spacing: var(--track-h3); }
-h4 { font-size: 1.25rem; line-height: 1.12; font-weight: calc(var(--w-h4) + var(--display-boost)); letter-spacing: -0.01em; }
+h3 { font-size: 1.28rem; line-height: 1.12; font-weight: calc(var(--w-h3) + var(--display-boost)); letter-spacing: var(--track-h3); }
+h4 { font-size: 1.1rem; line-height: 1.15; font-weight: calc(var(--w-h4) + var(--display-boost)); letter-spacing: -0.01em; }
 .next-step-title {
-  font-size: clamp(1.75rem, 3.6vw, 2.3rem);
+  font-size: clamp(1.45rem, 2.8vw, 1.8rem);
   font-weight: calc(var(--w-h2) + var(--display-boost)); letter-spacing: var(--track-h2);
 }
 .modal-title {
-  font-size: 2.1rem; line-height: 1.02;
+  font-size: 1.7rem; line-height: 1.06;
   font-weight: calc(var(--w-h2) + var(--display-boost)); letter-spacing: var(--track-h2);
 }
 .brand-name {
-  font-size: 1.6rem; letter-spacing: -0.02em;
+  font-size: 1.45rem; letter-spacing: -0.02em;
   font-weight: calc(var(--w-brand) + var(--display-boost));
 }
 .count-number, .stat-value { font-weight: calc(var(--w-num) + var(--display-boost)); letter-spacing: -0.03em; }
 .day-card-day {
-  font-size: clamp(2.8rem, 7.5vw, 3.8rem); line-height: 0.95;
+  font-size: clamp(2.2rem, 5.6vw, 2.85rem); line-height: 1;
   font-weight: calc(var(--w-num) + var(--display-boost)); letter-spacing: var(--track-h1);
 }
 .hero-card h1 {
-  font-size: clamp(4rem, 14vw, 7.6rem); line-height: 0.88;
+  font-size: clamp(3rem, 9vw, 4.9rem); line-height: 0.92;
   font-weight: calc(var(--w-hero) + var(--display-boost)); letter-spacing: var(--track-hero);
 }
 /* An italic turn inside a heading: <em> is Roslindale's light italic. */
@@ -2297,7 +2297,7 @@ h4 { font-size: 1.25rem; line-height: 1.12; font-weight: calc(var(--w-h4) + var(
    column that stays in view while you read the section.
    ============================================================= */
 .editorial { counter-reset: part; }
-.editorial-head h1 { max-width: 19ch; font-size: clamp(2.8rem, 7vw, 4.6rem); text-wrap: balance; }
+.editorial-head h1 { max-width: 20ch; font-size: clamp(2.2rem, 4.8vw, 3.1rem); text-wrap: balance; }
 .editorial-head .lead { font-size: 1.15rem; color: var(--muted); max-width: 46ch; margin: 0 0 8px; }
 .policy-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 30px 0 14px; }
 .policy-fact {
@@ -2306,7 +2306,7 @@ h4 { font-size: 1.25rem; line-height: 1.12; font-weight: calc(var(--w-h4) + var(
 }
 .policy-fact-big {
   margin: 0 0 10px; font-family: var(--font-display); font-optical-sizing: auto;
-  font-size: 2.2rem; line-height: 0.95; letter-spacing: var(--track-h1);
+  font-size: 1.75rem; line-height: 1; letter-spacing: var(--track-h1);
   font-weight: calc(var(--w-h1) + var(--display-boost));
 }
 .policy-fact p:last-child { margin-bottom: 0; }
@@ -2334,7 +2334,7 @@ h4 { font-size: 1.25rem; line-height: 1.12; font-weight: calc(var(--w-h4) + var(
 .privacy-panel { border-left-width: 1px; padding: 20px 20px 14px; }
 .privacy-title {
   margin: 0 0 14px; font-family: var(--font-display); font-optical-sizing: auto; color: var(--text);
-  font-size: clamp(1.7rem, 3.4vw, 2.2rem); line-height: 1.02; letter-spacing: var(--track-h2);
+  font-size: clamp(1.4rem, 2.7vw, 1.75rem); line-height: 1.06; letter-spacing: var(--track-h2);
   font-weight: calc(var(--w-h2) + var(--display-boost));
 }
 .privacy-panel .privacy-tiles {
@@ -2344,7 +2344,7 @@ h4 { font-size: 1.25rem; line-height: 1.12; font-weight: calc(var(--w-h4) + var(
 .privacy-tiles li { margin: 0; padding: 14px 14px 12px; border-radius: var(--radius-sm); background: var(--surface-soft); }
 .privacy-tiles strong {
   display: block; margin-bottom: 4px; font-family: var(--font-display); font-optical-sizing: auto;
-  font-size: 1.3rem; line-height: 1.05; letter-spacing: var(--track-h3); color: var(--success);
+  font-size: 1.15rem; line-height: 1.08; letter-spacing: var(--track-h3); color: var(--success);
   font-weight: calc(var(--w-h3) + var(--display-boost));
 }
 @media (max-width: 640px) { .privacy-panel .privacy-tiles { grid-template-columns: 1fr; } }
@@ -2361,8 +2361,8 @@ h4 { font-size: 1.25rem; line-height: 1.12; font-weight: calc(var(--w-h4) + var(
 /* Big light headings: even line breaks (no lone last word), and a size
    that fits narrow cards. */
 h1, h2, h3, .card-heading, .modal-title, .next-step-title, .privacy-title { text-wrap: balance; }
-.center-card h1 { font-size: clamp(2.3rem, 5.4vw, 3rem); }
-.modal-dialog .modal-title { font-size: clamp(1.7rem, 4vw, 2.1rem); }
+.center-card h1 { font-size: clamp(1.95rem, 4.2vw, 2.4rem); }
+.modal-dialog .modal-title { font-size: clamp(1.45rem, 3.2vw, 1.7rem); }
 summary.card-heading::marker, summary.card-heading::-webkit-details-marker { font-size: 0.55em; color: var(--muted); }
 
 /* =============================================================
@@ -2398,3 +2398,80 @@ summary.card-heading::marker, summary.card-heading::-webkit-details-marker { fon
   .mode-frame { padding: 28px 10px 12px; border-radius: 22px; }
   .mode-label { margin-top: -40px; }
 }
+
+/* =============================================================
+   Settings: a labeled button in the top bar, and the panel it opens
+   (who you're signed in as, Appearance, and a plain "Sign out").
+   ============================================================= */
+.settings-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 38px; padding: 0 15px 0 11px;
+  border: 1.5px solid var(--text); border-radius: var(--radius-full);
+  background: transparent; color: var(--text);
+  font: inherit; font-size: 0.86rem; font-weight: 650; white-space: nowrap;
+  cursor: pointer; flex-shrink: 0;
+}
+.settings-btn svg { width: 17px; height: 17px; }
+.settings-btn:hover, .settings-btn[aria-expanded="true"] { background: var(--text); color: var(--bg); }
+.settings-menu { min-width: 280px; max-width: min(340px, calc(100vw - 24px)); padding: 14px 10px 10px; }
+.settings-label {
+  margin: 0 8px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted);
+}
+.settings-who { margin: 3px 8px 0; font-weight: 650; overflow-wrap: anywhere; }
+.settings-sub {
+  margin: 3px 8px 8px; padding-bottom: 12px; border-bottom: 1px solid var(--border);
+  font-size: 0.82rem; color: var(--muted);
+}
+.settings-signout { margin: 8px 0 0; padding: 10px 2px 2px; border-top: 1px solid var(--border); }
+.settings-signout .btn { display: flex; align-items: center; gap: 8px; }
+.settings-signout svg { width: 16px; height: 16px; }
+@media (max-width: 640px) {
+  .settings-btn { height: 34px; padding: 0 11px 0 9px; font-size: 0.78rem; }
+}
+
+/* Instructor sign-in problems: front and center. A refused address gets a
+   warning page of its own; a mistyped one, a box right above the field. */
+.warning-card { border: 2px solid var(--amber); }
+.warning-mark {
+  width: 64px; height: 64px; margin: 2px auto 14px; padding: 13px;
+  border-radius: 50%; background: var(--amber-soft); color: var(--amber);
+}
+.warning-mark svg { width: 100%; height: 100%; display: block; }
+.warning-address {
+  display: inline-block; margin: 2px 0 12px; padding: 4px 12px; border-radius: var(--radius-full);
+  background: var(--surface-soft); font-weight: 650; overflow-wrap: anywhere;
+}
+.warning-card .btn-block { margin: 6px 0 16px; }
+.form-error {
+  margin: 4px 0 14px; padding: 12px 14px; border-radius: var(--radius-sm); text-align: left;
+  border: 1.5px solid var(--danger); background: var(--danger-bg); color: var(--danger); font-weight: 600;
+}
+
+/* =============================================================
+   Fonts first. Nothing shows until the page's fonts are in (app.js
+   lifts .fonts-loading; after 3 seconds the page shows regardless),
+   so text never flashes from a stand-in font to Roslindale or
+   YaleNew, and the blocks rise in once, together, when it appears.
+   ============================================================= */
+.fonts-loading body { visibility: hidden; animation: show-page 0s 3s forwards; }
+@keyframes show-page { to { visibility: visible; } }
+.fonts-loading :is(main, .mode-frame) > .card { animation-play-state: paused; }
+
+/* =============================================================
+   A soft light follows the pointer across each block (app.js sets
+   --mx/--my and .is-lit). Mice and trackpads only; not for readers
+   who ask for reduced motion, and not in the high-contrast themes.
+   ============================================================= */
+@property --spot { syntax: "<percentage>"; inherits: false; initial-value: 0%; }
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .card {
+    background-image: radial-gradient(560px circle at var(--mx, 50%) var(--my, 0%),
+      color-mix(in srgb, var(--accent) var(--spot), transparent), transparent 70%);
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease,
+      --spot 0.5s ease;
+  }
+  .card.is-lit { --spot: 7%; }
+  [data-mode="dark"] .card.is-lit { --spot: 11%; }
+}
+[data-theme^="contrast"] .card { background-image: none; }

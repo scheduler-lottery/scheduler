@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Instructor accounts need a school email — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="card center-card warning-card" role="alert">
+  <div class="warning-mark" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 3.5L2.8 19.5a1 1 0 0 0 .87 1.5h16.66a1 1 0 0 0 .87-1.5L12 3.5z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/>
+      <path d="M12 9.5v5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+      <circle cx="12" cy="17.6" r="1.1" fill="currentColor"/>
+    </svg>
+  </div>
+  <h1>This sign-in is for instructors with a school email</h1>
+  <p class="warning-address"><bdi>{{ email }}</bdi></p>
+  <p class="subtitle">
+    {% if personal %}That's a personal address, not a school one.{% else %}That isn't a school address this site accepts.{% endif %}
+    Instructor accounts need your school email{% if endings %}, the kind that ends in {{ endings | join(' or ') }}{% endif %}.
+  </p>
+  <a class="btn btn-primary btn-block" href="{{ url_for('teach.login') }}">Use my school email instead</a>
+
+  <div class="note-box students-elsewhere">
+    <p><strong>Are you a student?</strong> You don't sign in here and you don't need an account. Open the link your
+      instructor shared with you, or type its code on the <a href="{{ url_for('landing') }}">front page</a>.</p>
+  </div>
+  <p class="hint">
+    An instructor whose school addresses end differently?
+    {% if contact %}Write to <a href="mailto:{{ contact }}">{{ contact }}</a> to have your school added.{% else %}Ask whoever runs this site to add your school.{% endif %}
+  </p>
+</div>
+{% endblock %}
