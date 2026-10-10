@@ -2,12 +2,16 @@
 {% block title %}Instructors: get started or sign in — {{ app_name }}{% endblock %}
 {% block content %}
 <div class="card center-card">
-  <h1>Get started, or sign in</h1>
+  <p class="eyebrow">For instructors</p>
+  <h1>Instructor sign-in</h1>
   <p class="subtitle">
-    Type your school email and we'll send you a 6-digit code — no password to remember.
-    <strong>First time here?</strong> That's all it takes to make your account.
+    Make sign-up sheets for your classes. Type your school email and we'll send you a 6-digit code — no
+    password to remember. <strong>First time here?</strong> That's all it takes to make your account.
   </p>
-  <p class="mini-hint"><strong>Students:</strong> you don't sign in here. Open the link your instructor shared.</p>
+  <div class="note-box students-elsewhere">
+    <p><strong>Students:</strong> you don't sign in here, and you don't need an account. Open the link your
+      instructor shared with you.</p>
+  </div>
   <form method="post" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="tz" value="" data-timezone>

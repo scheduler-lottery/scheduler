@@ -2279,3 +2279,14 @@ def test_the_owner_switches_to_workos_by_pasting_its_key(prof, browser, monkeypa
     page = text(owner.get("/owner/"))
     assert "from workos.dev" in page and "This is a test (Staging) key" in page
     assert "codes are emailed by WorkOS, a sign-in service, from workos.dev" in text(browser().get("/privacy"))
+
+
+def test_instructor_pages_are_framed_and_student_pages_are_not(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    for page in (raw(prof.get("/teach/")), raw(prof.get(f"/teach/s/{sid}")), raw(browser().get("/teach/login"))):
+        assert 'class="mode-frame"' in page and '<p class="mode-label" aria-hidden="true">Instructor</p>' in page
+    assert "Instructor sign-in" in text(browser().get("/teach/login"))
+    assert "you don't sign in here" in text(browser().get("/teach/login"))
+    for page in (raw(browser().get("/")), raw(browser().get(f"/c/{sid}")), raw(browser().get("/privacy"))):
+        assert "mode-frame" not in page

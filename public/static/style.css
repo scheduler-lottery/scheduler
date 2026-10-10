@@ -46,7 +46,7 @@
   /* Display weights (Roslindale's 200-900) and tracking, per level. Dark
      themes add a little weight (thin strokes look thinner on dark), and the
      high-contrast themes a lot. */
-  --w-hero: 230; --w-h1: 270; --w-h2: 320; --w-h3: 400; --w-h4: 460; --w-num: 260; --w-brand: 480;
+  --w-hero: 200; --w-h1: 210; --w-h2: 240; --w-h3: 310; --w-h4: 370; --w-num: 200; --w-brand: 380;
   --track-hero: -0.045em; --track-h1: -0.035em; --track-h2: -0.025em; --track-h3: -0.015em;
   --display-boost: 0;
   --on-accent: #fff;
@@ -140,7 +140,7 @@
    scales the whole site at once. */
 html {
   -webkit-text-size-adjust: 100%;
-  font-size: calc(16px * var(--text-scale, 1));
+  font-size: calc(17px * var(--text-scale, 1));
 }
 
 body {
@@ -1852,9 +1852,7 @@ h4 { font-size: 1.25rem; line-height: 1.12; font-weight: calc(var(--w-h4) + var(
 .brand-name {
   font-size: 1.6rem; letter-spacing: -0.02em;
   font-weight: calc(var(--w-brand) + var(--display-boost));
-  transition: font-weight 0.35s ease;
 }
-.brand:hover .brand-name { font-weight: calc(var(--w-brand) + 260 + var(--display-boost)); }
 .count-number, .stat-value { font-weight: calc(var(--w-num) + var(--display-boost)); letter-spacing: -0.03em; }
 .day-card-day {
   font-size: clamp(2.8rem, 7.5vw, 3.8rem); line-height: 0.95;
@@ -2219,28 +2217,19 @@ h4 { font-size: 1.25rem; line-height: 1.12; font-weight: calc(var(--w-h4) + var(
 .meter-fill-100 { width: 100%; }
 
 /* =============================================================
-   Gentle entrances: page content rises into place, one card after
-   another; pop-ups, menus, messages and notes ease in. Switched
-   off for readers who ask for reduced motion (see the top). Each one
-   only fills backwards, so once it ends, the element's own styles (hover
-   lifts, a message fading out) take over again.
+   The one bit of motion on the site: blocks (cards) rise into place
+   as a page opens, one after another, and blocks further down rise
+   in as you scroll to them (app.js adds .reveal / .is-in). Switched
+   off for readers who ask for reduced motion (see the top). It only
+   fills backwards, so once it ends a block's own styles take over.
    ============================================================= */
 @keyframes rise-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes pop-in { from { opacity: 0; transform: translateY(8px) scale(0.985); } to { opacity: 1; transform: none; } }
-@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 14px); } to { opacity: 1; transform: translate(-50%, 0); } }
-main > .card { animation: rise-in 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
-main > .card:nth-child(2) { animation-delay: 0.05s; }
-main > .card:nth-child(3) { animation-delay: 0.1s; }
-main > .card:nth-child(4) { animation-delay: 0.15s; }
-main > .card:nth-child(5) { animation-delay: 0.2s; }
-main > .card:nth-child(n+6) { animation-delay: 0.25s; }
-.flash-stack .flash { animation: pop-in 0.35s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
-.toast-dock { animation: toast-in 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
-.modal-overlay.open { animation: fade-in 0.18s ease-out backwards; }
-.modal-overlay.open .modal-dialog { animation: pop-in 0.26s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
-.popover-dropdown.open { animation: pop-in 0.18s ease-out backwards; }
-details[open] > :not(summary) { animation: fade-in 0.25s ease-out backwards; }
+:is(main, .mode-frame) > .card { animation: rise-in 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) backwards; }
+:is(main, .mode-frame) > .card:nth-child(2) { animation-delay: 0.05s; }
+:is(main, .mode-frame) > .card:nth-child(3) { animation-delay: 0.1s; }
+:is(main, .mode-frame) > .card:nth-child(4) { animation-delay: 0.15s; }
+:is(main, .mode-frame) > .card:nth-child(5) { animation-delay: 0.2s; }
+:is(main, .mode-frame) > .card:nth-child(n+6) { animation-delay: 0.25s; }
 
 /* =============================================================
    Sending from your own email (email_links.html, the sign-in
@@ -2294,7 +2283,7 @@ details[open] > :not(summary) { animation: fade-in 0.25s ease-out backwards; }
    ============================================================= */
 .eyebrow {
   font-family: var(--font-display); font-style: italic; font-variation-settings: "ital" 1;
-  font-weight: calc(360 + var(--display-boost)); font-size: 1.08rem; letter-spacing: 0;
+  font-weight: calc(280 + var(--display-boost)); font-size: 1.08rem; letter-spacing: 0;
   text-transform: none; color: var(--accent);
 }
 .eyebrow a { font-weight: inherit; }
@@ -2331,7 +2320,7 @@ details[open] > :not(summary) { animation: fade-in 0.25s ease-out backwards; }
   counter-increment: part; content: counter(part, decimal-leading-zero);
   display: block; margin-bottom: 8px;
   font-style: italic; font-variation-settings: "ital" 1; font-size: 1rem; letter-spacing: 0.04em;
-  font-weight: calc(300 + var(--display-boost)); color: var(--accent);
+  font-weight: calc(220 + var(--display-boost)); color: var(--accent);
 }
 .policy-body > :first-child { margin-top: 0; }
 .policy-body ul { margin-top: 0; }
@@ -2360,57 +2349,14 @@ details[open] > :not(summary) { animation: fade-in 0.25s ease-out backwards; }
 }
 @media (max-width: 640px) { .privacy-panel .privacy-tiles { grid-template-columns: 1fr; } }
 
-/* =============================================================
-   Reacting to you (app.js adds the classes): sections below the
-   fold rise in as you scroll to them; a soft light follows the
-   pointer across cards; primary buttons catch a sheen; the top bar
-   lifts once the page scrolls under it; the front page's title
-   thickens wherever the pointer is. All of it is skipped for
-   readers who ask for reduced motion (see the top).
-   ============================================================= */
+/* Blocks further down rise in as you scroll to them (app.js). */
 .reveal { opacity: 0; transform: translateY(18px); }
 .reveal.is-in {
   opacity: 1; transform: none;
   transition: opacity 0.75s cubic-bezier(0.2, 0.7, 0.2, 1), transform 0.75s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 @media print { .reveal { opacity: 1 !important; transform: none !important; } }
-
-@property --spot { syntax: "<percentage>"; inherits: false; initial-value: 0%; }
-@media (hover: hover) and (pointer: fine) {
-  .card {
-    background-image: radial-gradient(560px circle at var(--mx, 50%) var(--my, 0%),
-      color-mix(in srgb, var(--accent) var(--spot), transparent), transparent 70%);
-    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease,
-      --spot 0.5s ease;
-  }
-  .card.is-lit { --spot: 7%; }
-  [data-mode="dark"] .card.is-lit { --spot: 11%; }
-
-  .btn-primary { position: relative; overflow: hidden; }
-  .btn-primary::after {
-    content: ""; position: absolute; top: 0; bottom: 0; left: -70%; width: 45%; pointer-events: none;
-    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-    transform: skewX(-18deg); opacity: 0;
-  }
-  .btn-primary:hover::after { animation: sheen 0.85s ease; }
-}
-@keyframes sheen {
-  from { opacity: 1; transform: translateX(0) skewX(-18deg); }
-  to { opacity: 1; transform: translateX(480%) skewX(-18deg); }
-}
-[data-theme^="contrast"] .card { background-image: none; }
-
-.topbar { transition: box-shadow 0.3s ease, background-color 0.3s ease, border-color 0.3s ease; }
-.topbar.is-scrolled { box-shadow: 0 10px 28px -18px rgba(30, 22, 10, 0.45); }
-[data-mode="dark"] .topbar.is-scrolled { box-shadow: 0 10px 28px -14px rgba(0, 0, 0, 0.8); }
-
-a { text-underline-offset: 0.16em; transition: text-underline-offset 0.2s ease, color 0.2s ease; }
-a:hover { text-underline-offset: 0.28em; }
-
-.weight-play span { transition: font-weight 0.35s cubic-bezier(0.2, 0.7, 0.2, 1); }
-.weight-play.is-waving span { animation: weight-wave 1.3s ease-in-out backwards; }
-.weight-play .hero-dot, .hero-dot { color: var(--accent); }
-@keyframes weight-wave { 45% { font-weight: 700; } }
+.hero-dot { color: var(--accent); }
 
 /* Big light headings: even line breaks (no lone last word), and a size
    that fits narrow cards. */
@@ -2418,3 +2364,37 @@ h1, h2, h3, .card-heading, .modal-title, .next-step-title, .privacy-title { text
 .center-card h1 { font-size: clamp(2.3rem, 5.4vw, 3rem); }
 .modal-dialog .modal-title { font-size: clamp(1.7rem, 4vw, 2.1rem); }
 summary.card-heading::marker, summary.card-heading::-webkit-details-marker { font-size: 0.55em; color: var(--muted); }
+
+/* =============================================================
+   Instructor pages (and the owner's) sit in a black-outlined,
+   round-cornered frame labeled on its top edge, so nobody mistakes
+   them for the students' pages, or the instructor sign-in for theirs.
+   ============================================================= */
+.mode-frame {
+  border: 2px solid var(--text);
+  border-radius: 30px;
+  padding: 34px 20px 20px;
+  margin-top: 18px;
+}
+.mode-label {
+  display: table;
+  margin: -46px 0 22px 4px; /* up onto the frame's top edge */
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+  font-family: var(--font-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.mode-frame:has(> .center-card) { max-width: 480px; margin: 7vh auto 0; }
+.mode-frame > .center-card { margin-top: 0; }
+.students-elsewhere { margin: 4px 0 18px; text-align: left; }
+.students-elsewhere p { margin: 0; }
+@media (max-width: 640px) {
+  .mode-frame { padding: 28px 10px 12px; border-radius: 22px; }
+  .mode-label { margin-top: -40px; }
+}

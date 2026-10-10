@@ -117,7 +117,12 @@
       </div>
     {% endif %}
   {% endwith %}
+  {# Instructor (and owner) pages sit in a black-outlined frame labeled
+     "Instructor", so nobody mistakes them for the students' pages. #}
+  {% set mode_label = {'teach': 'Instructor', 'owner': 'Site owner'}.get(request.blueprint) %}
+  {% if mode_label %}<div class="mode-frame" role="region" aria-label="{{ mode_label }} area"><p class="mode-label" aria-hidden="true">{{ mode_label }}</p>{% endif %}
   {% block content %}{% endblock %}
+  {% if mode_label %}</div>{% endif %}
 </main>
 
 <footer class="site-footer">

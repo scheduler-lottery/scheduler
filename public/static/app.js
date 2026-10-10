@@ -243,93 +243,26 @@
   });
 })();
 
-// Motion that answers the reader: sections rise in as they're scrolled to, a
-// soft light follows the pointer across cards, the top bar lifts once the
-// page scrolls under it, and the front page's title thickens wherever the
-// pointer is (Roslindale is a variable font: every weight from 200 to 900
-// exists). None of it runs for readers who ask for reduced motion, and
-// nothing depends on it: without it, everything is simply already there.
+// The site's one bit of motion: blocks further down a page rise in as
+// they're scrolled to (blocks already in view rise in by CSS alone). Only
+// what starts below the window is hidden, so nothing visible blinks, and
+// none of it runs for readers who ask for reduced motion.
 (function () {
-  var ask = function (query) { return window.matchMedia && window.matchMedia(query).matches; };
-  if (ask("(prefers-reduced-motion: reduce)")) return;
-  var finePointer = ask("(hover: hover) and (pointer: fine)");
-
-  // Only what starts below the window is hidden, so nothing visible blinks.
-  if ("IntersectionObserver" in window) {
-    var rise = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (!entry.isIntersecting) return;
-        entry.target.classList.add("is-in");
-        rise.unobserve(entry.target);
-      });
-    }, { rootMargin: "0px 0px -6% 0px", threshold: 0.06 });
-    var fold = window.innerHeight * 0.94;
-    document.querySelectorAll("main > .card, main > section, [data-reveal]").forEach(function (el) {
-      if (el.getBoundingClientRect().top > fold) {
-        el.classList.add("reveal");
-        rise.observe(el);
-      }
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (!("IntersectionObserver" in window)) return;
+  var rise = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (!entry.isIntersecting) return;
+      entry.target.classList.add("is-in");
+      rise.unobserve(entry.target);
     });
-  }
-
-  if (finePointer) {
-    document.querySelectorAll(".card").forEach(function (card) {
-      card.addEventListener("pointermove", function (e) {
-        var box = card.getBoundingClientRect();
-        card.style.setProperty("--mx", Math.round(e.clientX - box.left) + "px");
-        card.style.setProperty("--my", Math.round(e.clientY - box.top) + "px");
-        card.classList.add("is-lit");
-      });
-      card.addEventListener("pointerleave", function () { card.classList.remove("is-lit"); });
-    });
-  }
-
-  var bar = document.querySelector(".topbar");
-  if (bar) {
-    var lift = function () { bar.classList.toggle("is-scrolled", window.scrollY > 4); };
-    window.addEventListener("scroll", lift, { passive: true });
-    lift();
-  }
-
-  var title = document.querySelector("[data-weight-play]");
-  if (title) {
-    var words = title.textContent.trim();
-    var holder = document.createElement("span");
-    holder.className = "weight-play";
-    holder.setAttribute("aria-hidden", "true");
-    var letters = Array.prototype.map.call(words, function (ch, i) {
-      var letter = document.createElement("span");
-      letter.textContent = ch;
-      if (ch === ".") letter.className = "hero-dot";
-      letter.style.animationDelay = i * 55 + "ms";
-      holder.appendChild(letter);
-      return letter;
-    });
-    title.setAttribute("aria-label", words);
-    title.textContent = "";
-    title.appendChild(holder);
-    holder.classList.add("is-waving");
-    setTimeout(function () { holder.classList.remove("is-waving"); }, 1400 + letters.length * 55);
-
-    if (finePointer) {
-      var area = title.closest(".card") || title;
-      var base = parseFloat(window.getComputedStyle(title).fontWeight) || 300;
-      var pending = 0;
-      area.addEventListener("pointermove", function (e) {
-        if (pending) return;
-        pending = window.requestAnimationFrame(function () {
-          pending = 0;
-          letters.forEach(function (letter) {
-            var box = letter.getBoundingClientRect();
-            var away = Math.hypot(e.clientX - (box.left + box.width / 2), e.clientY - (box.top + box.height / 2));
-            var near = Math.max(0, 1 - away / 280);
-            letter.style.fontWeight = String(Math.round(base + near * near * (760 - base)));
-          });
-        });
-      });
-      area.addEventListener("pointerleave", function () {
-        letters.forEach(function (letter) { letter.style.fontWeight = ""; });
-      });
+  }, { rootMargin: "0px 0px -6% 0px", threshold: 0.06 });
+  var fold = window.innerHeight * 0.94;
+  var blocks = "main > .card, main > section, .mode-frame > .card, .mode-frame > section, [data-reveal]";
+  document.querySelectorAll(blocks).forEach(function (el) {
+    if (el.getBoundingClientRect().top > fold) {
+      el.classList.add("reveal");
+      rise.observe(el);
     }
-  }
+  });
 })();
