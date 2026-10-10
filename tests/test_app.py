@@ -3257,7 +3257,8 @@ def test_scheduler_helper_is_offered_only_once_it_exists(prof, monkeypatch):
     monkeypatch.setattr(settings, "CANVAS_HELPER_STORE_URL", "https://chromewebstore.google.com/detail/x")
     page = raw(prof.get(f"/teach/s/{sid}"))
     assert 'data-helper-ids="abcdefghijklmnopabcdefghijklmnop"' in page and "Get my class list from Canvas" in page
-    assert 'href="https://chromewebstore.google.com/detail/x"' in page and "Add Scheduler Helper to Chrome" in page
+    assert 'href="https://chromewebstore.google.com/detail/x"' in page
+    assert "Add Scheduler Helper to Chrome" in text(prof.get(f"/teach/s/{sid}"))
     # A list the helper fetched for this page goes in like one copied here.
     r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=3), "how": "helper"})
     assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")

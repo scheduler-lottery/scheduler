@@ -1060,6 +1060,11 @@
     var helperHosts = [];
     if (helperBox && helperIds.length) {
       var isChromium = /Chrome\/|Edg\//.test(navigator.userAgent) && !/OPR\//.test(navigator.userAgent);
+      if (/Edg\//.test(navigator.userAgent)) { // Edge installs from Chrome's store, a step more
+        guide.querySelectorAll("[data-browser-name]").forEach(function (el) { el.textContent = "Edge"; });
+        guide.querySelectorAll("[data-edge-only]").forEach(function (el) { el.hidden = false; });
+        guide.querySelectorAll("[data-not-edge]").forEach(function (el) { el.hidden = true; });
+      }
       var helperSaid = guide.querySelector("[data-helper-said]");
       var helperCourses = guide.querySelector("[data-helper-courses]");
       var helperGo = guide.querySelector("[data-helper-go]");

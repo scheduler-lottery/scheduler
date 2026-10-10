@@ -30,11 +30,16 @@
       <p class="mini-hint">Scheduler Helper fetches it from your Canvas{% if sheet.canvas_course %} ({{ sheet.canvas_course }}){% endif %}: names and email addresses only. If Canvas wants you to sign in, it opens for that, and this page carries on after.</p>
     </div>
     <div data-helper-install hidden>
-      <p class="canvas-easy-lead"><strong>Once:</strong> add the free Scheduler Helper to Chrome. Two clicks, and after that your class list comes over with one.</p>
-      <a class="btn btn-primary btn-large" href="{{ helper_store_url or '#' }}" target="_blank" rel="noopener" data-helper-add>Add Scheduler Helper to Chrome</a>
-      <ol class="helper-install-steps">
+      <p class="canvas-easy-lead"><strong>Once:</strong> add the free Scheduler Helper to <span data-browser-name>Chrome</span>. A couple of clicks, and after that your class list comes over with one.</p>
+      <a class="btn btn-primary btn-large" href="{{ helper_store_url or '#' }}" target="_blank" rel="noopener" data-helper-add>Add Scheduler Helper to <span data-browser-name>Chrome</span></a>
+      <ol class="helper-install-steps" data-not-edge>
         <li>On the page that opens, click <strong>Add to Chrome</strong>.</li>
         <li>Click <strong>Add extension</strong>. (Chrome says it can “read and change your data on canvas.northwestern.edu”: it only reads your students' names and emails, and only when you click here.)</li>
+        <li>Come back to this tab. It carries on by itself.</li>
+      </ol>
+      <ol class="helper-install-steps" data-edge-only hidden>
+        <li>On the page that opens, click <strong>Allow extensions from other stores</strong> at the top, then <strong>Allow</strong>. (It's Chrome's store; Edge uses the same extensions.)</li>
+        <li>Click <strong>Get</strong>, then <strong>Add extension</strong>. (Edge says it can “read and change your data on canvas.northwestern.edu”: it only reads your students' names and emails, and only when you click here.)</li>
         <li>Come back to this tab. It carries on by itself.</li>
       </ol>
     </div>

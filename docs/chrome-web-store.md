@@ -102,7 +102,8 @@ add these two, and redeploy:
 | `CANVAS_HELPER_IDS` | the item's id |
 | `CANVAS_HELPER_STORE_URL` | the item's page, `https://chromewebstore.google.com/detail/…` |
 
-From then on, in Chrome and Edge:
+From then on, in Chrome and Edge (Edge installs from Chrome's store after an "Allow
+extensions from other stores" click, and the page says so):
 
 - The class-list step offers **Add Scheduler Helper to Chrome**.
 - Once the helper is added, the step offers **Get my class list from Canvas**.
