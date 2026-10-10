@@ -1,36 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ 'New sign-up sheet' if mode == 'new' else 'Edit ' ~ sheet.title }} — {{ app_name }}{% endblock %}
-{% block content %}
-<div class="card">
-  <div class="admin-header">
-    <h1>{{ 'New sign-up sheet' if mode == 'new' else 'Edit sign-up sheet' }}</h1>
-    <a class="link-muted" href="{{ url_for('teach.sheet', sid=sheet.id) if mode == 'edit' else url_for('teach.dashboard') }}">← Back</a>
-  </div>
-  {% if mode == 'new' %}
-  <p class="subtitle">Three quick things and you're set. You can change any of it later.</p>
-  {% endif %}
-
-  <form method="post" class="form-stack" novalidate>
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    {% if mode == 'edit' %}<input type="hidden" name="version" value="{{ version }}">{% endif %}
-
-    {% if removing %}
-    <div class="confirm-box">
-      <h2 class="card-heading">Remove {{ removing | map(attribute='label') | join(', ') }}?</h2>
-      <ul>
-        {% if impact.ranked %}<li>{{ impact.ranked | plural('student has', 'students have') }} ranked {{ 'it' if removing | length == 1 else 'them' }}. It comes off their lists; the rest of their order stays.</li>{% endif %}
-        {% if impact.cant %}<li>Can't-do marks on it go away for: {{ impact.cant | join(', ') }}.</li>{% endif %}
-        {% if impact.notes %}<li>Notes about it will be hidden for: {{ impact.notes | join(', ') }}.</li>{% endif %}
-        {% if impact.scheduled %}<li>Scheduled on it now: {{ impact.scheduled | join(', ') }} — they'll need a new day.</li>{% endif %}
-      </ul>
-      <p class="mini-hint">A copy of the sheet as it is now is saved first, so you can undo this under Backups.</p>
-      <div class="form-actions">
-        <button type="submit" name="confirm_remove" value="1" class="btn btn-danger">Yes, remove {{ 'it' if removing | length == 1 else 'them' }} and save</button>
-        <a class="btn btn-secondary" href="{{ url_for('teach.edit_sheet', sid=sheet.id) }}">Cancel — keep {{ 'it' if removing | length == 1 else 'them' }}</a>
-      </div>
-    </div>
-    {% endif %}
-
+{% macro f_title() %}
     <div class="field">
       <label for="title">Title</label>
       <p class="field-help">What your students will see at the top of the page.</p>
@@ -38,6 +8,8 @@
              placeholder="e.g., CS &amp; Law, Fall 2026">
     </div>
 
+{% endmacro %}
+{% macro f_days() %}
     <fieldset class="field" data-day-field data-max="{{ max_days }}">
       <legend>Days students can pick from</legend>
       <p class="field-help">Pick them on a calendar: click a date, or drag across several.</p>
@@ -64,20 +36,24 @@
       {% endif %}
     </fieldset>
 
+{% endmacro %}
+{% macro f_capacity() %}
     <div class="field">
       <label for="capacity">Seats per day</label>
       <p class="field-help">How many presentations fit in one class meeting.</p>
       <input type="number" id="capacity" name="capacity" min="1" max="500" value="{{ form.capacity }}" required class="input-short">
     </div>
 
+{% endmacro %}
+{% macro f_rank_by() %}
     <div class="field">
       <label for="rank_by">Rank by <span class="muted">(optional)</span></label>
       <p class="field-help">A deadline to show students, like “Friday, Oct 10 at 5 PM”. Sign-ups don't close by themselves — you close them.</p>
       <input type="text" id="rank_by" name="rank_by" value="{{ form.rank_by }}" maxlength="100" placeholder="e.g., Friday, Oct 10 at 5 PM">
     </div>
 
-    <details class="more-options" {% if mode == 'edit' or form.note %}open{% endif %}>
-      <summary>More options</summary>
+{% endmacro %}
+{% macro f_note() %}
       <div class="field">
         <label for="note">Note to students <span class="muted">(optional)</span></label>
         <p class="field-help">Shown when they sign in and rank, and in the message you post. Good for the format and length of presentations.</p>
@@ -85,6 +61,8 @@
                   placeholder="e.g., Each class fits 4 presentations: 20 minutes each — 10–15 presenting, then questions.">{{ form.note }}</textarea>
       </div>
 
+{% endmacro %}
+{% macro f_who() %}
       <fieldset class="field">
         <legend>Who can sign up</legend>
         <label class="choice">
@@ -99,17 +77,96 @@
         </label>
       </fieldset>
 
+{% endmacro %}
+{% macro f_preview() %}
       <label class="choice">
         <input type="checkbox" name="show_preview" value="1" {{ 'checked' if form.show_preview }}>
         <span><strong>Let students see everyone's days.</strong> While sign-ups are open they see a draft; after you
         publish, the final schedule. Classmates will see each other's names and days. (Either way, each student
         always sees their own day once you publish.)</span>
       </label>
+{% endmacro %}
+{% block content %}
+<div class="card">
+  <div class="admin-header">
+    <h1>{{ 'New sign-up sheet' if mode == 'new' else 'Edit sign-up sheet' }}</h1>
+    <a class="link-muted" href="{{ url_for('teach.sheet', sid=sheet.id) if mode == 'edit' else url_for('teach.dashboard') }}">← Back</a>
+  </div>
+  {% if mode == 'new' %}
+  <p class="subtitle">A few questions, one at a time, and your sign-up sheet is ready.</p>
+  {% endif %}
+
+  <form method="post" class="form-stack" novalidate{% if mode == 'new' %} data-wizard data-wizard-start="{{ wizard_start or 'name' }}"{% endif %}>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if mode == 'edit' %}<input type="hidden" name="version" value="{{ version }}">{% endif %}
+
+    {% if removing %}
+    <div class="confirm-box">
+      <h2 class="card-heading">Remove {{ removing | map(attribute='label') | join(', ') }}?</h2>
+      <ul>
+        {% if impact.ranked %}<li>{{ impact.ranked | plural('student has', 'students have') }} ranked {{ 'it' if removing | length == 1 else 'them' }}. It comes off their lists; the rest of their order stays.</li>{% endif %}
+        {% if impact.cant %}<li>Can't-do marks on it go away for: {{ impact.cant | join(', ') }}.</li>{% endif %}
+        {% if impact.notes %}<li>Notes about it will be hidden for: {{ impact.notes | join(', ') }}.</li>{% endif %}
+        {% if impact.scheduled %}<li>Scheduled on it now: {{ impact.scheduled | join(', ') }} — they'll need a new day.</li>{% endif %}
+      </ul>
+      <p class="mini-hint">A copy of the sheet as it is now is saved first, so you can undo this under Backups.</p>
+      <div class="form-actions">
+        <button type="submit" name="confirm_remove" value="1" class="btn btn-danger">Yes, remove {{ 'it' if removing | length == 1 else 'them' }} and save</button>
+        <a class="btn btn-secondary" href="{{ url_for('teach.edit_sheet', sid=sheet.id) }}">Cancel — keep {{ 'it' if removing | length == 1 else 'them' }}</a>
+      </div>
+    </div>
+    {% endif %}
+
+{% if mode == 'new' %}
+    <p class="wizard-progress" data-wizard-progress aria-live="polite"></p>
+    <section class="wizard-step" data-wizard-step="name">
+      <h2 class="wizard-q" tabindex="-1">What's the class called?</h2>
+      {{ f_title() }}
+    </section>
+    <section class="wizard-step" data-wizard-step="days">
+      <h2 class="wizard-q" tabindex="-1">Which days can students present?</h2>
+      {{ f_days() }}
+    </section>
+    <section class="wizard-step" data-wizard-step="seats">
+      <h2 class="wizard-q" tabindex="-1">How many presentations fit in one day?</h2>
+      {{ f_capacity() }}
+    </section>
+    <section class="wizard-step" data-wizard-step="deadline">
+      <h2 class="wizard-q" tabindex="-1">When should students have ranked by? <span class="muted">(optional)</span></h2>
+      {{ f_rank_by() }}
+    </section>
+    <section class="wizard-step" data-wizard-step="note">
+      <h2 class="wizard-q" tabindex="-1">Anything students should know? <span class="muted">(optional)</span></h2>
+      {{ f_note() }}
+    </section>
+    <section class="wizard-step" data-wizard-step="who">
+      <h2 class="wizard-q" tabindex="-1">Who can sign up?</h2>
+      {{ f_who() }}
+      {{ f_preview() }}
+    </section>
+    <p class="form-error" data-wizard-error role="alert" hidden></p>
+    <div class="form-actions wizard-actions">
+      <button type="button" class="btn btn-secondary" data-wizard-back>← Back</button>
+      <button type="button" class="btn btn-primary btn-large" data-wizard-next>Next →</button>
+      <button type="submit" class="btn btn-primary btn-large" data-wizard-done>Create the sign-up sheet</button>
+    </div>
+    <p class="mini-hint">Next you'll add your students, and then share the link. You can change all of this later.</p>
+{% else %}
+    {{ f_title() }}
+    {{ f_days() }}
+    {{ f_capacity() }}
+    {{ f_rank_by() }}
+    <details class="more-options" {% if mode == 'edit' or form.note %}open{% endif %}>
+      <summary>More options</summary>
+      {{ f_note() }}
+      {{ f_who() }}
+      {{ f_preview() }}
     </details>
 
     <div class="form-actions">
-      <button type="submit" class="btn btn-primary btn-large">{{ 'Create sign-up sheet' if mode == 'new' else 'Save changes' }}</button>
+      <button type="submit" class="btn btn-primary btn-large">Save changes</button>
     </div>
+{% endif %}
   </form>
 </div>
 

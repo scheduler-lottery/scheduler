@@ -2548,3 +2548,23 @@ summary.card-heading::marker, summary.card-heading::-webkit-details-marker { fon
 .settings-list dt { color: var(--muted); }
 .settings-list dd { margin: 0; }
 @media (max-width: 560px) { .settings-list > div { grid-template-columns: 1fr; } }
+
+/* =============================================================
+   Setting up a new sheet: one question per screen.
+   ============================================================= */
+.wizard-progress { margin: 6px 0 4px; font-size: 0.85rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.wizard-progress:empty { display: none; }
+.wizard-step[hidden] { display: none; }
+.wizard-q {
+  margin: 4px 0 16px; font-size: clamp(1.45rem, 2.8vw, 1.8rem); line-height: 1.1;
+  font-weight: calc(var(--w-h2) + var(--display-boost)); letter-spacing: var(--track-h2);
+}
+.wizard-q:focus { outline: none; }
+/* The question says what the field's own label would; keep the label for
+   screen readers only. */
+.wizard-step > .field > label:first-child, .wizard-step > .field > legend:first-child {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.wizard-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.wizard-actions [hidden] { display: none; }

@@ -2382,3 +2382,21 @@ def test_each_class_has_class_schedule_and_settings_tabs(prof, browser):
     other = browser().sign_in_instructor("other@school.edu")
     for tab in ("/schedule", "/settings"):
         assert other.get(f"/teach/s/{sid}{tab}").status_code == 404
+
+
+def test_a_new_sheet_is_set_up_one_question_at_a_time(prof):
+    page = text(prof.get("/teach/new"))
+    for asked in ("What's the class called?", "Which days can students present?",
+                  "How many presentations fit in one day?", "When should students have ranked by?",
+                  "Anything students should know?", "Who can sign up?"):
+        assert asked in page, asked
+    assert 'data-wizard-start="name"' in raw(prof.get("/teach/new"))
+    # A problem sends the setup back to the question it's about.
+    r = prof.post("/teach/new", {"title": "Seminar", "capacity": "2"})
+    assert 'data-wizard-start="days"' in raw(r) and "Pick at least two days" in text(r)
+    r = prof.post("/teach/new", {"title": "", "capacity": "2"})
+    assert 'data-wizard-start="name"' in raw(r)
+    # Editing keeps the whole form on one page.
+    sid = prof.create_sheet()
+    edit = raw(prof.get(f"/teach/s/{sid}/edit"))
+    assert "data-wizard" not in edit and "Save changes" in edit

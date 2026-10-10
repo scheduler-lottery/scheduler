@@ -211,6 +211,56 @@
     });
   });
 
+  // Setting up a new sheet: one question at a time, "Step 2 of 6", Back and
+  // Next; the last step creates the sheet. Without JavaScript it's one form.
+  document.querySelectorAll("form[data-wizard]").forEach(function (form) {
+    var steps = Array.prototype.slice.call(form.querySelectorAll("[data-wizard-step]"));
+    var progress = form.querySelector("[data-wizard-progress]");
+    var error = form.querySelector("[data-wizard-error]");
+    var back = form.querySelector("[data-wizard-back]");
+    var next = form.querySelector("[data-wizard-next]");
+    var done = form.querySelector("[data-wizard-done]");
+    var at = 0;
+    var show = function (i, focus) {
+      at = Math.max(0, Math.min(i, steps.length - 1));
+      steps.forEach(function (step, n) { step.hidden = n !== at; });
+      progress.textContent = "Step " + (at + 1) + " of " + steps.length;
+      back.hidden = at === 0;
+      next.hidden = at === steps.length - 1;
+      done.hidden = at !== steps.length - 1;
+      error.hidden = true;
+      var question = steps[at].querySelector(".wizard-q");
+      if (focus && question) question.focus();
+    };
+    var problem = function (step) {
+      var title = step.querySelector("#title");
+      if (title && !title.value.trim()) return "Give the class a name. It's what your students will see.";
+      var chips = step.querySelector("[data-day-chips]");
+      if (chips && chips.querySelectorAll(".day-chip").length < 2) {
+        return "Pick at least two days on the calendar for students to choose between.";
+      }
+      var seats = step.querySelector("#capacity");
+      if (seats && !(parseInt(seats.value, 10) >= 1)) return "Seats per day should be a whole number, like 4.";
+      return "";
+    };
+    next.addEventListener("click", function () {
+      var says = problem(steps[at]);
+      if (says) { error.textContent = says; error.hidden = false; return; }
+      show(at + 1, true);
+    });
+    back.addEventListener("click", function () { show(at - 1, true); });
+    // Enter in a field moves on, rather than creating the sheet half set up.
+    form.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && e.target.tagName === "INPUT" && at < steps.length - 1) {
+        e.preventDefault();
+        next.click();
+      }
+    });
+    var start = steps.map(function (step) { return step.getAttribute("data-wizard-step"); })
+      .indexOf(form.getAttribute("data-wizard-start"));
+    show(start > 0 ? start : 0, false);
+  });
+
   // The class-list questions: one step at a time, with Back. Each answer
   // opens the next step; the drop box shows on the steps that use it.
   document.querySelectorAll("[data-quiz]").forEach(function (quiz) {

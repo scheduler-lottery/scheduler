@@ -403,6 +403,18 @@ def _read_days(form):
     return days, problems
 
 
+def _setup_step(errors):
+    """The setup question (sheet_form.html's steps) the first problem is about,
+    so the step-by-step setup opens right there."""
+    for error in errors:
+        said = error.lower()
+        for step, words in (("name", ("title",)), ("deadline", ("rank by",)), ("note", ("note to students",)),
+                            ("seats", ("seats",)), ("days", ("day", "date"))):
+            if any(word in said for word in words):
+                return step
+    return "name"
+
+
 def _read_sheet_form(form):
     """Returns (values, errors). Values are shaped like _blank_form() so the
     page can be shown again with everything the instructor typed."""
@@ -455,7 +467,8 @@ def new_sheet():
         if errors:
             for error in errors:
                 flash(error, "error")
-            return render_template("sheet_form.html", form=values, mode="new", max_days=sheets.MAX_DAYS)
+            return render_template("sheet_form.html", form=values, mode="new", max_days=sheets.MAX_DAYS,
+                                   wizard_start=_setup_step(errors))
         mine = [fold(r["title"]) for r in db.rows(
             "SELECT title FROM sheets WHERE owner_id = :me", me=current_instructor()["id"]
         )]
