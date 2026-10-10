@@ -12,8 +12,8 @@
 {# ------------------------------------------------------- getting started #}
 {% set remaining = steps | rejectattr('done') | list %}
 {% if remaining %}
-<details class="card guide" data-guide="{{ sheet.id }}" open>
-  <summary class="card-heading">Getting started ({{ steps | selectattr('done') | list | length }} of {{ steps | length }} done)</summary>
+<details class="card guide fold-card" data-guide="{{ sheet.id }}" open>
+  <summary class="fold-summary"><h2 class="card-heading">Getting started ({{ steps | selectattr('done') | list | length }} of {{ steps | length }} done)</h2></summary>
   <ol class="checklist">
     {% for step in steps %}
     <li class="check-item{{ ' done' if step.done }}">
@@ -30,8 +30,9 @@
 {% endif %}
 
 {# ------------------------------------------------------------ class list #}
-<section class="card" id="class-list">
-  <h2 class="card-heading">Class list</h2>
+{% set alert = report or just_added or (roster | selectattr('name_key', 'in', locked) | list) %}
+<details class="card fold-card" id="class-list" data-fold="class-list-{{ sheet.id }}"{% if alert %} open data-fold-alert{% endif %}>
+  <summary class="fold-summary"><h2 class="card-heading">Class list</h2></summary>
 
   {% if report %}
   <div class="report{{ ' report-warn' if report.warn }}">
@@ -223,11 +224,12 @@
     </div>
     {% endif %}
   </details>
-</section>
+</details>
 
 {# ---------------------------------------------------------------- try it #}
-<section class="card" id="try-it">
-  <h2 class="card-heading">See it as a student</h2>
+{% set alert = False %}
+<details class="card fold-card" id="try-it" data-fold="try-it-{{ sheet.id }}"{% if alert %} open data-fold-alert{% endif %}>
+  <summary class="fold-summary"><h2 class="card-heading">See it as a student</h2></summary>
   <p>See exactly what your students will see, in a new tab — you stay signed in here. You'll be a pretend student called <strong>Test Student 1</strong>; its rankings stop counting once real students rank.</p>
   <form method="post" action="{{ url_for('teach.try_as_student', sid=sheet.id) }}" target="_blank">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -250,11 +252,12 @@
       <button class="btn btn-secondary btn-small" type="submit">Add test students</button>
     </form>
   </details>
-</section>
+</details>
 
 {# ----------------------------------------------------------------- share #}
-<section class="card" id="share">
-  <h2 class="card-heading">Share with your class</h2>
+{% set alert = False %}
+<details class="card fold-card" id="share" data-fold="share-{{ sheet.id }}"{% if alert %} open data-fold-alert{% endif %}>
+  <summary class="fold-summary"><h2 class="card-heading">Share with your class</h2></summary>
   {% if published %}
   <p>The schedule is published. To tell your class, post this in Canvas:</p>
   <label for="announcement-published" class="visually-hidden">Message for students</label>
@@ -278,11 +281,12 @@
   <p class="muted">Add your class list first — then a ready-made message appears here to copy.</p>
   {% endif %}
   <p class="mini-hint">Note to students: {% if sheet.note %}“{{ sheet.note | truncate(140) }}”{% else %}none{% endif %} · <a href="{{ url_for('teach.edit_sheet', sid=sheet.id) }}">{{ 'Edit' if sheet.note else 'Add one' }}</a></p>
-</section>
+</details>
 
 {# -------------------------------------------------------------- sign-ups #}
-<section class="card" id="signups">
-  <h2 class="card-heading">Sign-ups</h2>
+{% set alert = deadline.waiting or stuck %}
+<details class="card fold-card" id="signups" data-fold="signups-{{ sheet.id }}"{% if alert %} open data-fold-alert{% endif %}>
+  <summary class="fold-summary"><h2 class="card-heading">Sign-ups</h2></summary>
   <div class="status-row">
     <span class="count-inline">
       {% if counts.roster %}
@@ -508,5 +512,5 @@
   {% else %}
   <p class="muted">No one has ranked the days yet.</p>
   {% endif %}
-</section>
+</details>
 {% endblock %}

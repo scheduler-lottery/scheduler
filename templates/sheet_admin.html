@@ -84,8 +84,8 @@
 
 {% if tab != 'settings' %}
 {# --------------------------------------------------------------- next step #}
-<section class="card next-step">
-  <p class="eyebrow">Next step</p>
+<details class="card next-step fold-card" data-fold="next-{{ sheet.id }}" open>
+  <summary class="fold-summary"><span class="eyebrow">Next step</span><span class="fold-peek">{{ next_step.title }}</span></summary>
   <h2 class="next-step-title"><a href="{{ tab_href(sheet.id, next_step.anchor) }}">{{ next_step.title }}</a></h2>
   <p>{{ next_step.text }}</p>
   {% if seat_warning %}
@@ -98,7 +98,7 @@
   {% elif email_room is not none and email_room < 15 %}
   <p class="warn-line">Only {{ email_room | plural('sign-in email') }} left on this site today. If a student can't get one, <a href="{{ url_for('teach.email_links', sid=sheet.id) }}">send them a sign-in link from your own email</a>.</p>
   {% endif %}
-</section>
+</details>
 {% endif %}
 
 {% block sheet_body %}{% endblock %}

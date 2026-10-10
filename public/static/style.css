@@ -2980,3 +2980,25 @@ input[type="date"] {
 .modify-days > summary { cursor: pointer; font-weight: 650; color: var(--accent-strong); }
 .modify-days[open] > summary { margin-bottom: 12px; }
 .modify-days .warn-box { margin-top: 0; }
+
+/* Cards that fold away (the class page): the heading is the switch, with
+   a chevron; folded, the Next step card still shows what the step is. */
+.fold-card > summary {
+  display: flex; align-items: center; gap: 12px; cursor: pointer; list-style: none;
+}
+.fold-card > summary::-webkit-details-marker { display: none; }
+.fold-card > summary::after {
+  content: ""; flex-shrink: 0; width: 9px; height: 9px; margin: 0 6px 0 auto;
+  border: solid var(--muted); border-width: 0 2px 2px 0; transform: rotate(45deg) translateY(-2px);
+  transition: transform 0.2s ease;
+}
+.fold-card[open] > summary::after { transform: rotate(-135deg) translateY(-2px); }
+.fold-card > summary .card-heading { margin: 0; }
+.fold-card[open] > summary { margin-bottom: 14px; }
+.fold-card > summary:hover .card-heading, .fold-card > summary:hover .eyebrow { color: var(--accent-strong); }
+.fold-card > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 8px; }
+.next-step > summary .eyebrow { margin: 0; }
+.fold-peek { display: none; font-weight: 650; }
+.next-step:not([open]) .fold-peek { display: inline; }
+details.guide:not([open]) { padding-bottom: 20px; }
+.card[id], .fold-card { scroll-margin-top: 92px; }  /* a link to a card lands below the top bar */

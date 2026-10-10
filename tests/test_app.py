@@ -2866,3 +2866,22 @@ def test_the_schedule_tab_shows_the_days_and_seats_and_warns_before_changing_ran
     prof.post(f"/teach/s/{sid}/close-and-schedule")
     page = raw(prof.get(f"/teach/s/{sid}/schedule"))
     assert "Pat Doe" in page and page.count('class="slot open"') == 5 and 'class="slot filled' in page
+
+
+def test_class_page_cards_fold_away_with_only_the_first_two_open(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    assert re.search(r'id="class-list"[^>]* open data-fold-alert', raw(prof.get(f"/teach/s/{sid}")))  # its report
+    prof.post(f"/teach/s/{sid}/roster/report/dismiss")
+    page = raw(prof.get(f"/teach/s/{sid}"))
+    assert re.search(r'<details class="card next-step fold-card" data-fold="next-\w+" open>', page)
+    assert '<details class="card guide fold-card"' in page and "Getting started" in page
+    for card in ("class-list", "try-it", "share", "signups"):
+        tag = re.search(rf'<details class="card fold-card" id="{card}"[^>]*>', page).group(0)
+        assert " open" not in tag, card  # folded away to start
+    # A card with something to deal with opens anyway.
+    _sheet_set(prof.app, sid, closes_at=PASSED, at_close="ask")
+    browser().get(f"/c/{sid}")  # the deadline passes with students missing: the instructor is asked
+    page = raw(prof.get(f"/teach/s/{sid}"))
+    assert '<details class="card fold-card" id="signups" data-fold="signups-' in page
+    assert re.search(r'id="signups"[^>]* open data-fold-alert', page)

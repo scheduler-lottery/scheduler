@@ -210,9 +210,25 @@
     });
   });
 
-  // A link to something folded away (a "Modify this" section): unfold it.
-  var opened = location.hash && document.getElementById(location.hash.slice(1));
-  if (opened && opened.tagName === "DETAILS") opened.open = true;
+  // Cards that fold away remember it on this computer (per card, per
+  // class); one holding something to deal with opens anyway.
+  document.querySelectorAll("details[data-fold]").forEach(function (card) {
+    var key = "fold-" + card.getAttribute("data-fold");
+    var saved = store(key);
+    if (saved && !card.hasAttribute("data-fold-alert")) card.open = saved === "open";
+    card.addEventListener("toggle", function () { store(key, card.open ? "open" : "closed"); });
+  });
+  // A link to something folded away (a card, a "Modify this"): unfold it.
+  var reveal = function (scroll) {
+    var target = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)));
+    if (!target) return;
+    for (var el = target; el; el = el.parentElement) {
+      if (el.tagName === "DETAILS") el.open = true;
+    }
+    if (scroll) target.scrollIntoView({ block: "start" });
+  };
+  reveal(true);
+  window.addEventListener("hashchange", function () { reveal(true); });
 
   // Emailing the class the link counts as sharing it, as copying it does.
   document.querySelectorAll("[data-compose][data-mark-shared]").forEach(function (link) {
