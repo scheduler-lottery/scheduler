@@ -21,7 +21,7 @@ from sqlalchemy import create_engine, event, text
 import settings
 from util import iso, new_id
 
-SCHEMA_VERSION = "10"
+SCHEMA_VERSION = "11"
 SCHEMA_PATH = os.path.join(settings.BASE_DIR, "schema.sql")
 
 # Every table the app owns. On Postgres each gets row-level security turned
@@ -58,6 +58,8 @@ MIGRATIONS = [
     ("sheets", "theme", "TEXT"),
     ("sheets", "font", "TEXT"),
     ("login_links", "from_instructor", "INTEGER NOT NULL DEFAULT 0"),
+    ("instructors", "canvas_host", "TEXT"),
+    ("instructors", "canvas_school", "TEXT"),
 ]
 
 _engine = None

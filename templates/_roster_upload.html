@@ -7,10 +7,12 @@
     <span class="dropzone-status" data-dropzone-status></span>
   </label>
   <noscript><button class="btn btn-primary" type="submit">Upload</button></noscript>
+  {% if paste_box is not defined or paste_box %}
   <details class="paste-box">
     <summary>Or paste names (and emails) instead</summary>
     <label for="pasted" class="field-help">One student per line: their name, then a comma and their email. You can also copy the whole table from Canvas → People.</label>
     <textarea id="pasted" name="pasted" rows="6" placeholder="Alex Johnson, alex.johnson@school.edu&#10;Sam Lee, sam.lee@school.edu"></textarea>
     <button class="btn btn-secondary btn-small" type="submit">Use these names</button>
   </details>
+  {% endif %}
 </form>

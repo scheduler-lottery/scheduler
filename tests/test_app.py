@@ -9,6 +9,7 @@ import zipfile
 
 import pytest
 
+import canvasdir
 import compose
 import db
 import settings
@@ -1901,7 +1902,7 @@ def test_the_class_list_steps_aside_once_it_is_in(prof):
     sid = prof.create_sheet()
     page = text(prof.get(f"/teach/s/{sid}"))
     assert "Your class list stays private" in page and "Encrypted all the way" in page
-    assert "the site's code is public" in page and "Get the list from Canvas" in page
+    assert "the site's code is public" in page and "Do you use Canvas for this class?" in page
     page = text(follow(prof, prof.upload(sid)))
     assert "Next: See it as a student →" in page
     assert "Replace it with a new file" in page and "Delete this list and start over" in page
@@ -2306,3 +2307,58 @@ def test_the_pointer_glow_is_only_on_the_front_page(prof, browser):
     for page in (raw(prof.get("/teach/")), raw(prof.get(f"/teach/s/{sid}")), raw(browser().get(f"/c/{sid}")),
                  raw(browser().get("/privacy")), raw(browser().get("/teach/login"))):
         assert "data-glow" not in page
+
+
+# ---------------------------------------------------------------------------
+# Adding a class: questions one at a time, the school's own Canvas, and a
+# nudge for students who haven't ranked.
+# ---------------------------------------------------------------------------
+def test_the_class_list_questions_offer_every_way_in(prof):
+    sid = prof.create_sheet()
+    page = text(prof.get(f"/teach/s/{sid}"))
+    for asked in ("Do you use Canvas for this class?", "Which school's Canvas do you use?",
+                  "How would you like to add your students?", "From a spreadsheet",
+                  "Type or paste their names and emails", "Let students sign themselves up"):
+        assert asked in page, asked
+    # Typing them in.
+    page = text(follow(prof, prof.post(f"/teach/s/{sid}/roster", {"pasted": "Ana Able, ana@school.edu\nBo Brown, bo@school.edu"})))
+    assert "2 students" in page and "Do you use Canvas for this class?" not in page
+    # Letting students sign themselves up, on another sheet: straight on to sharing the link.
+    other = prof.create_sheet(title="Seminar")
+    r = prof.post(f"/teach/s/{other}/who", {"allow_unlisted": "1", "back": "share"})
+    assert r.headers["Location"].endswith("#share")
+    assert "That's how this sheet works now" in text(prof.get(f"/teach/s/{other}"))
+
+
+def test_the_school_is_guessed_from_the_email_and_can_be_changed(prof, monkeypatch):
+    directory = {
+        ("domain", "school.edu"): [{"name": "School Pre-College Program", "domain": "app.precollege.school.edu"},
+                                   {"name": "School University", "domain": "canvas.school.edu"}],
+        ("name", "Lake"): [{"name": "Lake College", "domain": "lake.instructure.com"}],
+    }
+    monkeypatch.setattr(canvasdir, "_ask", lambda **p: directory.get(next(iter(p.items())), []))
+    sid = prof.create_sheet()
+    page = raw(prof.get(f"/teach/s/{sid}"))
+    assert "it looks like <strong>School University</strong>" in page
+    assert 'href="https://canvas.school.edu/courses"' in page  # not canvas.instructure.com
+    found = prof.client.get("/teach/canvas/schools?q=Lake").get_json()
+    assert found == {"schools": [{"name": "Lake College", "domain": "lake.instructure.com"}]}
+    headers = {"X-CSRF-Token": prof.csrf()}
+    r = prof.client.post("/teach/canvas/school", json={"domain": "https://lake.instructure.com/courses/5",
+                                                      "name": "Lake College"}, headers=headers)
+    assert r.get_json() == {"ok": True, "domain": "lake.instructure.com", "name": "Lake College"}
+    page = raw(prof.get(f"/teach/s/{sid}"))
+    assert 'href="https://lake.instructure.com/courses"' in page and 'data-go="canvas"' in page  # no need to ask again
+    assert prof.client.post("/teach/canvas/school", json={"domain": "not a host"}, headers=headers).status_code == 400
+
+
+def test_nudge_reminds_only_the_students_who_havent_ranked(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    rankers(browser, sid, [("Sam Lee", [0, 1], [])])
+    page = html(prof.get(f"/teach/s/{sid}"))
+    bcc = re.search(r'data-bcc="([^"]*)" data-subject="Reminder: rank your presentation days', page).group(1)
+    assert sorted(bcc.split(", ")) == ["alex@school.edu", "riya@school.edu"]
+    assert "Nudge the 2 who haven't ranked" in text(page)
+    prof.post(f"/teach/s/{sid}/toggle")  # sign-ups closed: nobody to nudge
+    assert "Nudge the" not in text(prof.get(f"/teach/s/{sid}"))

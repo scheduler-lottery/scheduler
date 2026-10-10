@@ -22,6 +22,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 import app as app_module  # noqa: E402
+import canvasdir  # noqa: E402
 import compose  # noqa: E402
 import db  # noqa: E402
 import settings  # noqa: E402
@@ -88,6 +89,8 @@ def app(request, tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "CRON_SECRET", "cron-secret")
     # No real DNS lookups: every domain looks like it has no mail records.
     monkeypatch.setattr(compose, "lookup", lambda name, kind: [])
+    # No real Canvas directory: no school matches anything.
+    monkeypatch.setattr(canvasdir, "_ask", lambda **params: [])
 
     flask_app = app_module.app
     flask_app.config.update(TESTING=True, MAIL_BACKEND="locmem")

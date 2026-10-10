@@ -211,11 +211,121 @@
     });
   });
 
-  // The Canvas guide: from the course's address, a link straight to its
+  // The class-list questions: one step at a time, with Back. Each answer
+  // opens the next step; the drop box shows on the steps that use it.
+  document.querySelectorAll("[data-quiz]").forEach(function (quiz) {
+    var steps = Array.prototype.slice.call(quiz.querySelectorAll(".quiz-step"));
+    var drop = quiz.querySelector("[data-quiz-drop]");
+    var key = "quiz-step-" + quiz.getAttribute("data-sheet");
+    var trail = [];
+    var current = "start";
+    var show = function (name, focus) {
+      if (!quiz.querySelector('[data-step="' + name + '"]')) name = "start";
+      current = name;
+      steps.forEach(function (step) { step.hidden = step.getAttribute("data-step") !== name; });
+      if (drop) drop.hidden = !(name === "canvas" || name === "file");
+      try { sessionStorage.setItem(key, name); } catch (e) { /* fine */ }
+      var question = quiz.querySelector('[data-step="' + name + '"] .quiz-q');
+      if (focus && question) question.focus({ preventScroll: false });
+    };
+    var go = function (name) { trail.push(current); show(name, true); };
+    quiz.addEventListener("click", function (e) {
+      var to = e.target.closest("[data-go]");
+      if (to) { go(to.getAttribute("data-go")); return; }
+      if (e.target.closest("[data-back]")) show(trail.pop() || "start", true);
+    });
+    var saved = null;
+    try { saved = sessionStorage.getItem(key); } catch (e) { saved = null; }
+    show(saved || "start", false);
+
+    // Which school's Canvas: confirm the guess, search by name, or type the
+    // address. The choice is saved to the instructor's account.
+    var search = quiz.querySelector("[data-school-search]");
+    var results = quiz.querySelector("[data-school-results]");
+    var status = quiz.querySelector("[data-school-status]");
+    if (search && search.hasAttribute("data-start-hidden")) search.hidden = true;
+    var choose = function (domain, name) {
+      if (status) status.textContent = "Saving…";
+      fetch(quiz.getAttribute("data-school-save"), {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": CSRF },
+        body: JSON.stringify({ domain: domain, name: name }),
+      }).then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+        .then(function (answer) {
+          if (!answer.ok) { if (status) status.textContent = answer.data.error || "That didn't work. Try again."; return; }
+          quiz.setAttribute("data-canvas-host", answer.data.domain);
+          var named = quiz.querySelector("[data-school-name]");
+          if (named) named.textContent = answer.data.name;
+          var home = quiz.querySelector("[data-canvas-home]");
+          if (home) home.href = "https://" + answer.data.domain + "/courses";
+          var course = document.getElementById("canvas-course");
+          if (course) course.dispatchEvent(new Event("input"));
+          if (status) status.textContent = "";
+          go("canvas");
+        })
+        .catch(function () { if (status) status.textContent = "Couldn't save that. Check your connection and try again."; });
+    };
+    quiz.addEventListener("click", function (e) {
+      var pick = e.target.closest("[data-school-pick]");
+      if (pick) { choose(pick.getAttribute("data-domain"), pick.getAttribute("data-name")); return; }
+      if (e.target.closest("[data-school-other]") && search) {
+        search.hidden = false;
+        var box = search.querySelector("[data-school-query]");
+        if (box) box.focus();
+      }
+      if (e.target.closest("[data-school-host-use]")) {
+        var typed = quiz.querySelector("[data-school-host]");
+        if (typed && typed.value.trim()) choose(typed.value.trim(), "");
+      }
+    });
+    var query = quiz.querySelector("[data-school-query]");
+    var timer = null;
+    if (query && results) {
+      query.addEventListener("input", function () {
+        clearTimeout(timer);
+        var words = query.value.trim();
+        if (words.length < 2) { results.innerHTML = ""; if (status) status.textContent = ""; return; }
+        timer = setTimeout(function () {
+          if (status) status.textContent = "Searching…";
+          fetch(quiz.getAttribute("data-schools-url") + "?q=" + encodeURIComponent(words), { credentials: "same-origin" })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              results.innerHTML = "";
+              (data.schools || []).forEach(function (school) {
+                var item = document.createElement("li");
+                var button = document.createElement("button");
+                button.type = "button";
+                button.className = "school-result";
+                button.setAttribute("data-school-pick", "");
+                button.setAttribute("data-domain", school.domain);
+                button.setAttribute("data-name", school.name);
+                var nameLine = document.createElement("strong");
+                nameLine.textContent = school.name;
+                var hostLine = document.createElement("span");
+                hostLine.textContent = school.domain;
+                button.appendChild(nameLine);
+                button.appendChild(hostLine);
+                item.appendChild(button);
+                results.appendChild(item);
+              });
+              if (status) {
+                status.textContent = (data.schools || []).length
+                  ? "Pick yours."
+                  : "No school by that name. Try another spelling, or use “My school isn't listed” below.";
+              }
+            })
+            .catch(function () { if (status) status.textContent = "Couldn't search just now. Try again, or type the address below."; });
+        }, 300);
+      });
+    }
+  });
+
+  // The Canvas step: from the course's address, a link straight to its
   // student list (New Analytics), remembered on this computer per sheet.
   var guide = document.querySelector("[data-canvas-guide]");
   var openLink = document.getElementById("canvas-open");
   if (guide && openLink) {
+    var quizBox = guide.closest("[data-quiz]");
     var courseInput = document.getElementById("canvas-course");
     var status = guide.querySelector("[data-canvas-status]");
     var where = document.querySelector("[data-canvas-where]");
@@ -233,10 +343,10 @@
     var applyCourse = function (save) {
       var found = readCourse(courseInput.value);
       if (!found) {
-        var host = store("canvas-host") || "canvas.instructure.com";
+        var host = (quizBox && quizBox.getAttribute("data-canvas-host")) || store("canvas-host") || "canvas.instructure.com";
         openLink.href = "https://" + host + "/courses";
-        openLink.textContent = "Open Canvas";
-        where.textContent = "Open your course there, copy its address into the box above, and this button takes you straight to its student list.";
+        openLink.textContent = "Open my class's student list";
+        where.textContent = "Paste your course's address above first, and this button goes straight to its student list.";
         status.textContent = courseInput.value.trim()
           ? "That doesn't look like a course address. It should have /courses/ and a number in it."
           : "We'll remember it on this computer for this sheet.";
@@ -249,7 +359,7 @@
       var tool = found.tool || learned[found.host] || KNOWN_TOOLS[found.host];
       openLink.href = "https://" + found.host + "/courses/" + found.course
         + (tool ? "/external_tools/" + tool + "?launch_type=course_navigation" : "");
-      openLink.textContent = "Open my class's student list in Canvas";
+      openLink.textContent = "Open my class's student list";
       where.textContent = tool
         ? "It opens New Analytics for your course."
         : "It opens your course. Click New Analytics (or Course Analytics) in the course menu on the left.";

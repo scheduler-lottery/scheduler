@@ -22,7 +22,9 @@ CREATE TABLE IF NOT EXISTS instructors (
     disabled      INTEGER NOT NULL DEFAULT 0,
     timezone      TEXT NOT NULL DEFAULT '',
     created_at    TEXT NOT NULL,
-    last_login_at TEXT
+    last_login_at TEXT,
+    canvas_host   TEXT,   -- their school's Canvas address, once they've said
+    canvas_school TEXT
 );
 
 -- One sign-up sheet per class. Its id is the code in the share link (/c/<id>).

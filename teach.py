@@ -22,6 +22,7 @@ from flask import (
 )
 
 import auth
+import canvasdir
 import compose
 import db
 import settings
@@ -875,6 +876,10 @@ def sheet(sid):
     labels = {d["key"]: d["label"] for d in days}
     order = [d["key"] for d in days]
     counts = sheets.counts(sid)
+    # Before anything below writes: these may save a lookup on their own connection.
+    me = current_instructor()
+    canvas = _canvas_school(me, guess=not counts["roster"])
+    mail_default = compose.service_for(me["email"])
     roster_rows = sheets.get_roster(sid)
     roster_keys = {r["name_key"] for r in roster_rows}
     tests = {r["name_key"] for r in roster_rows if r["is_test"]}
@@ -922,6 +927,20 @@ def sheet(sid):
     can_fill = bool(fill_plan) and (published or not stale)
 
     share_url = url_for("student.signin", sid=sid, _external=True)
+    # "Nudge": a reminder to everyone on the list who hasn't ranked, from the
+    # instructor's own email (their addresses in Bcc).
+    waiting_emails = [r["email"] for r in not_yet if r["email"]]
+    nudge = {
+        "to": me["email"], "bcc": ", ".join(waiting_emails), "count": len(waiting_emails),
+        "subject": f"Reminder: rank your presentation days for {sheet['title']}",
+        "body": (
+            "Hi everyone,\n\n"
+            f"If you haven't yet, please rank the days you could present for “{sheet['title']}”"
+            + (f" by {sheet['rank_by']}" if sheet["rank_by"] else "") + ". It takes about a minute, and ranking "
+            "early or late makes no difference to the day you get:\n\n"
+            f"{share_url}\n\nThanks!\n"
+        ),
+    } if sheet["bidding_open"] and waiting_emails else None
     report = session.get("roster_report")
     if not (report and report.get("sid") == sid):
         report = None
@@ -1018,6 +1037,10 @@ def sheet(sid):
         undo=undo,
         handoff=handoff,
         stuck=stuck,
+        canvas=canvas,
+        nudge=nudge,
+        me=me["email"],
+        mail_default=mail_default,
         list_next=list_next,
         course_look={"url": url_for("teach.set_look", sid=sid), "title": sheet["title"],
                      "theme": sheet["theme"] or settings.DEFAULT_THEME, "font": sheet["font"] or "mixed"},
@@ -1528,7 +1551,7 @@ def set_who(sid):
                 "under Sign-ups — connect each to the right name with “… is really” and Link, or delete it.",
                 "info",
             )
-    return _back(sheet, "class-list")
+    return _back(sheet, request.form.get("back") if request.form.get("back") in ("share",) else "class-list")
 
 
 # ---------------------------------------------------------------------------
@@ -1680,6 +1703,41 @@ def _link_email(sheet, name, token):
         f"{link}\n\n"
         "It signs in as you, so please don't forward it. If it doesn't work, just reply to this email.\n",
     )
+
+
+@bp.route("/canvas/schools")
+@instructor_required
+def canvas_schools():
+    """Schools whose name matches what was typed, with their Canvas
+    addresses, from Instructure's public directory (for the class-list
+    questions)."""
+    return jsonify(schools=canvasdir.search(request.args.get("q", "")))
+
+
+@bp.route("/canvas/school", methods=["POST"])
+@instructor_required
+def canvas_school():
+    """Remember which school's Canvas this instructor uses, so its links go
+    to their school's own Canvas."""
+    data = request.get_json(silent=True) or {}
+    host = canvasdir.clean_host(data.get("domain"))
+    if not host:
+        return jsonify(ok=False, error="That doesn't look like a Canvas address, like canvas.myschool.edu."), 400
+    name = " ".join(str(data.get("name") or "").split())[:120] or host
+    db.run("UPDATE instructors SET canvas_host = :host, canvas_school = :name WHERE id = :id",
+           host=host, name=name, id=current_instructor()["id"])
+    db.commit()
+    return jsonify(ok=True, domain=host, name=name)
+
+
+def _canvas_school(instructor, guess):
+    """{name, domain, saved} for the instructor's school's Canvas: the one
+    they chose, else (with `guess`) the one their email suggests, else None."""
+    if instructor["canvas_host"]:
+        return {"name": instructor["canvas_school"] or instructor["canvas_host"],
+                "domain": instructor["canvas_host"], "saved": True}
+    found = canvasdir.guess(instructor["email"]) if guess else None
+    return {**found, "saved": False} if found else None
 
 
 @bp.route("/s/<sid>/email-links", methods=["GET", "POST"])

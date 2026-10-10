@@ -491,7 +491,7 @@ h3 { margin: 0 0 8px; font-size: 1rem; font-weight: 650; }
 
 .stack { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
 
-input[type="text"], input[type="password"], input[type="number"], input[type="email"],
+input[type="text"], input[type="password"], input[type="number"], input[type="email"], input[type="search"],
 input[type="file"], select, textarea {
   font: inherit;
   padding: 10px 14px;
@@ -501,7 +501,7 @@ input[type="file"], select, textarea {
   color: var(--text);
 }
 input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus,
-input[type="email"]:focus, textarea:focus, select:focus {
+input[type="email"]:focus, input[type="search"]:focus, textarea:focus, select:focus {
   outline: none;
   border-color: var(--accent);
   background: var(--card-bg);
@@ -2486,3 +2486,43 @@ summary.card-heading::marker, summary.card-heading::-webkit-details-marker { fon
    their own font, in italic). */
 ::placeholder { font-family: var(--font-text); font-style: italic; color: var(--muted); opacity: 1; }
 .modal-dialog .privacy-panel { border: 0; padding: 0; margin: 0; background: none; }
+
+/* =============================================================
+   The class-list questions (sheet page): one question at a time,
+   big tappable answers, a Back link, and the drop box under the
+   steps that use it.
+   ============================================================= */
+.quiz { margin: 10px 0 16px; padding: 18px 18px 8px; border-radius: var(--radius-md); background: var(--surface-soft); }
+.quiz-step[hidden], .quiz-drop[hidden], [data-school-search][hidden] { display: none; }
+.quiz-q {
+  margin: 4px 0 14px; font-size: clamp(1.3rem, 2.4vw, 1.55rem); line-height: 1.12;
+  font-weight: calc(var(--w-h2) + var(--display-boost)); letter-spacing: var(--track-h2);
+}
+.quiz-q:focus { outline: none; }
+.quiz-back {
+  margin: 0 0 6px; padding: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: 0.88rem; color: var(--muted);
+}
+.quiz-back:hover { color: var(--accent-strong); }
+.quiz-choices { display: grid; gap: 10px; margin-bottom: 12px; }
+.quiz-choice, .school-result {
+  display: block; width: 100%; padding: 14px 16px; text-align: left; cursor: pointer;
+  border: 1.5px solid var(--border-strong); border-radius: var(--radius-md);
+  background: var(--card-bg); color: var(--text); font: inherit;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.quiz-choice:hover, .school-result:hover { border-color: var(--text); }
+.quiz-choice strong, .school-result strong { display: block; font-size: 1.02rem; }
+.quiz-choice span, .school-result span { display: block; margin-top: 3px; font-size: 0.9rem; color: var(--muted); }
+.quiz-guess, .quiz-note, .quiz-school { margin: 0 0 14px; }
+.school-search { margin: 6px 0 10px; }
+.school-search input[type="search"] { width: 100%; max-width: 460px; }
+.school-results { list-style: none; margin: 10px 0 6px; padding: 0; display: grid; gap: 8px; max-width: 520px; }
+.school-result { padding: 10px 14px; }
+.school-manual { margin-top: 10px; }
+.school-manual > summary, .quiz-help > summary { cursor: pointer; color: var(--accent-strong); font-weight: 600; }
+.quiz-help { margin: 4px 0 12px; }
+.quiz .guide-steps { margin: 0 0 12px; }
+.quiz-drop { margin: 6px 0 10px; }
+.nudge { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 10px 0 14px; }
+.nudge .mail-picker { flex-basis: 100%; margin: 4px 0 0; }

@@ -186,18 +186,150 @@
   {% else %}
   <p class="lead-line">
     {% if sheet.allow_unlisted %}
-      No class list yet. Anyone with the link can sign up by name and a PIN. Add a list so students confirm it's
-      really them with an emailed code, and so you can see who hasn't ranked.
+      No class list yet: anyone with your link can sign up by name and a PIN. A list lets students confirm it's
+      really them with an emailed code, and shows you who hasn't ranked.
     {% else %}
-      <strong>Add your class list next.</strong> Students find their name on it to sign in.
+      <strong>Next, add your students.</strong> A couple of quick questions, and we'll walk you through it.
     {% endif %}
   </p>
-  {% include "_privacy_panel.html" %}
-  <div class="helper-row">
-    <button type="button" class="btn btn-primary" data-popover-target="canvas-guide" aria-haspopup="dialog">Get the list from Canvas</button>
-    <span class="mini-hint">About a minute: one link opens your class's student list, one button downloads it.</span>
+
+  {# The class-list questions: one at a time, with Back (app.js). Without
+     JavaScript every step simply shows, in order. #}
+  <div class="quiz" data-quiz data-sheet="{{ sheet.id }}"
+       data-schools-url="{{ url_for('teach.canvas_schools') }}" data-school-save="{{ url_for('teach.canvas_school') }}"
+       {% if canvas %}data-canvas-host="{{ canvas.domain }}"{% endif %}>
+
+    <section class="quiz-step" data-step="start">
+      <h3 class="quiz-q" tabindex="-1">Do you use Canvas for this class?</h3>
+      <div class="quiz-choices">
+        <button type="button" class="quiz-choice" data-go="{{ 'canvas' if canvas and canvas.saved else 'school' }}">
+          <strong>Yes, my class is in Canvas</strong>
+          <span>We'll walk you through downloading its class list. It takes about a minute.</span>
+        </button>
+        <button type="button" class="quiz-choice" data-go="other">
+          <strong>No, I don't use Canvas</strong>
+          <span>Add students from a spreadsheet, type them in, or let them sign themselves up.</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="quiz-step" data-step="school">
+      <button type="button" class="quiz-back" data-back>← Back</button>
+      <h3 class="quiz-q" tabindex="-1">Which school's Canvas do you use?</h3>
+      {% if canvas %}
+      <p class="quiz-guess">From your email address, it looks like <strong>{{ canvas.name }}</strong> <span class="muted">({{ canvas.domain }})</span>.</p>
+      <div class="quiz-choices">
+        <button type="button" class="quiz-choice" data-school-pick data-domain="{{ canvas.domain }}" data-name="{{ canvas.name }}">
+          <strong>Yes, that's my school</strong>
+        </button>
+        <button type="button" class="quiz-choice" data-school-other>
+          <strong>No, a different school</strong>
+        </button>
+      </div>
+      {% endif %}
+      <div class="school-search" data-school-search{% if canvas %} data-start-hidden{% endif %}>
+        <label class="field-label" for="school-query">Type your school's name</label>
+        <input type="search" id="school-query" data-school-query placeholder="e.g., Northwestern University" autocomplete="off">
+        <ul class="school-results" data-school-results aria-live="polite"></ul>
+        <p class="mini-hint" data-school-status></p>
+        <details class="school-manual">
+          <summary>My school isn't listed</summary>
+          <label class="field-help" for="school-host">Open Canvas and type the start of the address at the top of your browser, like canvas.myschool.edu:</label>
+          <div class="inline-form">
+            <input type="text" id="school-host" data-school-host placeholder="e.g., canvas.myschool.edu" autocomplete="off" spellcheck="false">
+            <button type="button" class="btn btn-secondary btn-small" data-school-host-use>Use this address</button>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <section class="quiz-step" data-step="canvas">
+      <button type="button" class="quiz-back" data-back>← Back</button>
+      <h3 class="quiz-q" tabindex="-1">Get your class list from Canvas</h3>
+      <p class="quiz-school">Your school's Canvas: <strong data-school-name>{{ canvas.name if canvas else 'not chosen yet' }}</strong>
+        <button type="button" class="btn-link" data-go="school">Change</button></p>
+      <ol class="guide-steps">
+        <li><strong>Open your course in Canvas.</strong>
+          <a class="btn btn-secondary btn-small" data-canvas-home href="https://{{ canvas.domain if canvas else 'canvas.instructure.com' }}/courses" target="_blank" rel="noopener">Open Canvas</a>
+          <span class="mini-hint">It opens in a new tab, so this page stays right here.</span></li>
+        <li><strong>Copy your course's address</strong> from the top of the browser, and paste it here:
+          <div class="canvas-open" data-canvas-guide data-sheet="{{ sheet.id }}">
+            <label for="canvas-course" class="visually-hidden">Your Canvas course address</label>
+            <input type="text" id="canvas-course" placeholder="e.g., https://canvas.myschool.edu/courses/123456" autocomplete="off" spellcheck="false">
+            <p class="mini-hint" data-canvas-status>We'll remember it on this computer for this sheet.</p>
+          </div></li>
+        <li><strong>Open the student list and download it.</strong>
+          <a class="btn btn-primary btn-small" id="canvas-open" href="https://{{ canvas.domain if canvas else 'canvas.instructure.com' }}/courses" target="_blank" rel="noopener">Open my class's student list</a>
+          <span class="mini-hint" data-canvas-where>It opens Canvas's New Analytics page for your course.</span>
+          Then click <strong>Download CSV</strong>, the download icon at the top right of the student table.</li>
+        <li><strong>Drag the downloaded file</strong> (usually <code>students.csv</code>, in your Downloads folder) into the box below.</li>
+      </ol>
+      <details class="quiz-help">
+        <summary>Stuck?</summary>
+        <p><strong>No Download CSV button?</strong> In New Analytics, open the <strong>Reports</strong> tab and click <strong>Run Report</strong> next to <strong>Class Roster</strong>. That file works too.</p>
+        <p><strong>No New Analytics in the course menu?</strong> Go to <strong>Settings → Navigation</strong>, drag it into the visible list, and click <strong>Save</strong>.</p>
+        <p><strong>Students missing?</strong> The course has to be published, and Canvas can take a day or two to add new enrollments.</p>
+        <p><strong>Afterwards</strong>, delete the downloaded file: it holds grades and more that this site doesn't keep.</p>
+      </details>
+    </section>
+
+    <section class="quiz-step" data-step="other">
+      <button type="button" class="quiz-back" data-back>← Back</button>
+      <h3 class="quiz-q" tabindex="-1">How would you like to add your students?</h3>
+      <div class="quiz-choices">
+        <button type="button" class="quiz-choice" data-go="file">
+          <strong>From a spreadsheet</strong>
+          <span>An Excel or CSV file with their names, and ideally their emails.</span>
+        </button>
+        <button type="button" class="quiz-choice" data-go="paste">
+          <strong>Type or paste their names and emails</strong>
+          <span>One student per line. Copying a table from anywhere works too.</span>
+        </button>
+        <button type="button" class="quiz-choice" data-go="self">
+          <strong>Let students sign themselves up</strong>
+          <span>No list: anyone with your link adds their own name and picks a PIN.</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="quiz-step" data-step="file">
+      <button type="button" class="quiz-back" data-back>← Back</button>
+      <h3 class="quiz-q" tabindex="-1">Drag your spreadsheet into the box below</h3>
+      <p class="quiz-note">It needs a column of names, ideally headed “Name”, and ideally a column of emails, so students can confirm it's them with an emailed code. Every other column is thrown away the moment it's read.</p>
+    </section>
+
+    <section class="quiz-step" data-step="paste">
+      <button type="button" class="quiz-back" data-back>← Back</button>
+      <h3 class="quiz-q" tabindex="-1">Type or paste your students</h3>
+      <form method="post" action="{{ url_for('teach.upload_roster', sid=sheet.id) }}" class="stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="quiz-pasted" class="field-help">One student per line: their name, a comma, then their email. Without emails, students sign in with a PIN instead of an emailed code.</label>
+        <textarea id="quiz-pasted" name="pasted" rows="8" placeholder="e.g., Alex Johnson, alex.johnson@school.edu&#10;Sam Lee, sam.lee@school.edu"></textarea>
+        <button class="btn btn-primary" type="submit">Add these students</button>
+      </form>
+    </section>
+
+    <section class="quiz-step" data-step="self">
+      <button type="button" class="quiz-back" data-back>← Back</button>
+      <h3 class="quiz-q" tabindex="-1">Let students sign themselves up</h3>
+      <p class="quiz-note">Anyone with your link types their own name and picks a PIN, a number only they know. With no list to check against, look over the names as they come in under Sign-ups. You can add a class list at any time.</p>
+      {% if sheet.allow_unlisted %}
+      <p><strong>That's how this sheet works now.</strong> All that's left is to <a href="#share">share your link</a>.</p>
+      {% else %}
+      <form method="post" action="{{ url_for('teach.set_who', sid=sheet.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="allow_unlisted" value="1">
+        <input type="hidden" name="back" value="share">
+        <button type="submit" class="btn btn-primary">Let students sign themselves up</button>
+      </form>
+      {% endif %}
+    </section>
+
+    <div class="quiz-drop" data-quiz-drop>
+      {% with paste_box=False %}{% include "_roster_upload.html" %}{% endwith %}
+    </div>
   </div>
-  {% include "_roster_upload.html" %}
+  <p class="privacy-line">Private: only names and emails are kept, everything is encrypted, and only you can see the list. <button type="button" class="btn-link" data-popover-target="privacy-details" aria-haspopup="dialog">How it's protected</button></p>
   {% endif %}
 
   <form method="post" action="{{ url_for('teach.set_who', sid=sheet.id) }}" class="who-row">
@@ -380,6 +512,14 @@
       </button>
     </form>
   </div>
+  {% if nudge %}
+  <div class="nudge">
+    <a class="btn btn-primary" data-compose data-to="{{ nudge.to }}" data-bcc="{{ nudge.bcc }}" data-subject="{{ nudge.subject }}" data-body="{{ nudge.body }}"
+       href="mailto:{{ nudge.to }}?bcc={{ nudge.bcc | replace(' ', '') }}&amp;subject={{ nudge.subject | urlencode }}&amp;body={{ nudge.body | urlencode }}">Nudge the {{ nudge.count }} who haven't ranked</a>
+    <span class="mini-hint">Opens a ready-to-send reminder in your own email, with their addresses in Bcc.</span>
+    {% with picker_id="nudge", mail_why="It's picked to match your email address.", mail_account=me %}{% include "_mail_picker.html" %}{% endwith %}
+  </div>
+  {% endif %}
 
   {% if stuck %}
   <div class="callout" id="stuck">
@@ -871,39 +1011,6 @@
 </section>
 
 {# ---------------------------------------------------------------- modals #}
-<div id="canvas-guide" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="canvas-guide-title">
-  <div class="modal-dialog modal-wide">
-    <button type="button" class="modal-close" data-popover-close aria-label="Close">
-      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-    </button>
-    <h2 id="canvas-guide-title" class="modal-title">Get your class list from Canvas</h2>
-    <p class="modal-body">Canvas doesn't let outside sites read your class directly, so you download the list and drop it here. It takes about a minute.</p>
-
-    <ol class="guide-steps">
-      <li><strong>Paste your course's address.</strong> Open your course in Canvas and copy the address from the top of the browser. It looks like <code>https://canvas.myschool.edu/courses/123456</code>.
-        <div class="canvas-open" data-canvas-guide data-sheet="{{ sheet.id }}">
-          <label for="canvas-course" class="visually-hidden">Your Canvas course address</label>
-          <input type="text" id="canvas-course" placeholder="https://canvas.myschool.edu/courses/123456" autocomplete="off" spellcheck="false">
-          <p class="mini-hint" data-canvas-status>We'll remember it on this computer for this sheet.</p>
-        </div>
-      </li>
-      <li><strong>Open your student list.</strong>
-        <a class="btn btn-primary btn-small" id="canvas-open" href="https://canvas.instructure.com/courses" target="_blank" rel="noopener">Open my class's student list in Canvas</a>
-        <span class="mini-hint" data-canvas-where>It opens Canvas's New Analytics page for your course (sometimes called Course Analytics).</span></li>
-      <li><strong>Click Download CSV</strong>, the download icon at the top right of the student table. A file named like <code>students.csv</code> lands in your Downloads folder.</li>
-      <li><strong>Drag that file onto the box</strong> on this page. Done.</li>
-    </ol>
-
-    <div class="guide-tips">
-      <p><strong>No Download CSV button?</strong> In New Analytics, open the <strong>Reports</strong> tab and click <strong>Run Report</strong> next to <strong>Class Roster</strong>. That file works too.</p>
-      <p><strong>No New Analytics in the course menu?</strong> Go to <strong>Settings → Navigation</strong>, drag it into the visible list, and click <strong>Save</strong>.</p>
-      <p><strong>Students missing?</strong> The course has to be published, and Canvas can take a day or two to add brand-new enrollments.</p>
-      <p><strong>Not using Canvas?</strong> An Excel or CSV file with a “Name” column (and ideally “Email”) works, or paste the names in.</p>
-      <p><strong>Afterwards</strong>, delete the downloaded file. It holds grades and more that this site doesn't keep.</p>
-    </div>
-  </div>
-</div>
-
 <div id="privacy-details" class="modal-overlay" role="dialog" aria-modal="true" aria-label="How your class list is protected">
   <div class="modal-dialog modal-wide">
     <button type="button" class="modal-close" data-popover-close aria-label="Close">
@@ -954,4 +1061,4 @@
 
 {% if download_url %}<a href="{{ download_url }}" data-auto-download hidden>Download the backup</a>{% endif %}
 {% endblock %}
-{% block scripts %}{% if handoff %}<script src="{{ url_for('static', filename='compose.js') }}"></script>{% endif %}{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='compose.js') }}"></script>{% endblock %}
