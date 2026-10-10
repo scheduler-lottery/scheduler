@@ -10,7 +10,7 @@
   <div class="admin-header">
     <h1>{{ sheet.title }}</h1>
     {% if waiting_for_list %}
-    <span class="status-pill pending status-tip" tabindex="0" aria-describedby="status-why">Pending<span class="tip-bubble" role="tooltip" id="status-why">Waiting for your class list, so students can't sign in yet. You're on step 2 of 3: add your students. Step 3 is sharing the link.</span></span>
+    <span class="status-pill pending status-tip" tabindex="0" aria-describedby="status-why">Pending<span class="tip-bubble" role="tooltip" id="status-why">Waiting for your class list, so students can't sign in yet. You're on setup step 7 of 8: add your students. The last step is sharing the link.</span></span>
     {% elif sheet.bidding_open %}
     <span class="status-pill open">Sign-ups open</span>
     {% elif published %}

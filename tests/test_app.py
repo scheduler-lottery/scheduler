@@ -2583,7 +2583,7 @@ def test_a_sheet_waiting_for_its_list_says_pending_and_why(prof):
     sid = prof.create_sheet(allow_unlisted=False)
     page = html(prof.get("/teach/"))
     assert ">Pending<" in page and "Waiting for class list" not in page
-    assert "You're on step 2 of 3: add your students" in page
+    assert "You're on setup step 7 of 8: add your students" in page  # as the setup's progress bar counts
     assert f'aria-describedby="status-{sid}"' in page and f'id="status-{sid}"' in page
     prof.upload(sid)
     page = html(prof.get("/teach/"))

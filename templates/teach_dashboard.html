@@ -24,7 +24,7 @@
         </span>
         {# One short word; hovering (or focusing the row) says why, and what's next. #}
         {% if s.bidding_open and not s.roster_count and not s.allow_unlisted %}
-        <span class="status-pill pending status-tip">Pending<span class="tip-bubble" role="tooltip" id="status-{{ s.id }}">Waiting for your class list, so students can't sign in yet. You're on step 2 of 3: add your students. Step 3 is sharing the link.</span></span>
+        <span class="status-pill pending status-tip">Pending<span class="tip-bubble" role="tooltip" id="status-{{ s.id }}">Waiting for your class list, so students can't sign in yet. You're on setup step 7 of 8: add your students. The last step is sharing the link.</span></span>
         {% elif s.bidding_open %}
         <span class="status-pill open status-tip">Open<span class="tip-bubble" role="tooltip" id="status-{{ s.id }}">Students can rank their days now{% if s.roster_count %}: {{ s.listed_count }} of {{ s.roster_count }} have{% endif %}. Once everyone has, close sign-ups and make the schedule.</span></span>
         {% else %}
