@@ -55,8 +55,9 @@
     <p class="lead-line">A couple of quick questions, and we'll walk you through it.</p>
     {% include "_class_quiz.html" %}
     <p class="privacy-line">Private: only names and emails are kept, everything is encrypted, and only you can see the list. <button type="button" class="btn-link" data-popover-target="privacy-details" aria-haspopup="dialog">How it's protected</button></p>
-    <div class="setup-actions">
-      <a class="btn btn-secondary" href="{{ about_url }}"><span aria-hidden="true">←</span> Back</a>
+    {# Shown only on the first question (app.js): after that, the question's own Back is the one to use. #}
+    <div class="setup-actions" data-quiz-leave>
+      <a class="btn btn-secondary" href="{{ about_url }}"><span aria-hidden="true">←</span> Back to About the class</a>
     </div>
     <p class="mini-hint setup-skip"><a href="{{ url_for('teach.sheet', sid=sheet.id) }}">Skip for now</a>: you can add your students later, from the class page. Until then, nobody can sign in.</p>
     {% endif %}

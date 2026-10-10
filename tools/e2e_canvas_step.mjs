@@ -2,8 +2,8 @@
 // Canvas step offers in each browser, and the file upload. Against this site
 // running locally and told a store page for the helper:
 //
-//     CANVAS_HELPER_IDS=lgfmbiibmekimpipoeodjmkeimdffnmm CANVAS_HELPER_STORE_URL=https://chromewebstore.google.com/ \
-//         OWNER_EMAIL=owner@school.edu .venv/bin/python app.py
+//     CANVAS_DEV_HOST=127.0.0.1:5077 CANVAS_HELPER_IDS=lgfmbiibmekimpipoeodjmkeimdffnmm \
+//         CANVAS_HELPER_STORE_URL=https://chromewebstore.google.com/ OWNER_EMAIL=owner@school.edu .venv/bin/python app.py
 //     node tools/e2e_canvas_step.mjs
 //
 // Chrome and Edge: "Add Scheduler Helper", with their own steps, and the file
@@ -141,7 +141,7 @@ try {
     await as(agent);
     check(!(await shown("[data-helper-add]")) && await evaluate(me, `document.querySelector("[data-canvas-download]").open`)
       && (await visibleText()).includes("Upload Canvas's student file"), `${name}: no helper to add yet, so the file, first`);
-    check(await shown("[data-quiz-drop]"), `${name}: and the box for it`);
+    check(await shown("[data-canvas-download] form[data-dropzone]"), `${name}: and the box for it, in the last step`);
     await shot(`${name.toLowerCase()}-upload-first.png`);
   }
 
@@ -149,12 +149,15 @@ try {
   await evaluate(me, `(() => { window.__opened = []; window.open = (u, n, f) => { const w = { closed: false, focus() {}, close() { w.closed = true; } };
     w.location = { set href(x) { window.__opened.push(x); } }; return w; }; })()`);
   await evaluate(me, `document.querySelector("[data-canvas-beside]").click()`);
-  check(await evaluate(me, `document.documentElement.classList.contains("canvas-beside") && window.__opened[0].endsWith("/courses")`),
-    "Open Canvas beside this page: Canvas on the right, the steps on the left");
+  check(await evaluate(me, `document.documentElement.classList.contains("canvas-beside") && window.__opened[0] === "http://127.0.0.1:5077/"`),
+    "Open Canvas beside this page: Canvas (its Dashboard) on the right, the steps on the left");
+  await evaluate(me, `document.querySelector("[data-canvas-beside]").click()`);
+  check(await evaluate(me, `window.__opened.length === 1 && document.querySelector("[data-canvas-beside]").textContent === "Show Canvas again"`),
+    "pressed again, it brings Canvas forward rather than starting it over");
   const csv = join(profile, "students.csv");
   writeFileSync(csv, "Student Name,Student ID,Student SIS ID,Email,Section Name\nAlex Kim,1,111,akim@u.school.edu,Sec 1\nSam Lee,2,112,slee@u.school.edu,Sec 1\n");
   const { root } = await send("DOM.getDocument", {}, me);
-  const { nodeId } = await send("DOM.querySelector", { nodeId: root.nodeId, selector: "[data-quiz-drop] input[type=file]" }, me);
+  const { nodeId } = await send("DOM.querySelector", { nodeId: root.nodeId, selector: "[data-canvas-download] input[type=file]" }, me);
   await send("DOM.setFileInputFiles", { nodeId, files: [csv] }, me); // (as choosing it does: the page sends it at once)
   check(await until(me, `document.readyState === "complete" && /Added 2 students/.test(document.body.innerText)`, 10000),
     "the downloaded file goes in: 2 students");

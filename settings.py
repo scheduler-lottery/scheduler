@@ -7,6 +7,7 @@ Nothing secret belongs in this file — it's going on GitHub.
 """
 
 import os
+import re
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -97,6 +98,15 @@ SOURCE_URL = _env("SOURCE_URL", "https://github.com/scheduler-lottery/scheduler"
 # store page that installs it. Until they're set, the class-list step
 # doesn't offer it.
 CANVAS_HELPER_IDS = [i.strip() for i in _env("CANVAS_HELPER_IDS").split(",") if i.strip()]
+# The Canvas sites the helper can read (its manifest's host_permissions; a
+# test keeps the two the same). Professors at other schools aren't offered it.
+CANVAS_HELPER_HOSTS = ["canvas.northwestern.edu"]
+# Trying it all locally: tools/fake_canvas.py's address (e.g. 127.0.0.1:5077)
+# as every instructor's school's Canvas, and one the helper reads. Ignored on
+# Vercel.
+CANVAS_DEV_HOST = "" if IS_VERCEL else _env("CANVAS_DEV_HOST")
+if not re.fullmatch(r"(127\.0\.0\.1|localhost):\d{2,5}", CANVAS_DEV_HOST):
+    CANVAS_DEV_HOST = ""
 CANVAS_HELPER_STORE_URL = _env("CANVAS_HELPER_STORE_URL")
 # Safari's Scheduler Helper, once it's on the Mac App Store: its page there
 # (and its identifier, "<bundle id> (<team id>)", in CANVAS_HELPER_IDS).

@@ -238,6 +238,7 @@ def template_globals():
         "preload_fonts": _preload_fonts(),
         "codes_by_workos": signin.email_mode() == "workos",
         "helper_ids": ",".join(settings.CANVAS_HELPER_IDS),
+        "helper_hosts": ",".join(settings.CANVAS_HELPER_HOSTS + ([settings.CANVAS_DEV_HOST] if settings.CANVAS_DEV_HOST else [])),
         "canvas_connect": canvas_oauth.ready(),
         "canvas_connect_host": settings.CANVAS_OAUTH_HOST,
         "helper_store_url": settings.CANVAS_HELPER_STORE_URL,

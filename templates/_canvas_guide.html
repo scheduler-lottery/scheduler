@@ -1,18 +1,20 @@
 {# The Canvas guide: the class list from Canvas, the simple way (app.js):
    - Scheduler Helper (extension/), once added to the browser: one click;
-     until then, the button to add it (Chrome and Edge; Safari once
-     Safari's is published);
+     until then, the button to add it (Chrome and Edge, and Safari once
+     Safari's is published), for schools whose Canvas it reads, on a
+     computer;
    - or Canvas's own student file, downloaded with pictures to follow and
-     dropped in the box;
+     chosen in the box at the end;
    - or, once the school has issued a key, Connect Canvas.
-   On the class-list questions, and, once a sheet has a list, under
-   "Update from Canvas" (guide_download false: the box is the page's own). #}
+   On the class-list questions, and, once a sheet has a list, under "Update
+   from Canvas" (data-has-list: a list that comes is compared, not added). #}
 {% set canvas_host = canvas.domain if canvas else 'canvas.instructure.com' %}
 {% set connect_here = canvas_connect and (not canvas or canvas.domain == canvas_connect_host) %}
-<div class="canvas-guide" data-canvas-guide data-sheet="{{ sheet.id }}" data-host="{{ canvas_host }}"{% if canvas and canvas.saved %} data-host-saved{% endif %}
-     data-list-url="{{ url_for('teach.canvas_list_here', sid=sheet.id) }}"{% if setup %} data-setup="1"{% endif %}
+<div class="canvas-guide" data-canvas-guide data-sheet="{{ sheet.id }}" data-sheet-title="{{ sheet.title }}" data-host="{{ canvas_host }}"
+     data-list-url="{{ url_for('teach.canvas_list_here', sid=sheet.id) }}"{% if setup %} data-setup="1"{% endif %}{% if counts and counts.roster %} data-has-list{% endif %}
      data-canvas-course-id="{{ sheet.canvas_course_id or '' }}"
-     data-helper-ids="{{ helper_ids }}" data-helper-store="{{ helper_store_url }}" data-helper-safari="{{ helper_safari_url }}">
+     data-helper-ids="{{ helper_ids }}" data-helper-hosts="{{ helper_hosts }}"
+     data-helper-store="{{ helper_store_url }}" data-helper-safari="{{ helper_safari_url }}">
   {% if connect_here %}
   <section class="canvas-easy canvas-connect" data-connect aria-labelledby="canvas-connect-title-{{ sheet.id }}">
     <h4 class="canvas-easy-title" id="canvas-connect-title-{{ sheet.id }}">Get your class list in one step</h4>
@@ -20,34 +22,35 @@
     <p class="mini-hint">Canvas opens. Sign in if it asks, then press <strong>Authorize</strong>. Your students' names and email addresses come right back here.</p>
   </section>
   {% elif helper_ids %}
-  <section class="canvas-easy canvas-helper" data-helper hidden aria-labelledby="canvas-helper-title-{{ sheet.id }}">
-    <h4 class="canvas-easy-title" id="canvas-helper-title-{{ sheet.id }}">Get your class list in one click</h4>
+  <section class="canvas-easy canvas-helper" data-helper hidden>
     <div data-helper-ready hidden>
+      <h4 class="visually-hidden">Scheduler Helper</h4>
       <button type="button" class="btn btn-primary btn-large" data-helper-go>Get my class list from Canvas</button>
-      <p class="mini-hint">Your students' names and email addresses come right here, to check before anything is added. If Canvas wants you to sign in, a Canvas tab opens for that, and this page carries on after.</p>
+      <p class="mini-hint">Scheduler Helper reads your list of courses, then the names and email addresses of the students in the one you pick. You'll check them before anything is added. If Canvas wants you to sign in, a Canvas tab opens for that.</p>
     </div>
     <div data-helper-install hidden>
-      <p class="canvas-easy-lead">First, add the free <strong>Scheduler Helper</strong> to <span data-browser-name>Chrome</span>. You only do this once.</p>
+      <h4 class="canvas-easy-title">First, add Scheduler Helper to <span data-browser-name>Chrome</span></h4>
+      <p class="canvas-easy-lead">It's free, and you only do this once. After that, your class list comes over in one click.</p>
       <a class="btn btn-primary btn-large" href="#" target="_blank" rel="noopener" data-helper-add>Add Scheduler Helper to <span data-browser-name>Chrome</span></a>
       <ol class="helper-install-steps" data-steps-for="chrome">
-        <li>In the tab that opens, click <strong>Add to Chrome</strong>.</li>
-        <li>Click <strong>Add extension</strong>.</li>
-        <li>Come back to this tab. Your class list is next.</li>
+        <li>In the tab that opens (Chrome's web store), click <strong>Add to Chrome</strong>.</li>
+        <li>Chrome says the helper can “read and change your data” on your school's Canvas. It says that about any helper that reads a website; this one only reads. Click <strong>Add extension</strong>.</li>
+        <li>Close the web store tab. This page carries on by itself.</li>
       </ol>
       <ol class="helper-install-steps" data-steps-for="edge" hidden>
         <li>In the tab that opens, click <strong>Allow extensions from other stores</strong> at the top, then <strong>Allow</strong>.</li>
-        <li>Click <strong>Get</strong>, then <strong>Add extension</strong>.</li>
-        <li>Come back to this tab. Your class list is next.</li>
+        <li>Click <strong>Get</strong>. Edge says the helper can “read and change your data” on your school's Canvas. It says that about any helper that reads a website; this one only reads. Click <strong>Add extension</strong>.</li>
+        <li>Close that tab. This page carries on by itself.</li>
       </ol>
       <ol class="helper-install-steps" data-steps-for="safari" hidden>
         <li>In the App Store, click <strong>Get</strong>, then <strong>Install</strong>, then <strong>Open</strong>.</li>
         <li>Click the button that opens Safari's settings, and tick <strong>Scheduler Helper</strong>.</li>
         <li>On the Scheduler Helper page that opens, click <strong>Allow</strong>. Then come back to this tab and reload it.</li>
       </ol>
-      <p class="mini-hint">It reads only your students' names and email addresses, and only when you click here. <a href="{{ url_for('helper') }}" target="_blank" rel="noopener">More about it</a></p>
+      <p class="mini-hint">It reads only your list of courses and that course's names and email addresses, only when you press the button on this page, and it never sees your password. <a href="{{ url_for('helper') }}" target="_blank" rel="noopener">What it does, and how to remove it</a></p>
     </div>
-    <p class="helper-said" data-helper-said role="status" hidden></p>
-    <div class="canvas-copy-courses" data-helper-courses hidden></div>
+    <p class="helper-said" data-helper-said role="status"></p>
+    <div class="canvas-copy-courses" data-helper-courses role="group" aria-labelledby="helper-courses-q-{{ sheet.id }}" hidden></div>
   </section>
   {% endif %}
 
@@ -56,13 +59,14 @@
 
   <details class="canvas-by-hand canvas-upload" data-canvas-download>
     <summary><span data-upload-title="Upload Canvas's student file">Or upload Canvas's student file instead</span></summary>
+    <p class="mini-hint canvas-phone-note" data-phone-only hidden>This is easiest on a computer.</p>
     <div class="canvas-guide-top">
       <button type="button" class="btn btn-secondary" data-canvas-beside data-canvas-went="signin">Open Canvas beside this page</button>
       <button type="button" class="btn btn-secondary btn-small canvas-guide-done" data-canvas-close hidden>Done with Canvas</button>
     </div>
     <ol class="canvas-steps" data-canvas-steps>
     <li class="canvas-step" data-canvas-step="signin">
-      <p><strong>Sign in, then click your course.</strong> If Canvas asks, sign in as usual. On your Dashboard, click this class's card.</p>
+      <p><strong>Sign in, then click your course.</strong> If Canvas asks, sign in as usual. Then, on your Dashboard, click this class's card.</p>
       <svg class="canvas-pic" viewBox="0 0 360 132" role="img" aria-label="Canvas's Dashboard: the card for your course, to click">
         <rect class="pic-frame" x="0.5" y="0.5" width="359" height="131" rx="10"/>
         <rect class="pic-nav" x="0.5" y="0.5" width="38" height="131" rx="10"/>
@@ -92,7 +96,7 @@
       </svg>
     </li>
     <li class="canvas-step" data-canvas-step="list">
-      <p><strong>Click Students, then the download button</strong> (the arrow pointing down, next to Chart Options). A file downloads.</p>
+      <p><strong>Click Students, then the download button</strong> (the arrow pointing down, next to Chart Options). Canvas saves a file in your Downloads folder.<span data-safari-only hidden> (Safari opens it into a folder there.)</span></p>
       <svg class="canvas-pic" viewBox="0 0 360 120" role="img" aria-label="Course Analytics: first the Students tab, then the download button next to Chart Options">
         <rect class="pic-frame" x="0.5" y="0.5" width="359" height="119" rx="10"/>
         <text class="pic-heading" x="14" y="27">Course Analytics</text>
@@ -109,14 +113,12 @@
       </svg>
     </li>
     <li class="canvas-step" data-canvas-step="drop">
-      {% if guide_download is not defined or guide_download %}
-      <p><strong>Drag that file into the box below</strong>, or click the box and choose it from your Downloads folder.</p>
-      {% else %}
-      <p><strong>Drag that file into the box under “Replace it with a new file”</strong>, below. You'll see what changes before anything is replaced.</p>
-      {% endif %}
+      <p><strong>Click the box below and choose that file</strong> from your Downloads folder.<span data-safari-only hidden> Open the folder Canvas made there, and choose the file with “student” in its name.</span></p>
+      {% with drop_id='canvas-file-' ~ sheet.id, from_canvas=True, paste_box=False %}{% include "_roster_upload.html" %}{% endwith %}
     </li>
     </ol>
-    <p class="mini-hint">No download button? Click <strong>Reports</strong> instead, then <strong>Run Report</strong> next to <strong>Class Roster</strong>. Afterwards, delete the downloaded file: it holds more than this site keeps.</p>
+    <p class="mini-hint">No download button? Click <strong>Reports</strong> instead, then <strong>Run Report</strong> next to <strong>Class Roster</strong>, and choose that file in the last step.</p>
+    <p class="mini-hint">Canvas's file also holds grades and activity. Scheduler reads only the names and email addresses and throws the rest away as it reads. Once your students show up here, you can delete the file.</p>
   </details>
-  <p class="canvas-welcome" data-canvas-welcome role="status" hidden></p>
+  <p class="canvas-welcome" data-canvas-welcome role="status"></p>
 </div>

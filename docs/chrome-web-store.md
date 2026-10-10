@@ -107,7 +107,7 @@ extensions from other stores" click, and the page says so):
 
 - The class-list step offers **Add Scheduler Helper to Chrome**.
 - Once the helper is added, the step offers **Get my class list from Canvas**.
-- The bookmark button stays as a folded fallback.
+- Uploading Canvas's student file stays as a folded fallback.
 
 ## Updates
 

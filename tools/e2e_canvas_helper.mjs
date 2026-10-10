@@ -4,8 +4,8 @@
 // site, the site told the dev helper's id, then build the helper and run:
 //
 //     .venv/bin/python tools/fake_canvas.py
-//     CANVAS_HELPER_IDS=lgfmbiibmekimpipoeodjmkeimdffnmm CANVAS_HELPER_STORE_URL=https://chromewebstore.google.com/ \
-//         OWNER_EMAIL=owner@school.edu .venv/bin/python app.py
+//     CANVAS_DEV_HOST=127.0.0.1:5077 CANVAS_HELPER_IDS=lgfmbiibmekimpipoeodjmkeimdffnmm \
+//         CANVAS_HELPER_STORE_URL=https://chromewebstore.google.com/ OWNER_EMAIL=owner@school.edu .venv/bin/python app.py
 //     .venv/bin/python tools/build_extension.py dev
 //     node tools/e2e_canvas_helper.mjs
 //
@@ -97,7 +97,8 @@ async function shot(session, name, selector) {
   await evaluate(session, `(() => {
     const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let n = walk.nextNode(); n; n = walk.nextNode()) {
-      n.nodeValue = n.nodeValue.replace("127.0.0.1:5077", "canvas.northwestern.edu").replace("not chosen yet", "Northwestern University");
+      n.nodeValue = n.nodeValue.replace("127.0.0.1:5077", "canvas.northwestern.edu").replace("not chosen yet", "Northwestern University")
+        .replace("Stand-in Canvas", "Northwestern University");
     }
     document.querySelector(${JSON.stringify(selector)}).scrollIntoView({ block: "center" });
   })()`);
@@ -136,10 +137,9 @@ try {
 
   // The class-list step, on Canvas (this school's Canvas is the stand-in).
   await go(me.session, `${SITE}/teach/s/${sid}/setup?step=students`);
-  await evaluate(me.session, `sessionStorage.setItem("quiz-step-${sid}", "canvas"); localStorage.setItem("canvas-host", "127.0.0.1:5077")`);
+  await evaluate(me.session, `sessionStorage.setItem("quiz-step-${sid}", "canvas")`);
   await go(me.session, `${SITE}/teach/s/${sid}/setup?step=students&again=1`);
   await until(me.session, `!!document.querySelector("[data-quiz]") && !!document.querySelector("[data-helper-go]")`);
-  await evaluate(me.session, `document.querySelector("[data-quiz]").removeAttribute("data-canvas-host")`);
   check(await until(me.session, `document.querySelector("[data-helper-go]").offsetParent !== null`),
     "with the helper installed, the step offers one button: Get my class list from Canvas");
   check(await evaluate(me.session, `!document.querySelector("[data-canvas-download]").open && document.querySelectorAll(".canvas-guide details").length === 1`),

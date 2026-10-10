@@ -2,7 +2,7 @@
    JavaScript every step simply shows, in order. Used on the class page and
    on the setup page (where `setup` is set: each form then says so, and
    comes back to the setup). #}
-<div class="quiz" data-quiz data-sheet="{{ sheet.id }}"
+<div class="quiz" data-quiz data-canvas-panel data-sheet="{{ sheet.id }}"
      data-schools-url="{{ url_for('teach.canvas_schools') }}" data-school-save="{{ url_for('teach.canvas_school') }}"
      {% if canvas %}data-canvas-host="{{ canvas.domain }}"{% endif %}>
 
@@ -59,11 +59,12 @@
     {% include "_canvas_guide.html" %}
     <details class="quiz-help">
       <summary>Stuck?</summary>
-      <p><strong>Not signed in to Canvas?</strong> When Canvas asks, sign in as usual, in the tab that opens. This page carries on by itself.</p>
-      <p><strong>Your course isn't in the list?</strong> Only courses where you're a teacher or TA show. Check you're signed in to Canvas with your own account.</p>
+      <p data-for="helper"><strong>Not signed in to Canvas?</strong> When Canvas asks, sign in as usual, in the tab that opens. This page carries on by itself.</p>
+      <p data-for="helper"><strong>Your course isn't in the list?</strong> Only courses where you're a teacher or TA show. Check you're signed in to Canvas as yourself.</p>
+      <p><strong>Can't find Canvas's file?</strong> Click the box in the last step, then <strong>Downloads</strong> on the left of the window that opens. If Canvas's download became a folder (Safari does that), open it and choose the file with “student” in its name.</p>
+      <p><strong>No Course Analytics in the course menu?</strong> In Canvas, open the course's <strong>Settings</strong>, then <strong>Navigation</strong>. In the lower list, click the <strong>⋮</strong> next to Course Analytics, choose <strong>Enable</strong>, then click <strong>Save</strong> at the bottom.</p>
       <p><strong>No email addresses came over?</strong> Then students sign in with a PIN instead of an emailed code, which works fine.</p>
       <p><strong>Students missing?</strong> Canvas can take a day or two to list new enrollments, and an unpublished course may show none.</p>
-      <p><strong>No Course Analytics in the course menu?</strong> In Canvas, open the course's <strong>Settings</strong>, then <strong>Navigation</strong>, drag Course Analytics up into the list, and click <strong>Save</strong>.</p>
       <p><strong>None of this working?</strong> <button type="button" class="btn-link" data-go="paste">Type or paste your students</button> instead.</p>
     </details>
   </section>
@@ -89,7 +90,7 @@
 
   <section class="quiz-step" data-step="file">
     <button type="button" class="quiz-back" data-back>← Back</button>
-    <h3 class="quiz-q" tabindex="-1">Drag your spreadsheet into the box below</h3>
+    <h3 class="quiz-q" tabindex="-1">Choose your spreadsheet in the box below</h3>
     <p class="quiz-note">It needs a column of names, ideally headed “Name”, and ideally a column of emails, so students can confirm it's them with an emailed code. Every other column is thrown away the moment it's read.</p>
   </section>
 

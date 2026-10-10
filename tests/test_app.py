@@ -1915,7 +1915,7 @@ def test_the_class_list_steps_aside_once_it_is_in(prof):
     assert "Replace it with a new file" in page and "Delete this list and start over" in page
     assert "Drag your class list here" not in page  # the big drop box is gone
     page = text(follow(prof, prof.post(f"/teach/s/{sid}/roster/clear")))
-    assert "Drag your class list here" in page  # start over
+    assert "Click here to choose your class list" in page  # start over
 
 
 def test_new_codes_are_long_and_never_reuse_a_deleted_sheets(prof, monkeypatch):
@@ -2665,7 +2665,7 @@ def test_a_new_sheet_goes_on_to_its_students_and_its_link_with_a_progress_bar(pr
     page = raw(prof.get(f"/teach/s/{sid}/setup"))
     assert "Step 7 of 8" in text(page) and "Add your students" in page
     assert "Do you use Canvas for this class?" in html_lib.unescape(page)
-    assert page.count('name="setup" value="1"') == 3  # the drop box, pasting, and "sign themselves up"
+    assert page.count('name="setup" value="1"') == 4  # the drop box, Canvas's file, pasting, "sign themselves up"
     assert browser().sign_in_instructor("other@school.edu").get(f"/teach/s/{sid}/setup").status_code == 404
 
     # The class list, added from the setup, comes back to the setup and says what it read.
@@ -2735,7 +2735,7 @@ def test_setup_parts_link_back_and_the_sheet_is_a_draft_until_set_up(prof):
     assert 'class="draft-badge">Draft' in page and "Seminar" in page
     assert f'href="/teach/s/{sid}/edit?setup=1">About the class</a>' in page  # back into the first part
     assert f'href="/teach/s/{sid}/setup?step=share">Sharing the link</a>' in page
-    assert f'href="/teach/s/{sid}/edit?setup=1"><span aria-hidden="true">←</span> Back</a>' in page
+    assert f'href="/teach/s/{sid}/edit?setup=1"><span aria-hidden="true">←</span> Back to About the class</a>' in page
     # The first part again, on one page, then back to the setup.
     page = text(prof.get(f"/teach/s/{sid}/edit?setup=1"))
     assert "Steps 1 to 6 of 8" in page and "Save and continue" in page and "Back without saving" in page
@@ -3147,6 +3147,31 @@ def test_connect_canvas_takes_no_for_an_answer_and_nothing_forged(prof, monkeypa
     prof.post("/teach/logout")
     prof.sign_in_instructor("other@school.edu")
     assert prof.get(f"/teach/s/{other}/canvas/connect").status_code == 404
+
+
+def test_the_helper_is_offered_only_for_the_canvas_it_reads():
+    with open("extension/manifest.json", encoding="utf-8") as handle:
+        manifest = json.load(handle)
+    hosts = [re.match(r"https://([^/]+)/\*$", h).group(1) for h in manifest["host_permissions"]]
+    assert hosts == settings.CANVAS_HELPER_HOSTS  # the page offers it to exactly these schools
+
+
+def test_a_file_with_no_names_or_emails_gets_a_look_first(prof):
+    sid = prof.create_sheet(allow_unlisted=False)
+    grades = "Assignment Name,Points Possible,Average\nEssay 1,10,8.5\nReading Response 2,5,4.1\nMidterm Paper,20,17\n"
+    r = prof.upload(sid, grades, filename="course_grade.csv")
+    assert "/roster/review/" in r.headers["Location"]  # though the sheet has no list yet
+    assert "may not be your class list" in text(prof.get(r.headers["Location"]))
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 0
+
+
+def test_no_message_points_at_a_guide_that_is_gone():
+    import inspect
+
+    import roster
+
+    assert "Where do I find" not in inspect.getsource(roster)
+    assert "Or paste names" not in roster.PASTE_INSTEAD
 
 
 def test_canvas_names_written_last_first_are_turned_round_not_cut(prof):

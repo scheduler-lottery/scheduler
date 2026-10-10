@@ -54,7 +54,7 @@ SAVE_AS_CSV = (
     "In Excel: File → Save As → choose “CSV UTF-8 (Comma delimited)”, then drop that file here. "
     "In Google Sheets: File → Download → “Comma-separated values”."
 )
-PASTE_INSTEAD = "Or copy the names (and emails) and paste them into “Or paste names” below."
+PASTE_INSTEAD = "Or type or paste the names and emails instead, one student per line."
 SECTION_HEADERS = ("section", "section name", "course", "course name", "course section", "class", "course title")
 NO_NAME_COLUMN = (
     "We couldn't find a column of names. The first row should have headings, with one called "
@@ -315,8 +315,8 @@ def _not_a_list(data):
             return "That's a Word document, not a spreadsheet. " + PASTE_INSTEAD
         return f"That's an older Excel file (.xls), which we can't read. {SAVE_AS_CSV} {PASTE_INSTEAD}"
     if data.startswith(b"%PDF"):
-        return ("That's a PDF, not a class list. In Canvas, go to New Analytics → Reports → Class Roster and "
-                "drop the file it downloads (the sheet's page has a “Where do I find this in Canvas?” guide). "
+        return ("That's a PDF, not a class list. In Canvas, open Course Analytics, click Students, then the download "
+                "button (the arrow pointing down), and choose the file it downloads. "
                 + PASTE_INSTEAD)
     if (data.startswith(b"\x89PNG") or data.startswith(b"\xff\xd8\xff") or data.startswith(b"GIF8")
             or data[4:12] in (b"ftypheic", b"ftypmif1", b"ftypheix") or (data[:4] == b"RIFF" and data[8:12] == b"WEBP")):
@@ -791,7 +791,8 @@ def describe(result, source=""):
         tips.append(
             "No email addresses were found. Students will sign in by typing their name and "
             "choosing a PIN — but whoever types a name first gets it. To have students confirm "
-            "by email instead, use Canvas's Class Roster report (see “Where do I find this in Canvas?”)."
+            "by email instead, get the list from Canvas (Get my class list from Canvas, or Canvas's student file), "
+            "which has their emails."
         )
     elif result.with_email < n:
         missing = n - result.with_email

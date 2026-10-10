@@ -3044,12 +3044,9 @@ details.guide:not([open]) { padding-bottom: 20px; }
 .canvas-more textarea { width: 100%; font-size: 0.9rem; }
 .canvas-step code { font-size: 0.85em; }
 @media (min-width: 900px) {
-  /* The box for the file stays in view at the bottom of the panel. */
-  .canvas-beside [data-quiz-drop] {
-    position: sticky; bottom: -18px; z-index: 1; margin: 12px -18px -18px; padding: 12px 18px 18px;
-    background: var(--card-bg); border-top: 1px solid var(--border);
-  }
-  .canvas-beside [data-quiz] {
+  /* With Canvas open beside the page, the steps (the class-list questions,
+     or "Update from Canvas") sit in a panel on the left, clear of it. */
+  .canvas-beside .is-beside[data-canvas-panel] {
     position: fixed; z-index: 66; top: 76px; left: 16px; bottom: 16px; width: min(38vw, 520px);
     margin: 0; padding: 18px; overflow-y: auto; overscroll-behavior: contain;
     border: 1px solid var(--border); border-radius: 16px; background: var(--card-bg); box-shadow: var(--shadow-lg);
@@ -3117,3 +3114,22 @@ details.guide:not([open]) { padding-bottom: 20px; }
 .canvas-upload.is-first > summary::-webkit-details-marker { display: none; }
 .canvas-upload .canvas-guide-top { margin: 0 0 10px; }
 .helper-install-steps[hidden] { display: none; }
+
+/* The Canvas step, after review: status lines that are always there (so
+   screen readers hear them), a busy button, and the list's other way. */
+.helper-said:empty, .canvas-welcome:empty { margin: 0; padding: 0; border: 0; }
+[data-helper-go][aria-disabled] { opacity: 0.55; cursor: progress; }
+.helper-courses-q { margin: 0; font-weight: 650; }
+.helper-courses-q:focus { outline: none; }
+.arrived-other { display: inline-block; margin: 10px 0 0; }
+.canvas-arrived-here[hidden], .canvas-upload[hidden], .quiz-help[hidden] { display: none; }
+[data-safari-only][hidden], [data-phone-only][hidden], [data-quiz-leave][hidden], .quiz-help p[hidden] { display: none; }
+.canvas-step [data-dropzone] { margin-top: 8px; }
+.canvas-phone-note { margin: 0 0 10px; }
+@media (max-width: 560px) {
+  /* Phones: less frame, more room for the steps and their pictures. */
+  .quiz { padding: 12px; }
+  .canvas-easy, .canvas-upload.is-first, .canvas-arrived-here { padding: 12px; }
+  .canvas-step { padding-left: 0; padding-top: 34px; }
+  .canvas-pic { max-width: none; }
+}

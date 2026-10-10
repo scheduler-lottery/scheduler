@@ -1,11 +1,21 @@
+{# The box for a class-list file: click it to choose the file (or drag the
+   file onto it), and it goes in at once (app.js). `drop_id` tells two such
+   boxes on one page apart; `from_canvas` words it for Canvas's student
+   file; `paste_box` (default on) adds "Or paste names". #}
+{% set drop_id = drop_id if drop_id is defined else 'roster-file' %}
 <form method="post" action="{{ url_for('teach.upload_roster', sid=sheet.id) }}" enctype="multipart/form-data" data-dropzone>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   {% if setup %}<input type="hidden" name="setup" value="1">{% endif %}
-  <input type="file" id="roster-file" name="roster" accept=".csv,.tsv,.txt,.xlsx,.zip,text/csv,text/plain,application/zip" class="visually-hidden-file">
-  <label class="dropzone" for="roster-file">
-    <span class="dropzone-title">{{ 'Drop the new class list here' if counts.roster else 'Drag your class list here' }}</span>
-    <span class="dropzone-sub">the file Canvas downloads for you (usually <strong>students.csv</strong>, in your Downloads folder), or an Excel file — or click to choose it{% if counts.roster %}. You'll see what changes before anything is replaced.{% endif %}</span>
-    <span class="dropzone-status" data-dropzone-status></span>
+  <input type="file" id="{{ drop_id }}" name="roster" accept=".csv,.tsv,.txt,.xlsx,.zip,text/csv,text/plain,application/zip" class="visually-hidden-file">
+  <label class="dropzone" for="{{ drop_id }}">
+    {% if from_canvas is defined and from_canvas %}
+    <span class="dropzone-title">Click here to choose Canvas's file</span>
+    <span class="dropzone-sub">It's in your Downloads folder. Or drag it onto this box.{% if counts.roster %} You'll see what changes before anything is replaced.{% endif %}</span>
+    {% else %}
+    <span class="dropzone-title">{{ 'Click here to choose the new class list' if counts.roster else 'Click here to choose your class list' }}</span>
+    <span class="dropzone-sub">An Excel or CSV file. Or drag it onto this box.{% if counts.roster %} You'll see what changes before anything is replaced.{% endif %}</span>
+    {% endif %}
+    <span class="dropzone-status" data-dropzone-status role="status"></span>
   </label>
   <noscript><button class="btn btn-primary" type="submit">Upload</button></noscript>
   {% if paste_box is not defined or paste_box %}

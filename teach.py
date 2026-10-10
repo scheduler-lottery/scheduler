@@ -1491,6 +1491,12 @@ def _take_list(sheet, data, source, source_label, pasted=False, setup=False, par
     if result.error:
         flash(result.error, "error")
         return _list_back(sheet, setup)
+    # A file with no name column and no emails may be the wrong file (say,
+    # the grades file from the folder Safari makes of Canvas's download):
+    # a look before it goes in.
+    if source and not pasted and not result.name_column and not result.with_email and not look_first:
+        look_first = ("This file has no Name or Email column, so it may not be your class list. If Canvas's download "
+                      "became a folder, choose the file with “student” in its name.")
     message, tips = describe(result, source)
     # Someone on the new list by email alone, already here: the name they have stays.
     result.students = sheets.adopt_known_names(sheet["id"], result.students)
@@ -2219,6 +2225,8 @@ def canvas_school():
 def _canvas_school(instructor, guess):
     """{name, domain, saved} for the instructor's school's Canvas: the one
     they chose, else (with `guess`) the one their email suggests, else None."""
+    if settings.CANVAS_DEV_HOST:  # (trying it locally, against tools/fake_canvas.py)
+        return {"name": "Stand-in Canvas", "domain": settings.CANVAS_DEV_HOST, "saved": True}
     if instructor["canvas_host"]:
         return {"name": instructor["canvas_school"] or instructor["canvas_host"],
                 "domain": instructor["canvas_host"], "saved": True}
