@@ -2756,9 +2756,9 @@ def test_messages_can_be_closed_and_canvas_steps_pick_up_after_signing_in(prof, 
     assert "Open Canvas beside this page" in page and 'data-canvas-went="signin"' in page  # or in a tab
     assert page.count('class="canvas-pic"') == 3 and "Click Course Analytics" in page  # where to click, drawn
     assert "data-canvas-welcome" in page and "data-canvas-people" in page
-    # Instructions for an AI assistant: the class, its Canvas, and the way back here.
-    ai = re.search(r'<textarea id="canvas-ai"[^>]*>(.*?)</textarea>', page, re.S).group(1)
-    assert "CS & Law presentations" in ai and "/courses" in ai and f"/teach/s/{sid}#class-list" in ai
+    # No AI-assistant route for student data (agents' makers advise against using them on pages with
+    # others' personal information; school policies restrict which AI tools may see a roster).
+    assert "canvas-ai" not in page
     r = prof.post(f"/teach/s/{sid}/roster", {"pasted": ""})
     page = raw(prof.get(r.headers["Location"]))
     assert 'data-flash-stack' in page and 'class="flash-close" aria-label="Close this message"' in page
@@ -2889,3 +2889,86 @@ def test_class_page_cards_fold_away_with_only_the_first_two_open(prof, browser):
     page = raw(prof.get(f"/teach/s/{sid}"))
     assert '<details class="card fold-card" id="signups" data-fold="signups-' in page
     assert re.search(r'id="signups"[^>]* open data-fold-alert', page)
+
+
+# -- "Send to Scheduler": class lists straight from Canvas --------------------
+
+def _canvas_list(course="2026FA_BUSCOM_615_SEC1", n=3):
+    people = [{"name": f"Student {i}", "email": f"s{i}@u.school.edu"} for i in range(n)]
+    return json.dumps({"type": "scheduler-class-list", "v": 1, "host": "canvas.school.edu", "course": course,
+                       "students": people})
+
+
+def test_the_send_to_scheduler_button_is_made_for_this_site(prof):
+    import canvas_import
+
+    button = canvas_import.bookmarklet("https://scheduler.example.edu/")
+    from urllib.parse import unquote
+    code = unquote(button[len("javascript:"):])
+    assert button.startswith("javascript:") and "__SITE__" not in code
+    assert 'var SITE = "https://scheduler.example.edu";' in code and "/canvas-import" in code
+    assert not any(line.startswith("//") for line in code.splitlines())  # comments out
+    sid = prof.create_sheet(allow_unlisted=False)
+    page = raw(prof.get(f"/teach/s/{sid}"))
+    assert 'class="bookmarklet" href="javascript:' in page and "Send to Scheduler" in page
+
+
+def test_a_list_sent_from_canvas_waits_for_the_instructor_to_pick_its_sheet(prof, browser):
+    sid = prof.create_sheet(title="Seminar", allow_unlisted=False)
+    canvas = browser()  # Canvas's site: no sign-in here, and no form token
+    r = canvas.client.post("/canvas-import", data={"list": _canvas_list()})
+    assert r.status_code == 303 and "/teach/canvas-import/" in r.headers["Location"]
+    waiting = r.headers["Location"]
+    assert canvas.get(waiting).headers["Location"].endswith("/teach/login")  # only a signed-in instructor
+    page = text(prof.get(waiting))
+    assert "3 students from 2026FA_BUSCOM_615_SEC1" in page and "Seminar" in page and "A new sign-up sheet" in page
+    assert "All with email addresses" in page
+    r = prof.post(waiting, {"sheet": sid})
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")
+    assert "Added 3 students" in html(prof.get(r.headers["Location"]))
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 3
+    assert "expired" in follow(prof, prof.get(waiting))  # used up
+    # Someone else's sheet can't be the target.
+    other = browser().sign_in_instructor("other@school.edu")
+    r = canvas.client.post("/canvas-import", data={"list": _canvas_list()})
+    assert other.post(r.headers["Location"], {"sheet": sid}).status_code == 404
+
+
+def test_a_list_from_canvas_can_start_a_new_sheet(prof, browser):
+    r = browser().client.post("/canvas-import", data={"list": _canvas_list(n=4)})
+    waiting = r.headers["Location"]
+    assert prof.post(waiting, {"sheet": "new"}).headers["Location"].endswith("/teach/new")
+    assert "goes into this sheet as soon as it's made" in html(prof.get("/teach/new"))
+    r = prof.post("/teach/new", {"title": "From Canvas", "day_date": [a_date("Mon", 0), a_date("Tue", 1)],
+                                 "day_key": ["", ""], "capacity": "2"})
+    sid = re.search(r"/teach/s/([^/#?]+)", r.headers["Location"]).group(1)
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students")
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 4
+
+
+def test_lists_from_canvas_are_checked_limited_and_kept_an_hour(prof, browser, monkeypatch):
+    import app as app_module
+
+    canvas = browser()
+    for bad in ("", "nope", json.dumps({"type": "other"}), json.dumps({"type": "scheduler-class-list", "students": []})):
+        assert canvas.client.post("/canvas-import", data={"list": bad}).status_code == 400
+    assert canvas.client.post("/teach/s/x/canvas-list", data={"list": _canvas_list()}).status_code == 400  # needs the token
+    monkeypatch.setattr(app_module, "CANVAS_IMPORTS_PER_HOUR", 2)
+    assert canvas.client.post("/canvas-import", data={"list": _canvas_list()}).status_code == 303
+    assert canvas.client.post("/canvas-import", data={"list": _canvas_list()}).status_code == 303
+    assert canvas.client.post("/canvas-import", data={"list": _canvas_list()}).status_code == 429
+    # An hour on, it's gone.
+    with prof.app.app_context():
+        db.run("UPDATE canvas_imports SET created_at = :old", old=PASSED)
+        db.commit()
+        iid = db.scalar("SELECT id FROM canvas_imports LIMIT 1")
+    assert "expired" in follow(prof, prof.get(f"/teach/canvas-import/{iid}"))
+
+
+def test_a_list_handed_to_the_page_by_the_canvas_window_goes_in(prof):
+    sid = prof.create_sheet(allow_unlisted=False)
+    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=5), "setup": "1"})
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students")
+    assert "Added 5 students" in html(prof.get(r.headers["Location"]))
+    said = follow(prof, prof.post(f"/teach/s/{sid}/canvas-list", {"list": "{}"}))
+    assert "didn't come through" in said

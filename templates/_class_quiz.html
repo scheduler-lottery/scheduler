@@ -61,13 +61,69 @@
        on Canvas's Dashboard instead of where a link pointed, so the steps
        start from the Dashboard. #}
     {% set canvas_host = canvas.domain if canvas else 'canvas.instructure.com' %}
-    {% set come_back = url_for('teach.setup', sid=sheet.id, step='students', _external=True) if setup else url_for('teach.sheet', sid=sheet.id, _external=True) ~ '#class-list' %}
-    <div class="canvas-guide" data-canvas-guide data-sheet="{{ sheet.id }}" data-host="{{ canvas_host }}">
-      <div class="canvas-guide-top">
-        <button type="button" class="btn btn-primary" data-canvas-beside>Open Canvas beside this page</button>
-        <a class="link-muted" data-canvas-home data-canvas-went="signin" href="https://{{ canvas_host }}/courses" target="_blank" rel="noopener">or in a new tab</a>
-        <button type="button" class="btn btn-secondary btn-small canvas-guide-done" data-canvas-close hidden>Done with Canvas</button>
-      </div>
+    <div class="canvas-guide" data-canvas-guide data-sheet="{{ sheet.id }}" data-host="{{ canvas_host }}"
+         data-list-url="{{ url_for('teach.canvas_list_here', sid=sheet.id) }}"{% if setup %} data-setup="1"{% endif %}>
+      {# The easy way: the Send to Scheduler button (canvas_import), kept in
+         the bookmarks bar, reads the list in Canvas and hands it back to this
+         page. #}
+      <section class="canvas-easy" aria-labelledby="canvas-easy-title-{{ sheet.id }}">
+        <h4 class="canvas-easy-title" id="canvas-easy-title-{{ sheet.id }}">The easy way: one button, in Canvas</h4>
+        <ol class="canvas-easy-steps">
+          <li data-button-step>
+            <p class="button-known" data-button-known hidden><strong>You have the Send to Scheduler button</strong> in your bookmarks bar. (Lost it? Drag this one up again.)</p>
+            <p data-button-new><strong>Drag this button up to your bookmarks bar.</strong> You only do this once.</p>
+            <svg class="canvas-pic drag-pic" viewBox="0 0 360 96" role="img" aria-label="Dragging the Send to Scheduler button up into the bookmarks bar, just under the address bar" data-button-new>
+              <rect class="pic-frame" x="0.5" y="0.5" width="359" height="95" rx="10"/>
+              <circle class="pic-dot" cx="14" cy="13" r="4"/><circle class="pic-dot" cx="27" cy="13" r="4"/><circle class="pic-dot" cx="40" cy="13" r="4"/>
+              <rect class="pic-box" x="56" y="5" width="290" height="16" rx="8"/>
+              <rect class="pic-line" x="0.5" y="26" width="359" height="20"/>
+              <text class="pic-tiny" x="12" y="40">Bookmarks bar</text>
+              <rect class="pic-target" x="104" y="28" width="92" height="16" rx="8"/>
+              <text class="pic-tiny is-strong" x="112" y="40">Send to Scheduler</text>
+              <path class="pic-arrow" d="M200 80 C 230 76, 236 60, 206 44"/>
+              <path class="pic-arrow" d="M200 48 l6 -5 l2 8"/>
+              <rect class="pic-box is-dashed" x="196" y="70" width="120" height="20" rx="10"/>
+              <text class="pic-tiny is-strong" x="208" y="84">Send to Scheduler</text>
+              <path class="pic-pointer" d="M300 78 l0 16 l4.5 -4.5 l3.8 8 l3 -1.4 l-3.8 -8 l6 0 z"/>
+            </svg>
+            <div class="bookmarklet-row">
+              <a class="bookmarklet" href="{{ canvas_button() }}" data-bookmarklet>
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 3.5h10a1 1 0 0 1 1 1V21l-6-4-6 4V4.5a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+                Send to Scheduler</a>
+              <span class="bookmarklet-tip" data-bookmarks-tip>No bookmarks bar? Press <kbd data-key-mod>Ctrl</kbd> <kbd>Shift</kbd> <kbd>B</kbd> to show it.</span>
+            </div>
+            <p class="mini-hint bookmarklet-said" data-bookmarklet-said role="status" hidden></p>
+          </li>
+          <li>
+            <p><strong>Open Canvas</strong>, in a new tab. Sign in if it asks.</p>
+            <button type="button" class="btn btn-primary" data-canvas-tab>Open Canvas</button>
+          </li>
+          <li><p><strong>In Canvas, click Send to Scheduler</strong> in your bookmarks bar, on any page, and pick this class. You'll come right back here, with the list.</p></li>
+        </ol>
+        <div class="canvas-arrived-here" data-canvas-arrived hidden></div>
+      </section>
+
+      {# No bookmarks: Canvas's own list, as text, copied over (app.js reads
+         it here, keeping only names and emails). #}
+      <details class="canvas-by-hand canvas-copy" data-canvas-copy>
+        <summary>No bookmarks? Copy the list straight from Canvas</summary>
+        <ol class="canvas-copy-steps">
+          <li><button type="button" class="btn btn-secondary btn-small" data-copy-open>Show my Canvas courses</button>
+            <span class="mini-hint">It opens beside this page. If Canvas asks you to sign in and then shows its Dashboard, press the button again.</span></li>
+          <li>In that window, press <kbd data-key-mod>Ctrl</kbd> <kbd>A</kbd> to select everything, then <kbd data-key-mod>Ctrl</kbd> <kbd>C</kbd> to copy it. <span class="mini-hint">It looks like code. That's fine.</span></li>
+          <li><label for="canvas-paste-{{ sheet.id }}">Paste it here:</label>
+            <textarea id="canvas-paste-{{ sheet.id }}" class="canvas-paste" rows="3" data-copy-paste placeholder="Paste here"></textarea>
+            <p class="mini-hint" data-copy-said role="status"></p>
+            <div class="canvas-copy-courses" data-copy-courses hidden></div></li>
+        </ol>
+      </details>
+
+      <details class="canvas-by-hand">
+        <summary>Or download it from Course Analytics, with pictures</summary>
+        <div class="canvas-guide-top">
+          <button type="button" class="btn btn-secondary" data-canvas-beside data-canvas-went="signin">Open Canvas beside this page</button>
+          <button type="button" class="btn btn-secondary btn-small canvas-guide-done" data-canvas-close hidden>Done with Canvas</button>
+        </div>
       <ol class="canvas-steps" data-canvas-steps>
         <li class="canvas-step" data-canvas-step="signin">
           <p><strong>Sign in, then click your course.</strong> If Canvas asks, sign in. You'll land on your Dashboard: click the card for this class.</p>
@@ -120,6 +176,7 @@
           <p><strong>Drag that file into the box below</strong>, or click the box and choose it from your Downloads folder.</p>
         </li>
       </ol>
+      </details>
       <p class="canvas-welcome" data-canvas-welcome role="status" hidden></p>
       <details class="canvas-more">
         <summary>Faster next time: your course's address</summary>
@@ -127,18 +184,6 @@
         <label for="canvas-course" class="visually-hidden">Your Canvas course address</label>
         <input type="text" id="canvas-course" placeholder="e.g., https://canvas.myschool.edu/courses/123456" autocomplete="off" spellcheck="false">
         <p class="mini-hint" data-canvas-status>We'll remember it on this computer for this sheet.</p>
-      </details>
-      <details class="canvas-more">
-        <summary>Have an AI assistant do it</summary>
-        <p class="mini-hint">An AI assistant that can use your web browser (Claude in Chrome, for example) can do these steps for you, signed in as you. Copy these instructions and give them to it:</p>
-        <label for="canvas-ai" class="visually-hidden">Instructions for an AI assistant</label>
-        <textarea id="canvas-ai" class="announcement" rows="10" readonly>Please get the class list for my course "{{ sheet.title }}" from Canvas and add it to my Scheduler sign-up sheet.
-1. Open https://{{ canvas_host }}/courses and click the course that matches "{{ sheet.title }}". If Canvas asks me to sign in, stop and let me do that first.
-2. In the course's menu on the left, click "Course Analytics" (it may be called "New Analytics").
-3. Click the "Students" tab, then the download button (an arrow pointing down, next to "Chart Options"). It downloads students.csv or a .zip file.
-4. Go to {{ come_back }} and add that downloaded file to the box that says "Drag your class list here" (click the box to choose the file).
-Don't change anything else in Canvas or in Scheduler.</textarea>
-        <button type="button" class="btn btn-secondary btn-small" data-copy="#canvas-ai">Copy the instructions</button>
       </details>
     </div>
     <details class="quiz-help">

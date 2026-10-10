@@ -129,6 +129,9 @@
     <a class="link-muted" href="{{ url_for('teach.dashboard') }}">Cancel</a>
   </div>
   {% with draft_title = form.title, draft_hidden = True %}{% include "_draft_name.html" %}{% endwith %}
+  {% if canvas_waiting %}
+  <p class="canvas-waiting">Your class list from Canvas ({{ canvas_waiting.students | length | plural('student') }}, from {{ canvas_waiting.course }}) goes into this sheet as soon as it's made.</p>
+  {% endif %}
   {% else %}
   <div class="admin-header">
     <h1>{{ 'New sign-up sheet' if intake else 'Edit sign-up sheet' }}</h1>

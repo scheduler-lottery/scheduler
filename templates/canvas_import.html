@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Your class list from Canvas — {{ app_name }}{% endblock %}
+{% block content %}
+{# A class list the "Send to Scheduler" button sent from Canvas, waiting for
+   the instructor to look it over and pick its sheet (teach.canvas_list). #}
+<div class="card canvas-arrived">
+  <p class="eyebrow">From Canvas{% if data.host %} · {{ data.host }}{% endif %}</p>
+  <h1>{{ data.students | length | plural('student') }} from {{ data.course }}</h1>
+  <p class="subtitle">{% if with_email == data.students | length %}All with email addresses, so each can sign in with an emailed code.{% elif with_email %}{{ with_email }} with email addresses; the rest sign in with a PIN.{% else %}Canvas didn't share their email addresses, so they'll sign in with a PIN.{% endif %}</p>
+
+  <details class="arrived-names">
+    <summary>See the names</summary>
+    <ol class="arrived-list">
+      {% for s in data.students %}<li><bdi>{{ s.name or s.email }}</bdi>{% if s.email and s.name %} <span class="muted">{{ s.email }}</span>{% endif %}</li>{% endfor %}
+    </ol>
+  </details>
+
+  <form method="post" class="arrived-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <fieldset class="field">
+      <legend>Add them to</legend>
+      {% for sheet in sheets %}
+      <label class="choice"><input type="radio" name="sheet" value="{{ sheet.id }}"{{ ' checked' if loop.first }}> <span><strong>{{ sheet.title }}</strong></span></label>
+      {% endfor %}
+      <label class="choice"><input type="radio" name="sheet" value="new"{{ ' checked' if not sheets }}> <span><strong>A new sign-up sheet</strong> <span class="muted">(you'll make it next, and they go right in)</span></span></label>
+    </fieldset>
+    <button type="submit" class="btn btn-primary btn-large">Add {{ data.students | length | plural('student') }}</button>
+  </form>
+  <p class="mini-hint">If the sheet already has a class list, you'll see what changes before anything is replaced. This list is only kept for an hour.</p>
+</div>
+{% endblock %}

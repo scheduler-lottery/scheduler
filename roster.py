@@ -14,6 +14,7 @@ is dropped right here, in memory, and never stored.
 import codecs
 import csv
 import io
+import json
 import re
 import unicodedata
 import zipfile
@@ -396,8 +397,39 @@ def parse_roster(data):
     if "\x00" in text or sum(1 for ch in text[:2000] if unicodedata.category(ch) == "Cc"
                              and ch not in "\n\r\t") > 20:
         return RosterResult(error=f"That doesn't look like a class list. {SAVE_AS_CSV} {PASTE_INSTEAD}")
+    from_canvas = _canvas_api_lines(text)
+    if from_canvas is not None:
+        return _parse_rows(*_rows_from_text(from_canvas)) if from_canvas else RosterResult(
+            error="That's from Canvas, but it has no students in it. Is it the right course's list?")
     rows, lines = _rows_from_text(text)
     return _parse_rows(rows, lines)
+
+
+def _canvas_api_lines(text):
+    """A copy of what Canvas's API shows in the browser (a course's users, as
+    JSON, starting "while(1);"): its people as "Name, email" lines, keeping
+    nothing else. None if it isn't that."""
+    body = text.strip()
+    if body.startswith("while(1);"):
+        body = body[len("while(1);"):].strip()
+    if body.replace(" ", "") == "[]":
+        return ""
+    if not body.startswith("[") or '"name"' not in body[:2000]:
+        return None
+    try:
+        people = json.loads(body)
+    except ValueError:
+        return None
+    if not isinstance(people, list) or not all(isinstance(p, dict) for p in people):
+        return None
+    out = []
+    for person in people:
+        name = " ".join(str(person.get("name") or person.get("sortable_name") or "").split())
+        login = str(person.get("login_id") or "")
+        email = str(person.get("email") or person.get("primary_email") or (login if "@" in login else "")).strip()
+        if name or email:
+            out.append(f"{name}, {email}" if name and email else name or email)
+    return "\n".join(out)
 
 
 def _parse_rows(rows, lines):

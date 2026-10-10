@@ -264,6 +264,16 @@ CREATE TABLE IF NOT EXISTS invitations (
     PRIMARY KEY (id, sheet_id)
 );
 
+-- A class list on its way from Canvas ("Send to Scheduler", the button
+-- that runs in Canvas): it arrives without a sign-in (a post from another
+-- site), so it waits here under an unguessable id until a signed-in
+-- instructor picks the sheet it goes to. Gone once used, or after an hour.
+CREATE TABLE IF NOT EXISTS canvas_imports (
+    id         TEXT PRIMARY KEY,
+    data       TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 -- Daily totals the site keeps about itself (requests answered, bytes sent,
 -- milliseconds spent), so the owner hears before a free plan's limits.
 CREATE TABLE IF NOT EXISTS usage_daily (

@@ -26,6 +26,7 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 import auth
+import canvas_import
 import db
 import deadlines
 import maintenance
@@ -37,7 +38,7 @@ import student
 import teach
 import usage
 from matching_engine import ALGORITHMS, example_views
-from util import ID_ALPHABET, in_zone, initials, iso, parse_iso, plural
+from util import ID_ALPHABET, in_zone, initials, iso, new_id, now, parse_iso, plural
 
 app = Flask(__name__, static_folder="public/static", static_url_path="/static")
 
@@ -103,6 +104,8 @@ def local_times(text):
     return Markup(TIME_MARKER.sub(swap, str(escape(text or ""))))
 
 
+# The "Send to Scheduler" bookmark, made for the address this site is on.
+app.add_template_global(lambda: canvas_import.bookmarklet(request.url_root), "canvas_button")
 app.add_template_filter(initials, "initials")
 app.add_template_filter(local_times, "local_times")
 app.add_template_filter(autolink, "autolink")
@@ -149,7 +152,10 @@ def before_every_request():
     missing = missing_settings()
     if missing:
         return render_template("setup_needed.html", missing=missing), 503
-    if request.method == "POST" and not auth.csrf_ok():
+    # The one post that comes from another site: a class list sent from
+    # Canvas (canvas_import), which on its own can only be stored for a
+    # signed-in instructor to look over.
+    if request.method == "POST" and request.endpoint != "receive_canvas_list" and not auth.csrf_ok():
         if request.is_json:
             return jsonify(ok=False, error="This page expired. Refresh it and try again."), 400
         return render_template(
@@ -379,6 +385,31 @@ def site_font(name):
 @app.route("/how-it-works")
 def how_it_works():
     return render_template("how_it_works.html", algorithms=ALGORITHMS, examples=example_views())
+
+
+CANVAS_IMPORTS_PER_HOUR = 30
+
+
+@app.route("/canvas-import", methods=["POST"])
+def receive_canvas_list():
+    """A class list from the "Send to Scheduler" button in Canvas (a post
+    from Canvas's site). It's kept for an hour under an unguessable id, and
+    the instructor (signed in here as usual) looks it over and picks the
+    sheet it goes to: nothing is added until they do."""
+    data = canvas_import.read(request.form.get("list"))
+    if not data:
+        return render_template("error.html", code=400, title="That wasn't a class list",
+                               message="Open your course in Canvas and click Send to Scheduler again."), 400
+    network = "n:" + signin.keyed_hash("ip|" + (signin.client_ip() or "unknown"))
+    recent = db.scalar("SELECT COUNT(*) FROM auth_failures WHERE scope = 'canvas-import' AND client = :c AND at > :t",
+                       c=network, t=iso(now() - timedelta(hours=1))) or 0
+    if recent >= CANVAS_IMPORTS_PER_HOUR:
+        return render_template("error.html", code=429, title="Too many class lists at once",
+                               message="Wait a little, then click Send to Scheduler again."), 429
+    db.run("INSERT INTO auth_failures (id, scope, subject, client, at) VALUES (:id, 'canvas-import', '', :c, :at)",
+           id=new_id(16), c=network, at=iso())
+    iid = canvas_import.store(data)
+    return redirect(url_for("teach.canvas_list", iid=iid), code=303)
 
 
 @app.route("/invite", methods=["GET", "POST"])

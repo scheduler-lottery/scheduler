@@ -3,7 +3,7 @@
   "functions": {
     "app.py": {
       "maxDuration": 60,
-      "excludeFiles": "{tests/**,public/**,*.md,.env*,local.db,requirements-dev.txt}"
+      "excludeFiles": "{tests/**,tools/**,public/**,*.md,.env*,local.db,requirements-dev.txt}"
     }
   },
   "crons": [

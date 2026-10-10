@@ -22,6 +22,7 @@ from flask import (
 )
 
 import auth
+import canvas_import
 import canvasdir
 import compose
 import db
@@ -550,8 +551,17 @@ def new_sheet():
         if fold(values["title"]) in mine:
             flash("You already have a sheet with this title — the link code under each title on your list "
                   "tells them apart.", "info")
+        # A class list sent from Canvas for "a new sign-up sheet": it goes in now.
+        waiting = session.pop("canvas_list", None)
+        listed = canvas_import.load(waiting) if waiting else None
+        if listed:
+            canvas_import.forget(waiting)
+            db.commit()
+            return _take_canvas_list(sheets.get_sheet(sid), listed, setup=True)
         return redirect(url_for("teach.setup", sid=sid))
-    return render_template("sheet_form.html", form=_blank_form(), mode="new", max_days=sheets.MAX_DAYS)
+    waiting = canvas_import.load(session.get("canvas_list")) if session.get("canvas_list") else None
+    return render_template("sheet_form.html", form=_blank_form(), mode="new", max_days=sheets.MAX_DAYS,
+                           canvas_waiting=waiting)
 
 
 def _warn_past_days(days):
@@ -1457,10 +1467,17 @@ def upload_roster(sid):
         flash("That file is over 1 MB — a class list is far smaller. Is it the right file?", "error")
         return _list_back(sheet)
 
+    return _take_list(sheet, data, source, source_label, pasted=not source, setup=bool(request.form.get("setup")))
+
+
+def _take_list(sheet, data, source, source_label, pasted=False, setup=False):
+    """A class list (a file, pasted names, or one sent from Canvas), read and
+    checked the same way: the first list goes straight in, with a report;
+    one that would change an existing list is shown for review first."""
     result = parse_roster(data)
     if result.error:
         flash(result.error, "error")
-        return _list_back(sheet)
+        return _list_back(sheet, setup)
     message, tips = describe(result, source)
     # Someone on the new list by email alone, already here: the name they have stays.
     result.students = sheets.adopt_known_names(sheet["id"], result.students)
@@ -1473,13 +1490,60 @@ def upload_roster(sid):
     current = [r for r in sheets.get_roster(sheet["id"]) if not r["is_test"]]
     if not current:
         _apply_roster(sheet, result.students, "replace", message, tips, warn, source_label, sections)
-        return _list_back(sheet)
+        return _list_back(sheet, setup)
     pid = _store_pending(sheet, "roster", {
         "students": result.students, "message": message, "tips": tips, "warn": warn,
-        "source": source, "source_label": source_label, "pasted": not source, "sections": sections,
-        "setup": bool(request.form.get("setup")),
+        "source": source, "source_label": source_label, "pasted": pasted, "sections": sections,
+        "setup": setup,
     })
     return redirect(url_for("teach.review_roster", sid=sheet["id"], pid=pid))
+
+
+def _take_canvas_list(sheet, data, setup=False):
+    course = data["course"]
+    return _take_list(sheet, canvas_import.lines(data).encode("utf-8"), f"Canvas: {course}",
+                      f"sent from Canvas ({course})", setup=setup)
+
+
+@bp.route("/s/<sid>/canvas-list", methods=["POST"])
+@instructor_required
+def canvas_list_here(sid):
+    """A class list the "Send to Scheduler" button handed to this page
+    (from the Canvas window it opened), which the instructor then added."""
+    sheet = owned_sheet(sid)
+    data = canvas_import.read(request.form.get("list"))
+    if not data:
+        flash("That class list from Canvas didn't come through. Click Send to Scheduler in Canvas again.", "error")
+        return _list_back(sheet)
+    return _take_canvas_list(sheet, data, setup=bool(request.form.get("setup")))
+
+
+@bp.route("/canvas-import/<iid>", methods=["GET", "POST"])
+@instructor_required
+def canvas_list(iid):
+    """A class list sent from Canvas in a new tab, waiting for the
+    instructor to look it over and pick the sheet it goes to."""
+    data = canvas_import.load(iid)
+    if not data:
+        flash("That class list from Canvas has expired (each waits an hour). In Canvas, click Send to Scheduler "
+              "again.", "error")
+        return redirect(url_for("teach.dashboard"))
+    me = current_instructor()
+    mine = db.rows("SELECT id, title FROM sheets WHERE owner_id = :me AND archived_at IS NULL ORDER BY created_at DESC",
+                   me=me["id"])
+    if request.method == "POST":
+        choice = request.form.get("sheet", "")
+        if choice == "new":
+            session["canvas_list"] = iid  # added once the new sheet exists
+            return redirect(url_for("teach.new_sheet"))
+        sheet = owned_sheet(choice)
+        canvas_import.forget(iid)
+        db.commit()
+        return _take_canvas_list(sheet, data)
+    return render_template(
+        "canvas_import.html", data=data, iid=iid, sheets=mine,
+        with_email=sum(1 for s in data["students"] if s["email"]),
+    )
 
 
 @bp.route("/s/<sid>/roster/quick-add", methods=["POST"])

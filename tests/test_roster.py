@@ -262,3 +262,14 @@ def test_a_zip_from_canvas_course_analytics_works():
     # Only the grades: no class list in it, and the message says where the list is.
     result = parse_roster(zipped({"course_grade.csv": grades}))
     assert "no class list in it" in result.error and "Students tab" in result.error
+
+
+def test_canvas_api_text_pasted_from_the_browser_keeps_only_names_and_emails():
+    data = ('while(1);[{"id":1,"name":"Alex Johnson","sortable_name":"Johnson, Alex","login_id":"abc1",'
+            '"email":"alex@u.school.edu"},{"id":2,"name":"Sam Lee","login_id":"sam@u.school.edu"},'
+            '{"id":3,"name":"Riya Patel","login_id":"rp3"}]').encode()
+    result = parse_roster(data)
+    assert [(s["display_name"], s["email"]) for s in result.students] == [
+        ("Alex Johnson", "alex@u.school.edu"), ("Sam Lee", "sam@u.school.edu"), ("Riya Patel", "")]
+    assert all(set(s) == {"name_key", "display_name", "email", "name_pending"} for s in result.students)
+    assert "no students in it" in parse_roster(b"[]").error

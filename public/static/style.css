@@ -3056,3 +3056,56 @@ details.guide:not([open]) { padding-bottom: 20px; }
     border: 1px solid var(--border); border-radius: 16px; background: var(--card-bg); box-shadow: var(--shadow-lg);
   }
 }
+
+/* Canvas, the easy way: the Send to Scheduler button to drag to the
+   bookmarks bar, then a list that arrives right here. */
+.canvas-easy {
+  margin: 6px 0 16px; padding: 16px 18px; border: 1.5px solid var(--accent); border-radius: 14px;
+  background: var(--accent-soft);
+}
+.canvas-easy-title { margin: 0 0 10px; font-size: 1.2rem; }
+.canvas-easy-steps { margin: 0; padding-left: 1.3em; display: grid; gap: 10px; }
+.canvas-easy-steps > li > p { margin: 0 0 6px; line-height: 1.5; }
+.canvas-easy .canvas-guide-top { margin: 0; }
+.bookmarklet-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.bookmarklet {
+  display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 999px;
+  border: 2px dashed var(--accent); background: var(--card-bg); color: var(--accent-strong);
+  font-weight: 700; text-decoration: none; cursor: grab; box-shadow: var(--shadow-sm);
+}
+.bookmarklet:active { cursor: grabbing; }
+.bookmarklet svg { width: 18px; height: 18px; }
+.bookmarklet-tip { font-family: var(--font-small); font-size: 0.88rem; color: var(--muted); }
+.bookmarklet-tip kbd, .canvas-easy kbd {
+  display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px solid var(--border-strong); border-bottom-width: 2px;
+  border-radius: 6px; background: var(--card-bg); font-family: var(--font-small); font-size: 0.85em; text-align: center;
+}
+.bookmarklet-said { margin: 6px 0 0; color: var(--accent-strong); }
+.canvas-arrived-here, .canvas-arrived {
+  margin-top: 14px; padding: 16px 18px; border: 1.5px solid var(--success); border-radius: 14px; background: var(--card-bg);
+}
+.canvas-arrived-here[hidden] { display: none; }
+.canvas-arrived-here .eyebrow { margin: 0 0 4px; }
+.canvas-arrived-title { margin: 0 0 4px; font-size: 1.25rem; }
+.arrived-names { margin: 8px 0 12px; }
+.arrived-names > summary { cursor: pointer; color: var(--accent-strong); font-weight: 600; }
+.arrived-list { max-height: 220px; overflow: auto; margin: 8px 0 0; padding-left: 1.6em; font-size: 0.92rem; line-height: 1.5; }
+.arrived-form { margin: 0; }
+.canvas-by-hand { margin: 4px 0 12px; }
+.canvas-by-hand > summary { cursor: pointer; font-weight: 650; color: var(--accent-strong); }
+.canvas-by-hand[open] > summary { margin-bottom: 12px; }
+.canvas-waiting {
+  margin: 0 0 14px; padding: 10px 14px; border-radius: 12px; border: 1.5px solid var(--success);
+  background: var(--success-bg); color: var(--success); font-weight: 600;
+}
+.canvas-arrived .arrived-form .field { margin: 6px 0 14px; }
+.canvas-copy-steps { margin: 0; padding-left: 1.3em; display: grid; gap: 10px; line-height: 1.5; }
+.canvas-copy-steps .mini-hint { display: block; margin-top: 4px; }
+.canvas-paste { width: 100%; margin-top: 6px; font-family: ui-monospace, Menlo, monospace; font-size: 0.85rem; }
+.canvas-copy-courses { display: grid; gap: 8px; margin-top: 8px; }
+.canvas-copy-courses[hidden] { display: none; }
+.canvas-copy-courses > p { margin: 0; font-weight: 650; }
+.drag-pic { max-width: 380px; margin: 4px 0 10px; }
+.pic-arrow { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.pic-box.is-dashed { stroke: var(--accent); stroke-dasharray: 4 3; }
+.drag-pic[hidden], .button-known[hidden] { display: none; }

@@ -14,6 +14,7 @@ It does three things:
 
 from datetime import timedelta
 
+import canvas_import
 import db
 import deadlines
 import sheets
@@ -43,6 +44,7 @@ def run_daily():
     db.run("DELETE FROM login_links WHERE expires_at < :t", t=iso(now()))
     db.run("DELETE FROM auth_failures WHERE at < :t", t=cutoff(1))
     db.run("DELETE FROM pending_uploads WHERE created_at < :t", t=cutoff(1))
+    db.run("DELETE FROM canvas_imports WHERE created_at < :t", t=iso(now() - canvas_import.KEEP))
     db.run("DELETE FROM error_log WHERE created_at < :t", t=cutoff(30))
     # Sign-ins last at most 90 days, so older sign-out markers do nothing.
     db.run("DELETE FROM student_signouts WHERE at < :t", t=cutoff(100))

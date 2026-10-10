@@ -44,7 +44,7 @@ MAX_FONT_BYTES = 600 * 1024
 # days. So do remote_users, so the daily job still deletes WorkOS's copies.
 EVERYTHING = (
     "name_pins", "assignments", "submissions", "roster", "invitations", "sheet_days", "sheets", "snapshots",
-    "pending_uploads", "student_signouts", "login_codes", "login_links",
+    "pending_uploads", "student_signouts", "login_codes", "login_links", "canvas_imports",
 )
 _uploaded = {"at": 0.0, "names": frozenset()}
 
