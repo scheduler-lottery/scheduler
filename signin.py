@@ -33,11 +33,12 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import timedelta
 from email.utils import formataddr
 
-from flask import current_app, g, has_app_context, request
+from flask import current_app, g, has_app_context, request, url_for
 from flask_mailman import EmailMessage
 
 import db
@@ -1089,3 +1090,130 @@ def locked_names(sheet_id):
         )
         locked |= {r["subject"] for r in found}
     return locked
+
+
+# ---------------------------------------------------------------------------
+# Invitations ("Send it for me"): WorkOS emails each student an invitation,
+# and its button brings them back here, signed in to their class. WorkOS
+# writes that email (its standard invitation, from code_sender()), and its
+# link goes wherever WorkOS's dashboard says (Applications → Redirects →
+# User invitation URL), which has to be this site's /invite. So the option
+# is off until the owner's test invitation shows its link comes back here,
+# for the WorkOS key in use (a new key, another environment: test again).
+# WorkOS keeps a record of each invitation; it has no way to delete one, so
+# each is revoked once it's used.
+# ---------------------------------------------------------------------------
+INVITE_DAYS = 30
+INVITES_OK = "workos-invitations-ok"
+
+
+def _key_print():
+    return keyed_hash("workos-key|" + workos_key())[:24]
+
+
+def invite_url():
+    return url_for("accept_invitation", _external=True)
+
+
+def invites_ready():
+    if email_mode() != "workos":
+        return False
+    try:
+        return db.scalar("SELECT value FROM app_state WHERE key = :key", key=INVITES_OK) == _key_print()
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _invite(email, key):
+    """WorkOS emails this address an invitation; the invitation. An address
+    with one still waiting gets that one again. Raises on failure."""
+    try:
+        return _workos("POST", "/user_management/invitations", {"email": email, "expires_in_days": INVITE_DAYS},
+                       key=key)
+    except urllib.error.HTTPError as exc:
+        if exc.code not in (400, 409, 422):
+            raise
+        listed = _workos("GET", "/user_management/invitations?" + urllib.parse.urlencode({"email": email}), key=key)
+        waiting = next((i for i in listed.get("data", []) if i.get("state") == "pending"), None)
+        if not waiting:
+            raise
+        return _workos("POST", f"/user_management/invitations/{urllib.parse.quote(waiting['id'])}/resend", {},
+                       key=key)
+
+
+def send_invitations(sheet_id, emails):
+    """Invitations to this class for these addresses, sent a few at a time.
+    Returns (sent, failed addresses, skipped): skipped had one in the last
+    day. Not committed."""
+    recent = {r["email_hash"] for r in db.rows(
+        "SELECT email_hash FROM invitations WHERE sheet_id = :sid AND created_at > :since",
+        sid=sheet_id, since=iso(now() - timedelta(days=1)),
+    )}
+    todo = [e for e in dict.fromkeys(e.lower() for e in emails) if keyed_hash(e) not in recent]
+    key = workos_key()
+
+    def one(email):
+        try:
+            return _invite(email, key)
+        except Exception as exc:  # noqa: BLE001 - counted, and logged below
+            return _why(exc)
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        outcomes = list(pool.map(one, todo))
+    sent, failed = 0, []
+    for email, outcome in zip(todo, outcomes):
+        if isinstance(outcome, dict) and outcome.get("id"):
+            db.run(
+                "INSERT INTO invitations (id, sheet_id, email_hash, created_at) VALUES (:id, :sid, :hash, :at) "
+                "ON CONFLICT (id, sheet_id) DO UPDATE SET email_hash = excluded.email_hash, "
+                "created_at = excluded.created_at",
+                id=outcome["id"], sid=sheet_id, hash=keyed_hash(email), at=iso(),
+            )
+            sent += 1
+        else:
+            failed.append(email)
+            db.record_error("EMAIL", f"A WorkOS invitation failed: {outcome}")
+    return sent, failed, len(emails) - len(todo)
+
+
+def find_invitation(token):
+    """WorkOS's invitation for a link's token, or None."""
+    try:
+        return _workos("GET", "/user_management/invitations/by_token/" + urllib.parse.quote(token or "x", safe=""))
+    except urllib.error.HTTPError as exc:
+        if exc.code not in (400, 404):
+            db.record_error("EMAIL", f"Looking up a WorkOS invitation failed: {_why(exc)}")
+        return None
+    except Exception as exc:  # noqa: BLE001
+        db.record_error("EMAIL", f"Looking up a WorkOS invitation failed: {exc!r}")
+        return None
+
+
+def revoke_invitation(invitation_id):
+    """So its link can't be used again. Never raises."""
+    try:
+        _workos("POST", f"/user_management/invitations/{urllib.parse.quote(invitation_id)}/revoke", {})
+    except Exception:  # noqa: BLE001 - it runs out by itself
+        pass
+
+
+def test_invitations(email):
+    """The owner's test: WorkOS emails them an invitation, and its link has
+    to come back here. (ok, what to tell them). Commits."""
+    if email_mode() != "workos":
+        return False, "WorkOS isn't sending this site's email yet. Save its key above first."
+    try:
+        invitation = _invite(email, workos_key())
+    except Exception as exc:  # noqa: BLE001
+        return False, f"WorkOS didn't send it ({_why(exc)[:160]})."
+    link = (invitation.get("accept_invitation_url") or "").split("?")[0]
+    if link.rstrip("/") == invite_url().rstrip("/"):
+        db.run("INSERT INTO app_state (key, value) VALUES (:key, :value) "
+               "ON CONFLICT (key) DO UPDATE SET value = excluded.value", key=INVITES_OK, value=_key_print())
+        db.commit()
+        return True, ("WorkOS sent you a test invitation, and its link comes back here, so instructors can now "
+                      "have WorkOS send their class an invitation.")
+    revoke_invitation(invitation.get("id", ""))
+    return False, (f"WorkOS's invitation links go to {link or 'its own page'}, not to this site. In WorkOS's "
+                   f"dashboard, open Applications, then Redirects, and set the User invitation URL to "
+                   f"{invite_url()}. Then test again.")

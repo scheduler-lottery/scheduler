@@ -81,12 +81,15 @@ CREATE TABLE IF NOT EXISTS sheet_days (
 -- The class list. Only names and emails are ever stored; every other column
 -- of an uploaded file is dropped before it gets here. is_test marks the
 -- pretend students an instructor uses to try the student side themselves.
+-- name_pending: added by email alone, so display_name is a stand-in made
+-- from the address until the student types their own name.
 CREATE TABLE IF NOT EXISTS roster (
     sheet_id     TEXT NOT NULL REFERENCES sheets (id) ON DELETE CASCADE,
     name_key     TEXT NOT NULL,
     display_name TEXT NOT NULL,
     email        TEXT NOT NULL DEFAULT '',
     is_test      INTEGER NOT NULL DEFAULT 0,
+    name_pending INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (sheet_id, name_key)
 );
 
@@ -248,6 +251,17 @@ CREATE TABLE IF NOT EXISTS remote_users (
     user_id    TEXT PRIMARY KEY,
     email_hash TEXT NOT NULL,
     created_at TEXT NOT NULL
+);
+
+-- Invitations WorkOS emailed for an instructor ("Send it for me"): which
+-- class each is for, so its link signs the student in there. WorkOS's ids
+-- and a keyed hash; the address comes from WorkOS when the link is used.
+CREATE TABLE IF NOT EXISTS invitations (
+    id         TEXT NOT NULL,
+    sheet_id   TEXT NOT NULL REFERENCES sheets (id) ON DELETE CASCADE,
+    email_hash TEXT NOT NULL DEFAULT '',  -- keyed hash, so one can't be sent twice in a day
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (id, sheet_id)
 );
 
 -- Daily totals the site keeps about itself (requests answered, bytes sent,

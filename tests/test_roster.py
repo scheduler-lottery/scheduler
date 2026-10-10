@@ -12,8 +12,9 @@ def test_canvas_student_report_keeps_only_names_and_emails():
     result = parse_roster(CANVAS_ROSTER.encode())
     assert not result.error
     assert names(result) == ["Alex Johnson", "Sam Lee", "Riya Patel"]  # Test Student dropped
-    assert result.students[0] == {"name_key": "alex johnson", "display_name": "Alex Johnson", "email": "alex@school.edu"}
-    assert set(result.students[0]) == {"name_key", "display_name", "email"}  # no grades anywhere
+    assert result.students[0] == {"name_key": "alex johnson", "display_name": "Alex Johnson", "email": "alex@school.edu",
+                                  "name_pending": 0}
+    assert set(result.students[0]) == {"name_key", "display_name", "email", "name_pending"}  # no grades anywhere
     assert "Overall course grade" in result.ignored_columns
     assert result.canvas_rows == 1 and result.skipped == 0
 
@@ -148,10 +149,20 @@ def test_mac_line_endings_and_mac_roman_and_french_headers():
 def test_pasted_lines_find_the_email_wherever_it_is():
     data = b"Alex Johnson alex@school.edu\nLee, Sam; sam@school.edu\n<maria@school.edu> Maria Diaz\nonly@school.edu\n"
     result = parse_roster(data)
-    assert [(s["display_name"], s["email"]) for s in result.students] == [
-        ("Alex Johnson", "alex@school.edu"), ("Sam Lee", "sam@school.edu"), ("Maria Diaz", "maria@school.edu")]
+    assert [(s["display_name"], s["email"], s["name_pending"]) for s in result.students] == [
+        ("Alex Johnson", "alex@school.edu", 0), ("Sam Lee", "sam@school.edu", 0), ("Maria Diaz", "maria@school.edu", 0),
+        ("Only", "only@school.edu", 1)]  # an email alone: on the list, and they type their name later
     assert result.email_only == ["only@school.edu"] and result.flipped
     assert all("@" not in s["display_name"] for s in result.students)
+
+
+def test_a_list_of_emails_alone_is_a_class_list():
+    result = parse_roster(b'alex.johnson@school.edu, "Lee, Sam" <sam@school.edu>; riya.patel@school.edu')
+    assert [(s["display_name"], s["email"], s["name_pending"]) for s in result.students] == [
+        ("Alex Johnson", "alex.johnson@school.edu", 1), ("Sam Lee", "sam@school.edu", 0),
+        ("Riya Patel", "riya.patel@school.edu", 1)]
+    _message, tips = describe(result)
+    assert any("added by email address alone" in t for t in tips)
 
 
 def test_email_domain_typos_are_flagged():

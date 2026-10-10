@@ -24,12 +24,12 @@
 
   <form method="post" action="{{ url_for('student.login', sid=sheet.id) }}" class="stack" autocomplete="off">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label for="name-input" class="field-label">Your name</label>
+    <label for="name-input" class="field-label">{{ 'Your name or school email' if counts.roster_with_email else 'Your name' }}</label>
     <p id="name-help" class="hint hint-tight">
       {% if not sheet.bidding_open and not counts.roster %}
       Type the name you signed up with, then your PIN. (Only people who already signed up can sign in now.)
       {% elif counts.roster_with_email %}
-      Start typing and pick your name from the list. We'll email your school address a 6-digit code to confirm it's you.
+      Start typing and pick your name from the list, or type your school email address. We'll email that address a 6-digit code to confirm it's you.
       {% elif counts.roster %}
       Start typing and pick your name from the list. The first time, you'll choose a PIN (a number only you know).
       {% else %}

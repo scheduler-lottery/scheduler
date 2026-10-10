@@ -71,7 +71,24 @@ def load_sheet():
     g.student = auth.current_student(sheet)
     if g.get("signed_out_because") and request.endpoint != "student.save":
         flash(g.signed_out_because, "info")
+    # Added to the list by email alone: they type their name before anything else.
+    if g.student and request.endpoint not in NAME_FREE and _needs_name():
+        if request.endpoint == "student.save":
+            return jsonify(ok=False, retry=False, error="Type your name first: reload the page."), 409
+        return redirect(_here("student.set_name"))
     return None
+
+
+# Pages a student added by email alone can reach before typing their name.
+NAME_FREE = {"student.set_name", "student.signin", "student.logout", "student.logout_all", "student.restart",
+             "student.login", "student.login_again", "student.verify", "student.resend", "student.link_sign_in",
+             "student.pin", "student.names"}
+
+
+def _needs_name():
+    row = db.row("SELECT name_pending FROM roster WHERE sheet_id = :sid AND name_key = :key",
+                 sid=g.sheet["id"], key=g.student["k"])
+    return bool(row and row["name_pending"])
 
 
 def _here(endpoint, **kwargs):
@@ -89,14 +106,15 @@ def _pending(name):
 
 def _roster_rows():
     return db.rows(
-        "SELECT name_key, display_name, email, is_test FROM roster WHERE sheet_id = :sid",
+        "SELECT name_key, display_name, email, is_test, name_pending FROM roster WHERE sheet_id = :sid",
         sid=g.sheet["id"],
     )
 
 
 def _roster_row(key):
     return db.row(
-        "SELECT name_key, display_name, email, is_test FROM roster WHERE sheet_id = :sid AND name_key = :key",
+        "SELECT name_key, display_name, email, is_test, name_pending FROM roster "
+        "WHERE sheet_id = :sid AND name_key = :key",
         sid=g.sheet["id"], key=key,
     )
 
@@ -515,6 +533,55 @@ def link_sign_in(sid, token):
         flash("You're signed in.", "success")
         return redirect(_here("student.home"))
     return render_template("student_link.html", sheet=g.sheet, name=row["display_name"])
+
+
+@bp.route("/name", methods=["GET", "POST"])
+def set_name(sid):
+    """Added to the class list by email alone: the first time they sign in,
+    the student types their name, the way it'll show on the schedule."""
+    if not g.student:
+        return redirect(_here("student.signin"))
+    row = _roster_row(g.student["k"])
+    if not row or not row["name_pending"]:
+        return redirect(_here("student.home"))
+    typed = ""
+    if request.method == "POST":
+        typed = clean_text(request.form.get("name"), 120)
+        name = tidy_name(typed)
+        key = normalize_name(name)
+        problem = ""
+        if not key or "@" in name:
+            problem = "Type your name."
+        elif len(key.split()) < 2:
+            problem = "Please type your first and last name."
+        elif key != row["name_key"] and (
+            db.scalar("SELECT 1 FROM roster WHERE sheet_id = :sid AND name_key = :key", sid=g.sheet["id"], key=key)
+            or db.scalar("SELECT 1 FROM submissions WHERE sheet_id = :sid AND name_key = :key",
+                         sid=g.sheet["id"], key=key)
+        ):
+            problem = (f"Someone else in this class is already called {name}. Add a middle initial or another "
+                       "name, so your instructor can tell you apart.")
+        if problem:
+            flash(problem, "error")
+        else:
+            if key != row["name_key"]:
+                sheets.rekey_student(g.sheet["id"], row["name_key"], key, name)
+            else:
+                for table in ("submissions", "assignments"):
+                    db.run(f"UPDATE {table} SET display_name = :name WHERE sheet_id = :sid AND name_key = :key",
+                           name=name, sid=g.sheet["id"], key=key)
+            db.run(
+                "UPDATE roster SET name_key = :new, display_name = :name, name_pending = 0 "
+                "WHERE sheet_id = :sid AND name_key = :old",
+                new=key, name=name, sid=g.sheet["id"], old=row["name_key"],
+            )
+            sheets.touch(g.sheet["id"])
+            db.commit()
+            auth.sign_in_student(g.sheet["id"], name, key, g.student["m"], shared=bool(g.student.get("x")))
+            flash(f"Thanks, {name}.", "success")
+            return redirect(_here("student.home"))
+    guess = row["display_name"] if len(row["name_key"].split()) >= 2 else ""
+    return render_template("student_name.html", sheet=g.sheet, typed=typed or guess, email=mask_email(row["email"]))
 
 
 @bp.route("/restart", methods=["POST"])

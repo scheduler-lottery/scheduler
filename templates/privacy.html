@@ -83,7 +83,9 @@
         {% if codes_by_workos %}
         Sign-in codes are emailed by WorkOS, a sign-in service, from {{ code_sender }}, on this site's behalf.
         WorkOS keeps a record of each address it sends a code to only until that person signs in (the site then
-        deletes it), and for a day at most.
+        deletes it), and for a day at most. An instructor can also have WorkOS email their class an invitation to
+        sign in. WorkOS keeps a record of each invitation (the address it went to), and has no way to delete one,
+        so the site cancels each once it's used.
         {% else %}
         Sign-in codes{% if code_sender %} come from {{ code_sender }}{% else %} are sent from a Gmail account{% endif %}.
         {% endif %}

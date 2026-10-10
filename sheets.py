@@ -200,7 +200,7 @@ def counts(sid):
 
 def get_roster(sid):
     return db.rows(
-        "SELECT name_key, display_name, email, is_test FROM roster WHERE sheet_id = :sid "
+        "SELECT name_key, display_name, email, is_test, name_pending FROM roster WHERE sheet_id = :sid "
         "ORDER BY is_test, lower(display_name)",
         sid=sid,
     )
@@ -294,6 +294,19 @@ def _keep_numbering(current_rows, incoming):
     return out
 
 
+def adopt_known_names(sid, students):
+    """Students from a list that had only their email, matched by that email
+    to someone already on this class's list: they keep the name they have
+    (a student who typed theirs keeps it)."""
+    known = {r["email"].lower(): r for r in get_roster(sid) if r["email"] and not r["is_test"]}
+    adopted = []
+    for s in students:
+        here = known.get((s["email"] or "").lower()) if s.get("name_pending") else None
+        adopted.append({**s, "name_key": here["name_key"], "display_name": here["display_name"],
+                        "name_pending": here["name_pending"]} if here else s)
+    return adopted
+
+
 def replace_roster(sid, students):
     """Swap in a new class list. Test students stay put, and a student the
     new list has no email for keeps the one already on file. Returns the
@@ -309,9 +322,9 @@ def replace_roster(sid, students):
     ])
     db.run("DELETE FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid)
     db.run_many(
-        "INSERT INTO roster (sheet_id, name_key, display_name, email, is_test) "
-        "VALUES (:sid, :name_key, :display_name, :email, 0)",
-        [{"sid": sid, **s} for s in incoming],
+        "INSERT INTO roster (sheet_id, name_key, display_name, email, is_test, name_pending) "
+        "VALUES (:sid, :name_key, :display_name, :email, 0, :name_pending)",
+        [{"sid": sid, "name_pending": 0, **s} for s in incoming],
     )
     db.run(
         "UPDATE sheets SET roster_updated_at = :at, updated_at = :at WHERE id = :sid",
@@ -343,9 +356,10 @@ def add_to_roster(sid, students):
             s, here = {**s, "name_key": normalize_name(name), "display_name": name}, None
         if here is None:
             db.run(
-                "INSERT INTO roster (sheet_id, name_key, display_name, email, is_test) "
-                "VALUES (:sid, :key, :name, :email, 0)",
+                "INSERT INTO roster (sheet_id, name_key, display_name, email, is_test, name_pending) "
+                "VALUES (:sid, :key, :name, :email, 0, :pending)",
                 sid=sid, key=s["name_key"], name=s["display_name"], email=email,
+                pending=s.get("name_pending", 0) if email else 0,
             )
             current[s["name_key"]] = {**s, "email": email, "is_test": 0}
             added += 1

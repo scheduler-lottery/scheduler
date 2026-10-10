@@ -77,6 +77,28 @@
   {% endif %}
   {% endif %}
 
+  <h3 id="invitations">Student invitations</h3>
+  <p>Instructors can have WorkOS email their class an invitation, with a button that signs each student in.
+    {% if invites.ready %}<strong>It's on.</strong>{% else %}<strong>It's off</strong> until a test invitation's link comes back to this site.{% endif %}</p>
+  {% if invites.on %}
+  {% if not invites.ready %}
+  <ol class="owner-steps">
+    <li>In WorkOS's dashboard, open <strong>Applications</strong>, then <strong>Redirects</strong>, and set the
+      <strong>User invitation URL</strong> to <code>{{ invites.url }}</code>.</li>
+    <li>Send yourself a test invitation below. If its link comes back here, it turns on for everyone.</li>
+  </ol>
+  {% endif %}
+  <form method="post" action="{{ url_for('owner.test_invitations') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-secondary btn-small" type="submit">Send me a test invitation</button>
+  </form>
+  {% else %}
+  <p class="mini-hint">It needs WorkOS to send this site's email: save its key above first.</p>
+  {% endif %}
+  <p class="mini-hint">WorkOS writes these emails, and keeps a record of each invitation (the address it went to).
+    It has no way to delete one, so each is cancelled once it's used. Testing again is needed after switching to
+    another WorkOS key.</p>
+
   <h2>Switch an account off or on</h2>
   <p class="mini-hint">
     For abuse only. A switched-off instructor can't sign in and their students' links stop working; nothing

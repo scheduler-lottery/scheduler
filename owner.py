@@ -43,7 +43,7 @@ MAX_FONT_BYTES = 600 * 1024
 # limits (email_log, auth_failures), which clear themselves within two
 # days. So do remote_users, so the daily job still deletes WorkOS's copies.
 EVERYTHING = (
-    "name_pins", "assignments", "submissions", "roster", "sheet_days", "sheets", "snapshots",
+    "name_pins", "assignments", "submissions", "roster", "invitations", "sheet_days", "sheets", "snapshots",
     "pending_uploads", "student_signouts", "login_codes", "login_links",
 )
 _uploaded = {"at": 0.0, "names": frozenset()}
@@ -116,6 +116,8 @@ def index():
         },
         smtp_from=settings.SMTP_FROM if settings.SMTP_HOST else "",
         everything=everything_counts(current_instructor()["id"]),
+        invites={"ready": signin.invites_ready(), "url": signin.invite_url(),
+                 "on": signin.email_mode() == "workos"},
     )
 
 
@@ -213,6 +215,16 @@ def clear_errors():
     db.commit()
     flash("Cleared the error log.", "success")
     return redirect(url_for("owner.index"))
+
+
+@bp.route("/invitations/test", methods=["POST"])
+@owner_required
+def test_invitations():
+    """WorkOS emails the owner a test invitation; if its link comes back
+    here, instructors can have WorkOS send their class invitations."""
+    ok, said = signin.test_invitations(current_instructor()["email"])
+    flash(said, "success" if ok else "error")
+    return redirect(url_for("owner.index", _anchor="invitations"))
 
 
 @bp.route("/delete-everything", methods=["POST"])

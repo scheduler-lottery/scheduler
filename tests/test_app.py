@@ -307,7 +307,7 @@ def test_first_upload_applies_and_reports(prof):
     with prof.app.app_context():
         stored = db.rows("SELECT * FROM roster WHERE sheet_id = :sid ORDER BY name_key", sid=sid)
     assert [r["display_name"] for r in stored] == ["Alex Johnson", "Riya Patel", "Sam Lee"]
-    assert set(stored[0]) == {"sheet_id", "name_key", "display_name", "email", "is_test"}
+    assert set(stored[0]) == {"sheet_id", "name_key", "display_name", "email", "is_test", "name_pending"}
     # The report stays until it's dismissed.
     assert "Added 3 students" in html(prof.get(f"/teach/s/{sid}"))
     prof.post(f"/teach/s/{sid}/roster/report/dismiss")
@@ -2163,6 +2163,7 @@ def test_the_owner_sees_free_plan_usage_and_hears_when_it_runs_high(prof, browse
 class FakeWorkOS:
     def __init__(self):
         self.sent, self.deleted, self.fail = [], [], False
+        self.invitations, self.invite_base = [], "http://localhost/invite"
 
     def __call__(self, method, path, body=None, timeout=10, key=None):
         from datetime import timedelta
@@ -2184,6 +2185,22 @@ class FakeWorkOS:
         if method == "DELETE" and path.startswith("/user_management/users/"):
             self.deleted.append(unquote(path.rsplit("/", 1)[1]))
             return {}
+        if method == "POST" and path == "/user_management/invitations":
+            n = len(self.invitations) + 1
+            invitation = {"id": f"invitation_{n}", "token": f"token{n}", "email": body["email"], "state": "pending",
+                          "accept_invitation_url": f"{self.invite_base}?invitation_token=token{n}"}
+            self.invitations.append(invitation)
+            return invitation
+        if method == "GET" and path.startswith("/user_management/invitations/by_token/"):
+            token = unquote(path.rsplit("/", 1)[1])
+            found = next((i for i in self.invitations if i["token"] == token), None)
+            if not found:
+                raise HTTPError(path, 404, "Not Found", None, io.BytesIO(b"{}"))
+            return found
+        if method == "POST" and path.endswith("/revoke"):
+            found = next(i for i in self.invitations if i["id"] == unquote(path.split("/")[-2]))
+            found["state"] = "revoked"
+            return found
         raise AssertionError(f"unexpected WorkOS call {method} {path}")
 
 
@@ -2662,7 +2679,9 @@ def test_a_new_sheet_goes_on_to_its_students_and_its_link_with_a_progress_bar(pr
     # With the list in, the setup page is on its last step: sharing.
     page = html(prof.get(f"/teach/s/{sid}/setup"))
     assert "Step 8 of 8" in page and "Share the link with your class" in page
-    assert "Copy the message" in page and "Email it to your 3 students" in page
+    assert "How should your 3 students get the link?" in page
+    assert "Send it for me" in page and "Not set up on this site yet" in page  # until the owner's test passes
+    assert "I'll send it myself" in page and "Email them myself" in page and "Copy the message" in page
     assert "alex@school.edu, riya@school.edu, sam@school.edu" in page  # the ready-made email's Bcc
     assert "3 students on your list" in text(page) and "Done: go to my class page" in page
     assert "students.csv" not in page
@@ -2739,3 +2758,89 @@ def test_messages_can_be_closed_and_canvas_steps_pick_up_after_signing_in(prof, 
     page = raw(prof.get(r.headers["Location"]))
     assert 'data-flash-stack' in page and 'class="flash-close" aria-label="Close this message"' in page
     assert "flash-error" in page
+
+
+
+# -- class lists of emails alone, adding students, and invitations ------------
+
+def test_a_list_of_emails_alone_works_and_each_student_types_their_name(prof, browser):
+    sid = prof.create_sheet(allow_unlisted=False)
+    prof.post(f"/teach/s/{sid}/roster", {"pasted": "alex.johnson@school.edu, ajones7@school.edu"})
+    page = html(prof.get(f"/teach/s/{sid}"))
+    assert "Alex Johnson" in page and "Ajones" in page and page.count("name not typed yet") == 2
+    # Alexis signs in with her email, and types her name before anything else.
+    alexis = browser()
+    assert alexis.post(f"/c/{sid}/login", {"name": "ajones7@school.edu"}).headers["Location"].endswith("/verify")
+    r = alexis.post(f"/c/{sid}/verify", {"code": alexis.last_code("ajones7@school.edu")})
+    assert alexis.get(r.headers["Location"]).headers["Location"].endswith(f"/c/{sid}/name")
+    assert alexis.post_json(f"/c/{sid}/save", {"ranking": day_keys(sid), "excluded": [], "comments": {}}).status_code == 409
+    page = html(alexis.get(f"/c/{sid}/name"))
+    assert "What's your name?" in page and 'value=""' in page  # "Ajones" isn't offered as a guess
+    assert "first and last name" in html(alexis.post(f"/c/{sid}/name", {"name": "Alexis"}))
+    page = html(alexis.post(f"/c/{sid}/name", {"name": "alex johnson"}))
+    assert "already called Alex Johnson" in page and 'value="alex johnson"' in page  # what she typed stays
+    assert alexis.post(f"/c/{sid}/name", {"name": "Alexis Jones"}).headers["Location"].endswith(f"/c/{sid}/home")
+    assert alexis.get(f"/c/{sid}/home").status_code == 200
+    rows = db_rows(prof.app, "SELECT display_name, name_pending FROM roster WHERE sheet_id = :sid ORDER BY email", sid=sid)
+    assert [(r["display_name"], r["name_pending"]) for r in rows] == [("Alexis Jones", 0), ("Alex Johnson", 1)]
+    # Adding the same emails again keeps the name she typed.
+    prof.post(f"/teach/s/{sid}/roster/quick-add", {"people": "ajones7@school.edu, new.person@school.edu"})
+    rows = db_rows(prof.app, "SELECT display_name FROM roster WHERE sheet_id = :sid ORDER BY email", sid=sid)
+    assert [r["display_name"] for r in rows] == ["Alexis Jones", "Alex Johnson", "New Person"]
+
+
+def test_students_can_be_added_from_the_class_list_and_sent_the_link(prof):
+    sid = prof.create_sheet(allow_unlisted=False)
+    prof.upload(sid)
+    page = html(prof.get(f"/teach/s/{sid}"))
+    assert 'id="add-students"' in page and "Send them the link" not in page
+    r = prof.post(f"/teach/s/{sid}/roster/quick-add", {"people": "Dana Wu <dana@school.edu>, eli.o@school.edu"})
+    page = html(prof.get(r.headers["Location"]))
+    assert "Added 2 students: Dana Wu, Eli O" in page
+    assert "Send them the link" in page and "dana@school.edu, eli.o@school.edu" in page  # the email's Bcc
+    assert "I'll send it myself" in page and "Not set up on this site yet" in page
+    assert "Send them the link" not in html(prof.get(f"/teach/s/{sid}"))  # just once
+    said = follow(prof, prof.post(f"/teach/s/{sid}/roster/quick-add", {"people": "dana@school.edu"}))
+    assert "all on your list already" in said
+    assert "at least one school email" in follow(prof, prof.post(f"/teach/s/{sid}/roster/quick-add", {"people": ""}))
+
+
+def test_workos_sends_invitations_once_the_owner_has_tested_them(prof, browser, monkeypatch):
+    sid = prof.create_sheet(allow_unlisted=False)
+    prof.post(f"/teach/s/{sid}/roster", {"pasted": "alex.johnson@school.edu\nSam Lee, sam@school.edu"})
+    owner = browser().sign_in_instructor("owner@gmail.com")
+    workos = _use_workos(monkeypatch)
+    # Off until the owner's test invitation comes back here.
+    assert "Not set up on this site yet" in html(prof.get(f"/teach/s/{sid}/setup?step=share"))
+    said = follow(prof, prof.post(f"/teach/s/{sid}/invite", {"back": "setup"}))
+    assert "isn't set up on this site yet" in said and not workos.invitations
+    workos.invite_base = "https://example.authkit.app/invite"
+    said = follow(owner, owner.post("/owner/invitations/test"))
+    assert "not to this site" in said and "http://localhost/invite" in said
+    assert workos.invitations[-1]["state"] == "revoked"
+    workos.invite_base = "http://localhost/invite"
+    said = follow(owner, owner.post("/owner/invitations/test"))
+    assert "instructors can now have WorkOS send" in said
+    assert "It's on." in html(owner.get("/owner/"))
+    # The owner's own test link: it works, and says so.
+    assert "The invitation works" in html(owner.post("/invite", {"invitation_token": workos.invitations[-1]["token"]}))
+
+    page = html(prof.get(f"/teach/s/{sid}/setup?step=share"))
+    assert "Send 2 invitations" in page
+    said = follow(prof, prof.post(f"/teach/s/{sid}/invite", {"back": "setup"}))
+    assert "WorkOS is emailing 2 students an invitation" in said
+    sent = {i["email"]: i for i in workos.invitations[2:]}
+    assert set(sent) == {"alex.johnson@school.edu", "sam@school.edu"}
+    assert "got one in the last day" in follow(prof, prof.post(f"/teach/s/{sid}/invite", {"back": "setup"}))
+    assert len(workos.invitations) == 4
+
+    # Its button signs Alex in, after a press (email scanners open links too), and it's used up.
+    alex = browser()
+    token = sent["alex.johnson@school.edu"]["token"]
+    assert "Sign me in" in html(alex.get(f"/invite?invitation_token={token}"))
+    r = alex.post("/invite", {"invitation_token": token})
+    assert r.headers["Location"].endswith(f"/c/{sid}/home")
+    assert alex.get(f"/c/{sid}/home").headers["Location"].endswith(f"/c/{sid}/name")  # added by email: name first
+    assert sent["alex.johnson@school.edu"]["state"] == "revoked"
+    assert "already used" in html(browser().post("/invite", {"invitation_token": token}))
+    assert q(prof.app, "SELECT COUNT(*) FROM invitations WHERE sheet_id = :sid", sid=sid) == 1  # Sam's, still out

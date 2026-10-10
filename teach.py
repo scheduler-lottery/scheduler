@@ -65,7 +65,7 @@ def _deadline_choices():
     zone, and today in it."""
     zone = _zone()
     return {"deadline_slots": deadlines.slots, "deadline_zone": deadlines.zone_label(zone),
-            "today": in_zone(now(), zone).date().isoformat()}
+            "today": in_zone(now(), zone).date().isoformat(), "invites_ready": signin.invites_ready()}
 
 
 # ---------------------------------------------------------------------------
@@ -1122,6 +1122,17 @@ def _sheet_page(sid, tab):
     if undo and undo.get("tell"):
         undo["emails"] = _changed_emails(sheet, undo["snap"], roster_rows)
     add_form = _pop_form("add_form", sid)
+    # Students just added from the class list's box: ways to send them the link.
+    just_added = _pop_form("just_added", sid)
+    if just_added:
+        emails = [r["email"] for r in roster_rows if r["name_key"] in set(just_added["keys"]) and r["email"]]
+        body = _announcement(sheet, share_url, counts)
+        just_added = {
+            "who": just_added["keys"], "count": len(emails), "back": "class", "copy_from": "announcement",
+            "compose": {"to": me["email"], "bcc": ", ".join(emails),
+                        "subject": f"Rank your presentation days for {sheet['title']}",
+                        "body": f"Hi,\n\n{body}\n\nThanks!\n"},
+        } if emails and body and sheet["bidding_open"] else None
 
     steps = [
         {"title": "Create your sign-up sheet", "done": True, "anchor": "top"},
@@ -1220,6 +1231,7 @@ def _sheet_page(sid, tab):
         course_look={"url": url_for("teach.set_look", sid=sid), "title": sheet["title"],
                      "theme": sheet["theme"] or settings.DEFAULT_THEME, "font": sheet["font"] or "mixed"},
         add_form=add_form,
+        just_added=just_added,
         download_url=download_url,
         email_on=signin.smtp_ready(),
         test_email=current_instructor()["email"],
@@ -1439,6 +1451,8 @@ def upload_roster(sid):
         flash(result.error, "error")
         return _list_back(sheet)
     message, tips = describe(result, source)
+    # Someone on the new list by email alone, already here: the name they have stays.
+    result.students = sheets.adopt_known_names(sheet["id"], result.students)
     if not source:
         message = message.replace(" from “”", "")
     warn = bool(result.duplicates or result.bad_emails or result.suspicious or result.garbled
@@ -1455,6 +1469,82 @@ def upload_roster(sid):
         "setup": bool(request.form.get("setup")),
     })
     return redirect(url_for("teach.review_roster", sid=sheet["id"], pid=pid))
+
+
+@bp.route("/s/<sid>/roster/quick-add", methods=["POST"])
+@instructor_required
+def quick_add(sid):
+    """Add students from the box on the class list: emails, or names and
+    emails, pasted any which way. Nothing on the list changes, so there's
+    nothing to review first; then they can be sent the link."""
+    sheet = owned_sheet(sid)
+    pasted = (request.form.get("people") or "").strip()
+    if not pasted:
+        flash("Type or paste at least one school email address.", "error")
+        return _back(sheet, "class-list")
+    result = parse_roster(pasted.encode("utf-8")[:MAX_UPLOAD_BYTES])
+    if result.error:
+        flash(result.error, "error")
+        return _back(sheet, "class-list")
+    before = {r["name_key"] for r in sheets.get_roster(sheet["id"])}
+    students = sheets.adopt_known_names(sheet["id"], result.students)
+    if sheets.get_roster(sheet["id"]):
+        sheets.take_snapshot(sheet, "roster", "Before students were added")
+    added, filled, changed = sheets.add_to_roster(sheet["id"], students)
+    auth.end_student_sessions(sheet["id"], changed, reason="list")
+    db.commit()
+    new_rows = [r for r in sheets.get_roster(sheet["id"]) if r["name_key"] not in before and not r["is_test"]]
+    if not new_rows and not filled:
+        flash("They're all on your list already.", "info")
+        return _back(sheet, "class-list")
+    names = ", ".join(r["display_name"] for r in new_rows[:6]) + (" …" if len(new_rows) > 6 else "")
+    flash(f"Added {plural(len(new_rows), 'student')}" + (f": {names}" if new_rows else "")
+          + (f", and filled in {plural(filled, 'missing email')}" if filled else "") + ".", "success")
+    for name, value in result.bad_emails[:3]:
+        flash(f"Left out “{value}”: it doesn't look like a whole email address.", "error")
+    if new_rows:
+        session["just_added"] = {"sid": sheet["id"], "keys": [r["name_key"] for r in new_rows if r["email"]]}
+    return _back(sheet, "class-list")
+
+
+@bp.route("/s/<sid>/invite", methods=["POST"])
+@instructor_required
+def invite(sid):
+    """"Send it for me": WorkOS emails an invitation to everyone on the list
+    with an email address (or just the students named), with a button that
+    signs them in to this class."""
+    sheet = owned_sheet(sid)
+    keys = set(request.form.getlist("key"))
+    if request.form.get("back") == "setup":
+        back = redirect(url_for("teach.setup", sid=sheet["id"], step="share"))
+    else:
+        back = _back(sheet, "class-list")
+    if not signin.invites_ready():
+        flash("Sending invitations through WorkOS isn't set up on this site yet, so nothing was sent. Send the "
+              "message from your own email instead.", "error")
+        return back
+    rows = [r for r in sheets.get_roster(sheet["id"])
+            if r["email"] and not r["is_test"] and (not keys or r["name_key"] in keys)]
+    if not rows:
+        flash("Nobody on your list has an email address to send an invitation to.", "error")
+        return back
+    sent, failed, skipped = signin.send_invitations(sheet["id"], [r["email"] for r in rows])
+    if sent:
+        db.run("UPDATE sheets SET shared_at = :at WHERE id = :sid AND shared_at IS NULL", at=iso(), sid=sheet["id"])
+    db.commit()
+    said = []
+    if sent:
+        sender = signin.code_sender()
+        said.append(f"WorkOS is emailing {plural(sent, 'student')} an invitation{f', from {sender}' if sender else ''}. "
+                    "Its button signs them in to this class.")
+    if skipped:
+        said.append(f"{plural(skipped, 'student')} got one in the last day, so they weren't sent another.")
+    if failed:
+        said.append(f"{plural(len(failed), 'invitation')} couldn't be sent, so email "
+                    f"{'that student' if len(failed) == 1 else 'them'} yourself: {', '.join(failed[:8])}"
+                    f"{' …' if len(failed) > 8 else ''}.")
+    flash(" ".join(said), "error" if failed else "success")
+    return back
 
 
 @bp.route("/s/<sid>/roster/review/<pid>", methods=["GET", "POST"])

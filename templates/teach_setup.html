@@ -70,21 +70,21 @@
       <a class="btn btn-primary" href="{{ url_for('teach.setup', sid=sheet.id, step='students') }}"><span aria-hidden="true">←</span> Add your students</a>
     </div>
     {% else %}
-    <p class="lead-line">Post this message where your class will see it, like a Canvas announcement, or email it to them. Edit it first if you like.</p>
+    {% if invite %}
+    <p class="lead-line">How should your {{ invite.count | plural('student') }} get the link?</p>
+    {% with send = {'who': None, 'count': invite.count, 'back': 'setup', 'compose': invite, 'copy_from': 'announcement'} %}
+    {% include "_send_link.html" %}
+    {% endwith %}
+    <label for="announcement" class="field-label setup-message-label">The message, for your own email or Canvas <span class="muted">(edit it if you like)</span></label>
+    <textarea id="announcement" rows="11" class="announcement">{{ announcement }}</textarea>
+    {% else %}
+    <p class="lead-line">Post this message where your class will see it, like a Canvas announcement. Edit it first if you like.</p>
     <label for="announcement" class="visually-hidden">Message for your students</label>
     <textarea id="announcement" rows="11" class="announcement">{{ announcement }}</textarea>
     <div class="helper-row">
       <button class="btn btn-primary" type="button" data-copy="#announcement"
               data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}">Copy the message</button>
-      {% if invite %}
-      <a class="btn btn-secondary" data-compose data-to="{{ invite.to }}" data-bcc="{{ invite.bcc }}" data-subject="{{ invite.subject }}" data-body="{{ invite.body }}"
-         data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}"
-         href="mailto:{{ invite.to }}?bcc={{ invite.bcc | replace(' ', '') }}&amp;subject={{ invite.subject | urlencode }}&amp;body={{ invite.body | urlencode }}">Email it to your {{ invite.count | plural('student') }}</a>
-      {% endif %}
     </div>
-    {% if invite %}
-    <p class="mini-hint">“Email it” opens the message, ready to send, in your own email, with your students' addresses in Bcc.</p>
-    {% with picker_id="invite", mail_why="It's picked to match your email address.", mail_account=me %}{% include "_mail_picker.html" %}{% endwith %}
     {% endif %}
     <p class="mini-hint">Students can also type the code <strong>{{ sheet.id }}</strong> on the {{ app_name }} home page.</p>
 

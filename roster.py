@@ -70,7 +70,7 @@ class RosterResult:
     ignored_columns: list = field(default_factory=list)
     skipped: int = 0  # rows with no name at all
     canvas_rows: int = 0  # Canvas's "Points Possible" and "Test Student" rows
-    email_only: list = field(default_factory=list)  # emails found on lines with no name
+    email_only: list = field(default_factory=list)  # added by email alone: each types their name later
     non_students: int = 0  # teachers/TAs dropped by a role column
     duplicates: list = field(default_factory=list)  # [(display name, dropped email)]: one name, can't tell apart
     numbered: list = field(default_factory=list)  # ["Alex Kim (2)"]: two people, one name, told apart by email
@@ -413,12 +413,26 @@ def _parse_rows(rows, lines):
     return result
 
 
-def _add(result, raw_name, email, seen):
+def name_from_email(email):
+    """A stand-in name, until the student types their own: "alex.johnson@x.edu"
+    -> "Alex Johnson", "ajohnson3@x.edu" -> "Ajohnson"."""
+    local = (email or "").partition("@")[0]
+    words = [w for w in re.split(r"[._\-+\d\s]+", local) if w]
+    return clean_name(" ".join(w[:1].upper() + w[1:].lower() for w in words)) or clean_name(local)
+
+
+def _add(result, raw_name, email, seen, pending=False):
     display_name = clean_name(raw_name)
     email = (email or "").strip()
     if not display_name:
+        found = find_email(email) if email else ""
+        if found and valid_email(found.lower()):
+            # An email and no name: they're on the list, and they type
+            # their own name the first time they sign in.
+            result.email_only.append(found.lower())
+            return _add(result, name_from_email(found), found, seen, pending=True)
         if email:
-            result.email_only.append(email)
+            result.bad_emails.append(("A line", email))
         else:
             result.skipped += 1
         return
@@ -430,8 +444,7 @@ def _add(result, raw_name, email, seen):
         display_name = clean_name(display_name.replace(found, " ")) if found else display_name
         email = email or found
         if not display_name or "@" in display_name:
-            result.email_only.append(email or display_name)
-            return
+            return _add(result, "", email or display_name, seen)
     email = email.lower()
     if email.startswith("mailto:"):
         email = email[7:]
@@ -454,10 +467,12 @@ def _add(result, raw_name, email, seen):
             result.repeated.append(display_name)
         else:
             # Two students with one name: both stay, told apart by their emails.
-            result.same_name.append({"name_key": key, "display_name": display_name, "email": email})
+            result.same_name.append({"name_key": key, "display_name": display_name, "email": email,
+                                     "name_pending": 1 if pending else 0})
         return
     seen.add(key)
-    result.students.append({"name_key": key, "display_name": display_name, "email": email})
+    result.students.append({"name_key": key, "display_name": display_name, "email": email,
+                            "name_pending": 1 if pending else 0})
 
 
 SAME_NAME_SUFFIX = re.compile(r" \((\d+)\)$")
@@ -491,7 +506,8 @@ def _number_same_names(result):
                        key=lambda name: name not in (name.lower(), name.upper()))
         for n, e in enumerate(group, start=1):
             name = numbered(spelling, n)
-            final.append({"name_key": normalize_name(name), "display_name": name, "email": e["email"]})
+            final.append({"name_key": normalize_name(name), "display_name": name, "email": e["email"],
+                          "name_pending": e.get("name_pending", 0)})
             if n > 1:
                 result.numbered.append(name)
     result.students = final
@@ -550,6 +566,24 @@ def _parse_table_without_header(rows, result):
         _add(result, raw, _cell(r, emails), seen)
 
 
+ADDRESS = re.compile(r"[A-Za-z0-9._%+'-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+")
+
+
+def _one_address_per_line(lines):
+    """Lines as pasted, but a line with several addresses on it (as copied
+    from an email's To: line, "Alex Kim <alex@x.edu>, sam@x.edu") as one
+    line per address, each with the name written before it."""
+    for line in lines:
+        found = list(ADDRESS.finditer(line))
+        if len(found) < 2:
+            yield line
+            continue
+        start = 0
+        for match in found:
+            yield line[start:match.end()]
+            start = match.end()
+
+
 def _parse_lines(lines, result):
     """One student per line: a name, maybe an email, separated by anything —
     "Alex Johnson, alex@school.edu", "Lee, Sam", "Maria Diaz; maria@x.edu"."""
@@ -557,7 +591,7 @@ def _parse_lines(lines, result):
         result.error = f"That has more than {MAX_ROWS:,} lines — is it the right list?"
         return
     seen = set()
-    for line in lines:
+    for line in _one_address_per_line(lines):
         email = find_email(line)
         rest = line
         if email:
@@ -651,10 +685,9 @@ def describe(result, source=""):
     if result.skipped:
         tips.append(f"Skipped {result.skipped} row{'s' if result.skipped != 1 else ''} with no name.")
     if result.email_only:
-        shown = ", ".join(result.email_only[:3]) + (" …" if len(result.email_only) > 3 else "")
-        n_lines = len(result.email_only)
-        tips.append(f"Skipped {n_lines} line{'s' if n_lines != 1 else ''} with an email address but no name "
-                    f"({shown}). If that's a student, add them with “Add a student who joined late”.")
+        n_only = len(result.email_only)
+        tips.append(f"{n_only} student{'s were' if n_only != 1 else ' was'} added by email address alone. "
+                    "Until they sign in and type their name, the list shows a name made from the address.")
     for name, value in result.bad_emails[:5]:
         tips.append(f"{name}'s email “{value}” looks incomplete (it needs an ending like .edu), so it was left "
                     "blank — they'll use a PIN until you fix it under “See or change the list”.")

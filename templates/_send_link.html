@@ -1,0 +1,34 @@
+{# How students get the link: WorkOS emails each one an invitation ("Send it
+   for me"), or the instructor does, from their own email or by copying the
+   message (to post in Canvas, say). Needs `send` = {who (name keys, or None
+   for everyone on the list), count, back ("setup" or "class"), compose (to,
+   bcc, subject, body), copy_from (the id of the message's text box)}. #}
+<div class="send-choices">
+  <section class="send-choice" aria-labelledby="send-for-me-{{ send.back }}">
+    <h3 class="send-title" id="send-for-me-{{ send.back }}">Send it for me</h3>
+    <p class="send-text">WorkOS emails {{ 'each of your ' ~ (send.count | plural('student')) if send.count > 1 else 'your student' }} an invitation{% if code_sender %}, from {{ code_sender }}{% endif %}. Its button signs them in to this class. WorkOS writes that email, so it won't include your message.</p>
+    {% if invites_ready %}
+    <form method="post" action="{{ url_for('teach.invite', sid=sheet.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="back" value="{{ send.back }}">
+      {% for key in send.who or [] %}<input type="hidden" name="key" value="{{ key }}">{% endfor %}
+      <button type="submit" class="btn btn-primary" data-confirm="Have WorkOS email {{ send.count | plural('student') }} an invitation now?">Send {{ send.count | plural('invitation') }}</button>
+    </form>
+    {% else %}
+    <p class="send-off">Not set up on this site yet.{% if is_owner %} <a href="{{ url_for('owner.index') }}#invitations">Set it up</a>{% else %} Whoever runs this site can turn it on.{% endif %}</p>
+    {% endif %}
+  </section>
+  <section class="send-choice" aria-labelledby="send-myself-{{ send.back }}">
+    <h3 class="send-title" id="send-myself-{{ send.back }}">I'll send it myself</h3>
+    <p class="send-text">From your own email, with their addresses in Bcc, or copy the message to post in Canvas.</p>
+    <div class="helper-row">
+      <a class="btn btn-secondary" data-compose data-to="{{ send.compose.to }}" data-bcc="{{ send.compose.bcc }}"
+         data-subject="{{ send.compose.subject }}" data-body="{{ send.compose.body }}"
+         data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}"
+         href="mailto:{{ send.compose.to }}?bcc={{ send.compose.bcc | replace(' ', '') }}&amp;subject={{ send.compose.subject | urlencode }}&amp;body={{ send.compose.body | urlencode }}">Email {{ 'them' if send.count > 1 else 'it' }} myself</a>
+      <button class="btn btn-secondary" type="button" data-copy="#{{ send.copy_from }}"
+              data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}">Copy the message</button>
+    </div>
+    {% with picker_id="send-" ~ send.back, mail_why="It's picked to match your email address.", mail_account=me %}{% include "_mail_picker.html" %}{% endwith %}
+  </section>
+</div>

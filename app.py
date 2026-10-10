@@ -381,6 +381,44 @@ def how_it_works():
     return render_template("how_it_works.html", algorithms=ALGORITHMS)
 
 
+@app.route("/invite", methods=["GET", "POST"])
+def accept_invitation():
+    """The button in an invitation WorkOS emailed (signin.send_invitations).
+    Opening the link only shows a button, since email scanners open links
+    too; pressing it signs the student in to their class (every class that
+    sent this invitation), and the invitation is used up."""
+    token = (request.values.get("invitation_token") or "")[:300]
+    if request.method == "GET":
+        return render_template("invite_accept.html", token=token, problem="" if token else "used")
+    invitation = signin.find_invitation(token) if token else None
+    if not invitation or invitation.get("state") != "pending":
+        return render_template("invite_accept.html", token="", problem="used")
+    email = (invitation.get("email") or "").lower()
+    rows = db.rows("SELECT sheet_id FROM invitations WHERE id = :id", id=invitation["id"])
+    signed = []
+    for row in rows:
+        sheet = sheets.get_sheet(row["sheet_id"])
+        student = db.row(
+            "SELECT name_key, display_name FROM roster WHERE sheet_id = :sid AND lower(email) = :email AND is_test = 0",
+            sid=row["sheet_id"], email=email,
+        ) if sheet and not sheet["owner_disabled"] else None
+        if not student:
+            continue
+        auth.sign_in_student(sheet["id"], student["display_name"], student["name_key"], "code",
+                             shared=request.form.get("shared") == "1")
+        signin.clear_refusals(sheet["id"], student["name_key"])
+        db.run("UPDATE sheets SET shared_at = :at WHERE id = :sid AND shared_at IS NULL", at=iso(), sid=sheet["id"])
+        signed.append(sheet)
+    db.run("DELETE FROM invitations WHERE id = :id", id=invitation["id"])
+    db.commit()
+    signin.revoke_invitation(invitation["id"])
+    if len(signed) == 1:
+        flash("You're signed in.", "success")
+        return redirect(url_for("student.home", sid=signed[0]["id"]))
+    return render_template("invite_accept.html", token="", classes=signed,
+                           problem="" if signed else "test" if not rows else "gone")
+
+
 @app.route("/privacy")
 def privacy():
     return render_template("privacy.html")

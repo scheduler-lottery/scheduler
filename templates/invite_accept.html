@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Your invitation — {{ app_name }}{% endblock %}
+{% block content %}
+{# Where the button in a WorkOS invitation lands (app.accept_invitation). #}
+<div class="card center-card">
+  {% if classes %}
+  <h1>You're signed in</h1>
+  <p class="subtitle">Your invitation was for more than one class. Pick one to rank its presentation days:</p>
+  <ul class="plain-rows">
+    {% for sheet in classes %}
+    <li class="plain-row"><a class="btn btn-primary btn-block" href="{{ url_for('student.home', sid=sheet.id) }}">{{ sheet.title }}</a></li>
+    {% endfor %}
+  </ul>
+  {% elif problem == 'test' %}
+  <h1>The invitation works</h1>
+  <p class="subtitle">This was a test invitation, and its button came back to this site, as it should.</p>
+  {% elif problem %}
+  <h1>This invitation was already used</h1>
+  <p class="subtitle">Or it expired. To sign in, open the link your instructor shared (or type your class's code on the
+    <a href="{{ url_for('landing') }}">front page</a>), then type your school email: we'll send you a code.</p>
+  {% else %}
+  <h1>You're invited to rank your presentation days</h1>
+  <p class="subtitle">Press the button to sign in to your class.</p>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="invitation_token" value="{{ token }}">
+    <label class="choice choice-small"><input type="checkbox" name="shared" value="1">
+      <span>This is a shared or library computer: sign me out after 20 minutes of not using it.</span></label>
+    <button type="submit" class="btn btn-primary">Sign me in</button>
+  </form>
+  <p class="hint">Not expecting this? You can close this page.</p>
+  {% endif %}
+</div>
+{% endblock %}
