@@ -502,8 +502,8 @@
       note.className = "undo-banner";
       note.setAttribute("role", "status");
       var words = document.createElement("span");
-      words.textContent = "Your Send to Scheduler button works. To bring a class list over, open your course in Canvas "
-        + "and click Send to Scheduler there.";
+      words.textContent = "That's the Send to Scheduler button. To bring a class list over, open your course in Canvas "
+        + "and click it there.";
       var shut = document.createElement("button");
       shut.type = "button";
       shut.className = "btn btn-ghost btn-small";
@@ -555,7 +555,10 @@
       var m = (raw || "").trim().match(/^(?:https?:\/\/)?([a-z0-9.-]+\.[a-z]{2,})\/courses\/(\d+)(?:\/external_tools\/(\d+))?/i);
       return m ? { host: m[1].toLowerCase(), course: m[2], tool: m[3] } : null;
     };
+    // The school's Canvas: the one saved on their account, else one a
+    // course address pasted here showed, else the one their email suggests.
     var host = function () {
+      if (guide.hasAttribute("data-host-saved")) return guide.getAttribute("data-host");
       return (quizBox && quizBox.getAttribute("data-canvas-host")) || store("canvas-host") || guide.getAttribute("data-host");
     };
     // Where Canvas should open for the download: Course Analytics, the
@@ -673,18 +676,26 @@
     // Something to show in the guide: its step of the class-list questions
     // comes into view, and any folded section around it opens.
     var reveal = function (el) {
+      for (var d = el.closest("details"); d; d = d.parentElement && d.parentElement.closest("details")) d.open = true;
       var step = stepBox.getAttribute && stepBox.getAttribute("data-step");
       if (quizBox && step) quizBox.dispatchEvent(new CustomEvent("quiz-go", { detail: step }));
-      for (var d = el.closest("details"); d; d = d.parentElement && d.parentElement.closest("details")) d.open = true;
     };
-    var say = function (text) { reveal(said); said.textContent = text; said.hidden = false; };
+    var say = function (text) {
+      reveal(said);
+      said.textContent = text;
+      said.hidden = false;
+      said.scrollIntoView({ block: "center", behavior: "smooth" });
+    };
     var currentKey = guide.getAttribute("data-button-key") || "";
     var currentVersion = Number(guide.getAttribute("data-button-v") || 0);
-    var outOfDate = function () {
+    var newButtonSteps = function () {
       store("canvas-button-installed", null);
       store("canvas-button-used", null);
       guide.querySelectorAll("[data-button-new]").forEach(function (el) { el.hidden = false; });
       guide.querySelectorAll("[data-button-known]").forEach(function (el) { el.hidden = true; });
+    };
+    var outOfDate = function () {
+      newButtonSteps();
       say("Your Send to Scheduler button is out of date. Drag this new one onto your bookmarks bar (step 2), then "
         + "delete the old one: right-click it and choose Delete.");
     };
@@ -735,10 +746,11 @@
         try { tab.close(); } catch (err) { /* fine */ }
         window.focus();
       }, 1200);
-      store("canvas-button-used", "1");
       var old = currentKey && msg.key !== currentKey;
+      if (old) newButtonSteps(); // the steps to drag the new one, up above
+      else store("canvas-button-used", "1");
       showArrived(msg, e.origin, "button", old ? "Your Send to Scheduler button is out of date, so you'll see this list "
-        + "once more before it goes in. To skip that next time, drag the new button from this page onto your bookmarks "
+        + "once more before it goes in. To skip that next time, drag the new button (above) onto your bookmarks "
         + "bar." : "");
     });
 

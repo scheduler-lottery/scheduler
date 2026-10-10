@@ -124,11 +124,11 @@
     if (run.stopped) return;
     var why = err && err.message;
     if (why === "signin") done("Sign in to Canvas first (in this tab), then click Send to Scheduler again.");
-    else if (why === "forbidden") done("Canvas didn't let this button see that course's class list. Is it a course you teach?",
-      pickAgain ? again : null);
+    else if (why === "forbidden" && onCanvas) done("Canvas didn't let this button see that course's class list. Is it a course "
+      + "you teach?", pickAgain ? again : null);
     else if (why === "missing" && onCanvas) done("Canvas couldn't find that course. Open your course in Canvas, then click "
       + "Send to Scheduler again.");
-    else if (why === "busy" || why === "offline" || onCanvas) done("Canvas didn't answer just now. Wait a minute, then click "
+    else if ((why === "busy" || why === "offline") || (onCanvas && why !== "forbidden")) done("Canvas didn't answer just now. Wait a minute, then click "
       + "Send to Scheduler again. If it keeps happening, go back to Scheduler and use “Copy and paste instead”.");
     else done("This page isn't Canvas yet. If you're still signing in, finish signing in first. When you see your Canvas "
       + "Dashboard or your course, click Send to Scheduler again.");
@@ -140,12 +140,13 @@
   var here = location.pathname.match(/\/courses\/(\d+)/);
   if (here) {
     show("Getting the class list…");
-    get("/api/v1/courses/" + here[1]).then(function (got) { fetchStudents(got.data); }, function (err) { trouble(err, true); });
+    get("/api/v1/courses/" + here[1] + "?include[]=term").then(function (got) { fetchStudents(got.data); },
+      function (err) { trouble(err, true); });
   } else {
     askOpener(function (id) {
       if (!id) { pick(); return; }
       show("Getting the class list…");
-      get("/api/v1/courses/" + id).then(function (got) { fetchStudents(got.data); }, pick);
+      get("/api/v1/courses/" + id + "?include[]=term").then(function (got) { fetchStudents(got.data); }, pick);
     });
   }
 
@@ -209,7 +210,8 @@
   function fetchStudents(course) {
     if (run.stopped) return;
     run.busy = true;
-    var name = (course && course.name) || "your course";
+    var term = course && course.term && course.term.name && !/default term/i.test(course.term.name) ? course.term.name : "";
+    var name = ((course && course.name) || "your course") + (term ? " (" + term + ")" : "");
     show("Getting the class list for " + name + "…");
     all("/api/v1/courses/" + course.id + "/users?enrollment_type[]=student&include[]=email&per_page=100").then(function (users) {
       if (run.stopped) return;

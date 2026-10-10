@@ -3038,7 +3038,7 @@ def test_lists_from_canvas_are_checked_limited_and_swept(prof, browser, monkeypa
     # Old lists go as soon as another arrives, and an old one can't be opened.
     with prof.app.app_context():
         iid = db.scalar("SELECT id FROM canvas_imports LIMIT 1")
-        db.run("UPDATE canvas_imports SET created_at = :old", old=PASSED)
+        db.run("UPDATE canvas_imports SET expires_at = :old", old=PASSED)
         db.commit()
     assert "waited too long" in follow(prof, prof.get(f"/teach/canvas-import/{iid}"))
     _from_canvas(canvas.client, _canvas_list())
@@ -3105,15 +3105,43 @@ def test_a_list_from_canvas_goes_to_the_sheet_tied_to_its_course(prof, browser):
     assert "came from LAW 310 in Canvas; this one is from BIO 101" in review
     prof.post(r.headers["Location"], {"action": "cancel"})
     assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=a) == "111"
-    # Even an empty sheet tied to another course gets the second look.
+    # Replacing it with that course's list after all: the sheet is now that course's.
+    r = prof.post(f"/teach/s/{a}/canvas-list", {"list": _canvas_list(n=3, key=key, course_id="222", course="BIO 101")})
+    prof.post(r.headers["Location"], {"action": "replace"})
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=a) == "222"
+    # Undo puts the tie back with the list; clearing the list unties it; a file replacing it unties it too.
+    undo = re.search(r'action="([^"]*/undo/[^"]*)"', raw(prof.get(f"/teach/s/{a}")))
+    form = dict(re.findall(r'name="(parts|key)" value="([^"]*)"', raw(prof.get(f"/teach/s/{a}")).split(undo.group(1))[1][:600]))
+    prof.post(html_lib.unescape(undo.group(1)), form)
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=a) == "111"
+    prof.post(f"/teach/s/{a}/roster/clear")
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=a) is None
+    prof.post(f"/teach/s/{a}/canvas-list", {"list": _canvas_list(n=3, key=key, course_id="111", course="LAW 310")})
+    prof.upload(a, "Name,Email\nAlex Kim,alex@x.edu\n")
+    review = re.search(r"/roster/review/\w+", raw(prof.get(f"/teach/s/{a}")))
+    if review:
+        prof.post(f"/teach/s/{a}" + review.group(0), {"action": "replace"})
+    with prof.app.app_context():
+        pid = db.scalar("SELECT id FROM pending_uploads WHERE sheet_id = :s", s=a)
+    if pid:
+        prof.post(f"/teach/s/{a}/roster/review/{pid}", {"action": "replace"})
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=a) is None
+    # An empty sheet still tied to an old course just takes the new one.
     c = prof.create_sheet(title="Seminar", allow_unlisted=False)
     with prof.app.app_context():
         db.run("UPDATE sheets SET canvas_course_id = '333', canvas_course = 'SEM 1' WHERE id = :s", s=c)
         db.commit()
     r = prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=2, key=key, course_id="444")})
-    assert "/roster/review/" in r.headers["Location"]
-    prof.post(r.headers["Location"], {"action": "replace"})
+    assert r.headers["Location"].endswith(f"/teach/s/{c}#class-list")
     assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=c) == "444"
+    # Two courses with one name are told apart by number.
+    r = prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=2, key=key, course_id="555",
+                                                                     course="2026FA_BUSCOM_615_SEC1")})
+    prof.post(r.headers["Location"], {"action": "replace"})
+    r = prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=2, key=key, course_id="556",
+                                                                     course="2026FA_BUSCOM_615_SEC1")})
+    assert ("came from Canvas course 555; this one is from course 556, which has the same name"
+            in text(prof.get(r.headers["Location"])))
 
 
 def test_the_button_teaches_the_site_which_canvas_is_theirs(prof, browser):
@@ -3137,12 +3165,41 @@ def test_a_list_waiting_for_a_new_sheet_gets_time_to_make_it(prof, browser):
         db.commit()
     prof.post(waiting, {"sheet": "new"})
     with prof.app.app_context():
-        assert db.scalar("SELECT created_at FROM canvas_imports") > iso(now() - timedelta(minutes=1))
-        db.run("UPDATE canvas_imports SET created_at = :old", old=PASSED)  # but left far too long
+        assert db.scalar("SELECT expires_at FROM canvas_imports") > iso(now() + timedelta(minutes=29))
+        db.run("UPDATE canvas_imports SET expires_at = :old", old=PASSED)  # but left far too long
         db.commit()
     r = prof.post("/teach/new", {"title": "Late", "day_date": [a_date("Mon", 0), a_date("Tue", 1)],
                                  "day_key": ["", ""], "capacity": "2"})
     assert "waited more than half an hour" in follow(prof, r)
+    # Never kept past an hour from arriving, however often a new sheet is chosen.
+    waiting = _from_canvas(browser().client, _canvas_list(n=2, key=_button_key(prof))).headers["Location"]
+    prof.get(waiting)
+    with prof.app.app_context():
+        db.run("UPDATE canvas_imports SET created_at = :t", t=iso(now() - timedelta(minutes=50)))
+        db.commit()
+    prof.post(waiting, {"sheet": "new"})
+    with prof.app.app_context():
+        assert db.scalar("SELECT expires_at FROM canvas_imports") < iso(now() + timedelta(minutes=11))
+    # Added to a sheet after all (or thrown away): no false "it expired" later.
+    sid = prof.create_sheet(allow_unlisted=False)
+    prof.post(waiting, {"sheet": sid})
+    r = prof.post("/teach/new", {"title": "Later", "day_date": [a_date("Mon", 0), a_date("Tue", 1)],
+                                 "day_key": ["", ""], "capacity": "2"})
+    assert "waited more than half an hour" not in follow(prof, r)
+
+
+def test_lists_waiting_are_few_per_instructor_and_odd_text_is_kept_out(prof, browser):
+    canvas = browser()
+    waits = [_from_canvas(canvas.client, _canvas_list()).headers["Location"] for _ in range(4)]
+    for w in waits:
+        prof.get(w)  # each opened: theirs
+    assert q(prof.app, "SELECT COUNT(*) FROM canvas_imports") == 3  # the oldest went
+    assert "already added" in follow(prof, prof.get(waits[0]))
+    odd = json.dumps({"type": "scheduler-class-list", "course": "X\ud800", "students": [{"name": "A \ud800 B\u0007",
+                                                                                            "email": "a@b.edu"}]})
+    w = _from_canvas(canvas.client, odd).headers["Location"]
+    assert "/teach/canvas-import/" in w and q(prof.app, "SELECT COUNT(*) FROM error_log") == 0
+    assert "1 student from X" in text(prof.get(w))
 
 
 def test_canvas_text_that_isnt_a_class_list_never_becomes_students():
@@ -3157,6 +3214,20 @@ def test_canvas_text_that_isnt_a_class_list_never_becomes_students():
     copied = 'JSON  Raw Data  Headers\n[{"id":0,"name":"Kim, Alex","sortable_name":"Kim, Alex","email":"a@x.edu"}]'
     result = parse_roster(copied.encode())
     assert not result.error and [s["display_name"] for s in result.students] == ["Alex Kim"]
+    error_after = 'JSON  Raw Data  Headers\n{"errors":[{"message":"The specified resource does not exist."}]}'
+    assert "couldn't show that page" in parse_roster(error_after.encode()).error
+    cut_start = '},{"id":2,"name":"Student 2","sortable_name":"2, S","email":"s2@x.edu"},{"id":3,"name":"S 3","email":"s3@x.edu"}]'
+    assert "Only part" in parse_roster(cut_start.encode()).error
+    pretty_cut = '[\n  {\n    "id": 0,\n    "name": "Student 0",\n    "sortable_name": "0, Student",\n  },\n  {\n    "id": 1'
+    assert "Only part" in parse_roster(pretty_cut.encode()).error
+    assert "isn't a class list" in parse_roster(b'[{"id":11,"course_id":101,"name":"LAW 310 Sec 1","start_at":null}]').error
+    assert "isn't a class list" in parse_roster(b'{"id":1,"name":"Alex","primary_email":"a@x.edu","login_id":"a"}').error
+    enrollments = ('[{"id":900,"type":"StudentEnrollment","user":{"id":0,"name":"Student 0","login_id":"s0@x.edu"}},'
+                   '{"id":901,"type":"TeacherEnrollment","user":{"id":1,"name":"Prof","login_id":"p@x.edu"}}]')
+    assert [s["display_name"] for s in parse_roster(enrollments.encode()).students] == ["Student 0"]
+    names = parse_roster(b'[{"name":"Alex Kim"},{"name":"Sam Lee"}]')
+    assert [s["display_name"] for s in names.students] == ["Alex Kim", "Sam Lee"]
+    assert "doesn't look like a class list" in parse_roster(("[" * 100000 + "]" * 100000).encode()).error
 
 
 def test_canvas_names_written_last_first_are_turned_round_not_cut(prof):

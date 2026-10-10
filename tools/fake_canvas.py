@@ -169,7 +169,10 @@ def api_course(cid):
     if cid not in COURSES:
         return api({"errors": [{"message": "The specified resource does not exist."}]}, 404)
     c = COURSES[cid]
-    return api({"id": int(cid), "name": c["name"], "course_code": c["course_code"]})
+    course = {"id": int(cid), "name": c["name"], "course_code": c["course_code"]}
+    if "term" in request.args.getlist("include[]"):
+        course["term"] = {"id": 1, **c["term"]}
+    return api(course)
 
 
 @app.route("/api/v1/courses/<cid>/users")

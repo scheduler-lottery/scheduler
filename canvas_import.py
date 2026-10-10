@@ -31,9 +31,11 @@ from datetime import timedelta
 from urllib.parse import quote
 
 import db
-from util import iso, new_id, now, parse_iso
+from util import iso, iso_precise, new_id, now, parse_iso
 
 KEEP = timedelta(minutes=30)
+LONGEST = timedelta(hours=1)  # however often it's kept longer (wait_longer)
+CLAIMED_EACH = 3  # lists one instructor may have open at once
 MAX_BYTES = 300 * 1024
 MAX_STUDENTS = 3000
 MAX_WAITING = 200  # lists waiting at once, from everyone: a ceiling no flood gets past
@@ -42,7 +44,10 @@ SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bookmarklet",
 
 
 def _text(value, limit):
-    return " ".join(str(value or "").split())[:limit]
+    """Plain text: no control characters, no lone surrogates (which can't
+    be stored), spaces collapsed."""
+    text = "".join(ch for ch in str(value or "") if ch >= " " and not 0xD800 <= ord(ch) <= 0xDFFF and ch != "\x7f")
+    return " ".join(text.split())[:limit]
 
 
 def read(raw):
@@ -116,7 +121,10 @@ def sent_by(data, instructor_id):
 
 
 def sweep():
-    db.run("DELETE FROM canvas_imports WHERE created_at < :t", t=iso(now() - KEEP))
+    """Lists past their time go. (expires_at; lists from before it existed
+    by their arrival.)"""
+    db.run("DELETE FROM canvas_imports WHERE expires_at < :now OR (expires_at IS NULL AND created_at < :old)",
+           now=iso(), old=iso(now() - KEEP))
 
 
 def store(data, origin):
@@ -129,18 +137,21 @@ def store(data, origin):
     sweep()
     waiting = db.scalar("SELECT COUNT(*) FROM canvas_imports") or 0
     if waiting >= MAX_WAITING:
+        needed = waiting - MAX_WAITING + 1
         oldest = [r["id"] for r in db.rows(
-            "SELECT id FROM canvas_imports WHERE claimed_by IS NULL ORDER BY created_at LIMIT :n",
-            n=waiting - MAX_WAITING + 1)]
-        if len(oldest) < waiting - MAX_WAITING + 1:
+            "SELECT id FROM canvas_imports WHERE claimed_by IS NULL ORDER BY created_at LIMIT :n", n=needed)]
+        # Only if still unopened: one opened this very moment stays.
+        gone = sum(db.run("DELETE FROM canvas_imports WHERE id = :id AND claimed_by IS NULL", id=old)
+                   for old in oldest)
+        if gone < needed:
             db.commit()
             return None
-        for old in oldest:
-            forget(old)
     iid = new_id(22)
     kept = {k: data[k] for k in ("course", "course_id", "key", "v", "students")}
-    db.run("INSERT INTO canvas_imports (id, data, origin, created_at) VALUES (:id, :data, :origin, :at)",
-           id=iid, data=json.dumps(kept, ensure_ascii=False, separators=(",", ":")), origin=origin or "", at=iso())
+    db.run("INSERT INTO canvas_imports (id, data, origin, created_at, expires_at) "
+           "VALUES (:id, :data, :origin, :at, :until)",
+           id=iid, data=json.dumps(kept, ensure_ascii=False, separators=(",", ":")), origin=origin or "", at=iso_precise(),
+           until=iso(now() + KEEP))
     db.commit()
     return iid
 
@@ -150,10 +161,11 @@ def load(iid, instructor_id):
     it. None if there's none, it's someone else's, or it's too old."""
     if not re.fullmatch(r"[A-Za-z0-9_-]{10,40}", iid or ""):
         return None
-    row = db.row("SELECT data, origin, claimed_by, created_at FROM canvas_imports WHERE id = :id", id=iid)
+    row = db.row("SELECT data, origin, claimed_by, created_at, expires_at FROM canvas_imports WHERE id = :id", id=iid)
     if not row:
         return None
-    if parse_iso(row["created_at"]) < now() - KEEP:
+    until = parse_iso(row["expires_at"]) if row["expires_at"] else parse_iso(row["created_at"]) + KEEP
+    if until < now():
         forget(iid)
         db.commit()
         return None
@@ -162,6 +174,10 @@ def load(iid, instructor_id):
     if not row["claimed_by"]:
         db.run("UPDATE canvas_imports SET claimed_by = :me WHERE id = :id AND claimed_by IS NULL",
                me=instructor_id, id=iid)
+        # A few open at once, each: an instructor's oldest beyond that go.
+        for old in db.rows("SELECT id FROM canvas_imports WHERE claimed_by = :me AND id <> :id "
+                           "ORDER BY created_at DESC", me=instructor_id, id=iid)[CLAIMED_EACH - 1:]:
+            forget(old["id"])
         db.commit()
         if db.scalar("SELECT claimed_by FROM canvas_imports WHERE id = :id", id=iid) != instructor_id:
             return None
@@ -176,10 +192,12 @@ def forget(iid):
 
 def wait_longer(iid, instructor_id):
     """Their list, kept another half hour from now (while they make a sheet
-    for it). Commits."""
-    db.run("UPDATE canvas_imports SET created_at = :at WHERE id = :id AND claimed_by = :me",
-           at=iso(), id=iid, me=instructor_id)
-    db.commit()
+    for it), but never past an hour after it arrived. Commits."""
+    row = db.row("SELECT created_at FROM canvas_imports WHERE id = :id AND claimed_by = :me", id=iid, me=instructor_id)
+    if row:
+        until = min(now() + KEEP, parse_iso(row["created_at"]) + LONGEST)
+        db.run("UPDATE canvas_imports SET expires_at = :until WHERE id = :id", until=iso(until), id=iid)
+        db.commit()
 
 
 @functools.lru_cache(maxsize=1)

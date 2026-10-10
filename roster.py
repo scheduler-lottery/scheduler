@@ -403,7 +403,10 @@ def parse_roster(data):
     if from_canvas is not None:
         return parse_people(from_canvas) if from_canvas else RosterResult(
             error="That's from Canvas, but it has no students in it. Is it the right course's list?")
-    rows, lines = _rows_from_text(text)
+    try:
+        rows, lines = _rows_from_text(text)
+    except csv.Error:  # a "line" longer than any name could be
+        return RosterResult(error=f"That doesn't look like a class list. {SAVE_AS_CSV} {PASTE_INSTEAD}")
     return _parse_rows(rows, lines)
 
 
@@ -414,48 +417,57 @@ CANVAS_SAID_NO = "That's Canvas saying it couldn't show that page. Open your cou
 CANVAS_PARTIAL = "Only part of Canvas's page came across. Copy all of it (Ctrl A, then Ctrl C) and paste it again."
 CANVAS_COURSES = ("That's your list of Canvas courses, not a class list. Under “Copy and paste instead”, paste it "
                   "in that box: it takes you on to the students.")
+CANVAS_NOT_A_LIST = ("That's from Canvas, but it isn't a class list. Under “Copy and paste instead”, Show my Canvas "
+                     "courses takes you to the right page.")
+JSON_KEY = re.compile(r'"[A-Za-z_]+"\s*:')
+PERSON_KEYS = ("sortable_name", "login_id", "short_name", "email", "primary_email")
 
 
 def _canvas_api_people(text):
     """A copy of what Canvas's API shows in the browser (a course's users, as
     JSON; once it started "while(1);", and a copy may carry a little text
-    around it): its people as (name, email) pairs, keeping nothing else. A
-    message, if it's Canvas saying no, Canvas's list of courses, or only
-    part of a page; None if it isn't from Canvas."""
+    around it): its people as (name, email) pairs, keeping nothing else.
+    Any other text that's plainly Canvas's JSON (its courses, an error, a
+    page cut short) gets a message saying what it is, and is never read as
+    names. None if it isn't JSON at all."""
     original = text.strip()
-    body = original
-    if body.startswith("while(1);"):
-        body = body[len("while(1);"):].strip()
-    if body.startswith("{") and '"errors"' in body[:500]:
-        lowered = body[:500].lower()
+    body = original[len("while(1);"):].strip() if original.startswith("while(1);") else original
+    if body.replace(" ", "") == "[]":
+        return []
+    head = body[:600]
+    if not original.startswith("while(1);") and len(JSON_KEY.findall(head)) < 2:
+        return None
+    if '"errors"' in head:
+        lowered = head.lower()
         if "authorization required" in lowered or "unauthenticated" in lowered:
             return CANVAS_SIGNED_OUT
         if "not authorized" in lowered or "unauthorized" in lowered:
             return CANVAS_NOT_ALLOWED
         return CANVAS_SAID_NO
-    start, end = body.find("["), body.rfind("]")
-    if start < 0 or start > 200:
-        return None
-    looks_like_canvas = original.startswith("while(1);") or body[start:start + 2] == "[{"
+    opens = [i for i in (body.find("["), body.find("{")) if 0 <= i <= 200]
+    if not opens:
+        return CANVAS_PARTIAL
+    start = min(opens)
+    end = body.rfind("]" if body[start] == "[" else "}")
     if end < start:
-        return CANVAS_PARTIAL if looks_like_canvas and '"name"' in body[:2000] else None
-    body = body[start:end + 1]
-    if body.replace(" ", "") == "[]":
-        return []
-    if '"name"' not in body[:2000]:
-        return None
+        return CANVAS_PARTIAL
     try:
-        people = json.loads(body)
+        found = json.loads(body[start:end + 1])
     except (ValueError, RecursionError):
-        return CANVAS_PARTIAL if looks_like_canvas else None
-    if not isinstance(people, list) or not all(isinstance(p, dict) for p in people):
-        return None
-    if any("course_code" in p or "enrollment_term_id" in p for p in people):
+        return CANVAS_PARTIAL
+    if not isinstance(found, list) or not all(isinstance(p, dict) for p in found):
+        return CANVAS_NOT_A_LIST
+    if not found:
+        return []
+    if any("course_code" in p or "enrollment_term_id" in p for p in found):
         return CANVAS_COURSES
-    if not any(k in p for p in people for k in ("sortable_name", "login_id", "short_name", "email")):
-        return None
+    if all(isinstance(p.get("user"), dict) for p in found):  # enrollments: each person inside
+        found = [p["user"] for p in found if "student" in str(p.get("type") or "student").lower()]
+    elif not (any(k in p for p in found for k in PERSON_KEYS)
+              or all(set(p) <= {"id", "name", "email"} for p in found)):
+        return CANVAS_NOT_A_LIST
     out = []
-    for person in people:
+    for person in found:
         name = " ".join(str(person.get("name") or person.get("sortable_name") or "").split())
         login = str(person.get("login_id") or "")
         email = str(person.get("email") or person.get("primary_email") or (login if "@" in login else "")).strip()

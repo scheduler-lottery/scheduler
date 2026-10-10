@@ -3,7 +3,7 @@
    the professor's own browser (app.js). On the class-list questions, and,
    once a sheet has a list, under "Update from Canvas". #}
 {% set canvas_host = canvas.domain if canvas else 'canvas.instructure.com' %}
-<div class="canvas-guide" data-canvas-guide data-sheet="{{ sheet.id }}" data-host="{{ canvas_host }}"
+<div class="canvas-guide" data-canvas-guide data-sheet="{{ sheet.id }}" data-host="{{ canvas_host }}"{% if canvas and canvas.saved %} data-host-saved{% endif %}
      data-list-url="{{ url_for('teach.canvas_list_here', sid=sheet.id) }}"{% if setup %} data-setup="1"{% endif %}
      data-canvas-course-id="{{ sheet.canvas_course_id or '' }}"
      data-button-key="{{ canvas_button_key() }}" data-button-v="{{ canvas_button_version() }}">

@@ -270,13 +270,14 @@ CREATE TABLE IF NOT EXISTS invitations (
 -- that runs in Canvas): it arrives without a sign-in (a post from another
 -- site), so it waits here under an unguessable id until a signed-in
 -- instructor picks the sheet it goes to; the first to open it claims it.
--- Only names and emails. Gone once used, or after half an hour.
+-- Only names and emails. Gone once used, or when it expires.
 CREATE TABLE IF NOT EXISTS canvas_imports (
     id         TEXT PRIMARY KEY,
     data       TEXT NOT NULL,
     origin     TEXT,  -- the site that really sent it (the post's Origin header)
     claimed_by TEXT,  -- the instructor who opened it
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    expires_at TEXT   -- half an hour on, a little longer while they make a sheet for it
 );
 
 -- Daily totals the site keeps about itself (requests answered, bytes sent,

@@ -39,7 +39,7 @@ SHEET_FIELDS = (
     "id", "title", "note", "rank_by", "capacity_per_day", "algorithm", "bidding_open",
     "allow_unlisted", "show_preview", "include_unranked", "lottery_seed", "last_algorithm",
     "scheduled_at", "schedule_signature", "published_at", "roster_updated_at", "created_at",
-    "updated_at",
+    "updated_at", "canvas_course_id", "canvas_course",
 )
 # What a restore puts back. Whether sign-ups are open, and whether the
 # schedule is published, are left as they are now: going back to an earlier
@@ -1110,16 +1110,20 @@ def restore(sheet_id, owner_id, data, keep_newer=True, parts=None):
             rows[r["name_key"]] = {
                 "sid": sheet_id, "name_key": r["name_key"], "display_name": r["display_name"],
                 "email": r.get("email") or "", "is_test": 1 if r.get("is_test") else 0,
+                "name_pending": 1 if r.get("name_pending") and r.get("email") else 0,
             }
         db.run_many(
-            "INSERT INTO roster (sheet_id, name_key, display_name, email, is_test) "
-            "VALUES (:sid, :name_key, :display_name, :email, :is_test)",
+            "INSERT INTO roster (sheet_id, name_key, display_name, email, is_test, name_pending) "
+            "VALUES (:sid, :name_key, :display_name, :email, :is_test, :name_pending)",
             rows.values(),
         )
         db.run(
             "UPDATE sheets SET roster_updated_at = :rat WHERE id = :sid",
             rat=(saved.get("roster_updated_at") or at) if rows else None, sid=sheet_id,
         )
+        if "canvas_course_id" in saved:  # (restore points from before sheets knew their Canvas course don't say)
+            db.run("UPDATE sheets SET canvas_course_id = :cid, canvas_course = :name WHERE id = :sid",
+                   cid=saved.get("canvas_course_id") or None, name=saved.get("canvas_course") or None, sid=sheet_id)
         after = {k: r["email"] for k, r in rows.items() if not r["is_test"]}
         changed = _signin_changes(before, after, pinned)
         _drop_pins(sheet_id, [k for k, email in after.items() if email])

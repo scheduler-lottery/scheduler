@@ -555,25 +555,29 @@ def new_sheet():
             flash("You already have a sheet with this title — the link code under each title on your list "
                   "tells them apart.", "info")
         # A class list sent from Canvas for "a new sign-up sheet": it goes in now.
-        expected = bool(session.get("canvas_list"))
         waiting, listed = _waiting_canvas_list()
         session.pop("canvas_list", None)
         if listed:
             canvas_import.forget(waiting)
             db.commit()
             return _take_canvas_list(sheets.get_sheet(sid), listed, setup=True)
-        if expected:
-            flash("Your class list from Canvas waited more than half an hour, so it was deleted to keep it private. "
-                  "Your sheet is made: in Canvas, click Send to Scheduler again.", "info")
         return redirect(url_for("teach.setup", sid=sid))
     return render_template("sheet_form.html", form=_blank_form(), mode="new", max_days=sheets.MAX_DAYS,
                            canvas_waiting=_waiting_canvas_list()[1])
 
 
+CANVAS_LIST_GONE = ("Your class list from Canvas waited more than half an hour, so it was deleted to keep it private. "
+                    "Once your sheet is made, click Send to Scheduler in Canvas again.")
+
+
 def _waiting_canvas_list():
     """The list from Canvas this instructor chose to start a new sheet with
-    (its id, and the list), if it's still there."""
+    (its id, and the list), if it's still there. If it was, but has since
+    expired, they're told (once). Lists added elsewhere or thrown away
+    clear the choice when that happens (canvas_list)."""
     waiting = session.get("canvas_list")
+    if not waiting:
+        return None, None
     me = current_instructor()
     if not isinstance(waiting, dict) or waiting.get("owner") != me["id"]:
         session.pop("canvas_list", None)
@@ -581,6 +585,7 @@ def _waiting_canvas_list():
     listed = canvas_import.load(waiting.get("iid"), me["id"])
     if not listed:
         session.pop("canvas_list", None)
+        flash(CANVAS_LIST_GONE, "info")
     return waiting.get("iid"), listed
 
 
@@ -1519,7 +1524,7 @@ def _take_list(sheet, data, source, source_label, pasted=False, setup=False, par
     current = [r for r in sheets.get_roster(sheet["id"]) if not r["is_test"]]
     if not current and unverified is None and not look_first:
         _apply_roster(sheet, result.students, "replace", message, tips, warn, source_label, sections)
-        _tie_to_canvas(sheet, canvas)
+        _tie_to_canvas(sheet, canvas, "replace")
         return _list_back(sheet, setup)
     pid = _store_pending(sheet, "roster", {
         "students": result.students, "message": message, "tips": tips, "warn": warn,
@@ -1540,13 +1545,21 @@ def _take_canvas_list(sheet, data, setup=False, copied=False):
     course = data["course"]
     by_button = canvas_import.sent_by(data, sheet["owner_id"])
     trusted = copied or by_button
-    canvas = {"id": data["course_id"], "name": course} if trusted and data.get("course_id") else None
+    # Its course: the sheet's, once its list goes in (an unchecked list only
+    # gets there after a second look).
+    canvas = {"id": data["course_id"], "name": course} if data.get("course_id") else None
     look_first = None
-    if canvas and sheet.get("canvas_course_id") and sheet["canvas_course_id"] != canvas["id"]:
-        look_first = (f"This sheet's class list came from {sheet.get('canvas_course') or 'another course'} in Canvas; "
-                      f"this one is from {course}. Is it the right course?")
+    has_list = db.scalar("SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sheet["id"])
+    if canvas and has_list and sheet.get("canvas_course_id") and sheet["canvas_course_id"] != canvas["id"]:
+        before = sheet.get("canvas_course") or "another course"
+        if before == course:  # two courses with one name: their numbers tell them apart
+            look_first = (f"This sheet's class list came from Canvas course {sheet['canvas_course_id']}; this one is "
+                          f"from course {canvas['id']}, which has the same name ({course}). Is it the right course?")
+        else:
+            look_first = (f"This sheet's class list came from {before} in Canvas; this one is from {course}. "
+                          "Is it the right course?")
     host = canvasdir.clean_host(data.get("host"))
-    if by_button and host:
+    if trusted and host:
         db.run("UPDATE instructors SET canvas_host = :host, canvas_school = COALESCE(canvas_school, :host) "
                "WHERE id = :id AND canvas_host IS NULL", host=host, id=sheet["owner_id"])
         db.commit()
@@ -1555,12 +1568,17 @@ def _take_canvas_list(sheet, data, setup=False, copied=False):
                       unverified=None if trusted else (data.get("host") or ""), canvas=canvas, look_first=look_first)
 
 
-def _tie_to_canvas(sheet, canvas):
-    """The sheet's class list is now this Canvas course's."""
-    if canvas:
+def _tie_to_canvas(sheet, canvas, mode):
+    """Which Canvas course the sheet's class list is from, now: a list that
+    replaces it brings its course (or none, from a file or a paste); one
+    added to it ties a sheet that wasn't tied to any."""
+    if mode == "replace":
         db.run("UPDATE sheets SET canvas_course_id = :cid, canvas_course = :name WHERE id = :sid",
-               cid=canvas["id"], name=canvas["name"], sid=sheet["id"])
-        db.commit()
+               cid=canvas["id"] if canvas else None, name=canvas["name"] if canvas else None, sid=sheet["id"])
+    elif canvas:
+        db.run("UPDATE sheets SET canvas_course_id = :cid, canvas_course = :name "
+               "WHERE id = :sid AND canvas_course_id IS NULL", cid=canvas["id"], name=canvas["name"], sid=sheet["id"])
+    db.commit()
 
 
 @bp.route("/s/<sid>/canvas-list", methods=["POST"])
@@ -1592,6 +1610,8 @@ def canvas_list(iid):
     mine = db.rows("SELECT id, title, canvas_course_id, canvas_course FROM sheets WHERE owner_id = :me "
                    "AND archived_at IS NULL ORDER BY created_at DESC", me=me["id"])
     if request.method == "POST":
+        if (session.get("canvas_list") or {}).get("iid") == iid:
+            session.pop("canvas_list", None)  # (chosen for a new sheet before; not any more)
         if request.form.get("action") == "discard":
             canvas_import.forget(iid)
             db.commit()
@@ -1621,7 +1641,7 @@ def canvas_list(iid):
         tied = [s for s in mine if data.get("course_id") and s["canvas_course_id"] == data["course_id"]]
         last = next((s for s in mine if s["id"] == session.get("canvas_for")), None)
         if tied:
-            chosen = tied[0]["id"]
+            chosen = last["id"] if last in tied else tied[0]["id"]
         elif last and not last["canvas_course_id"]:
             chosen = last["id"]
         elif len(mine) == 1 and not mine[0]["canvas_course_id"]:
@@ -1728,7 +1748,7 @@ def review_roster(sid, pid):
         if action in ("replace", "add"):
             _apply_roster(sheet, pending["students"], action, pending["message"], pending["tips"],
                           pending["warn"], pending["source_label"], pending.get("sections"))
-            _tie_to_canvas(sheet, pending.get("canvas"))
+            _tie_to_canvas(sheet, pending.get("canvas"), action)
             return _list_back(sheet, pending.get("setup"))
     diff = sheets.compare_rosters(sheets.get_roster(sheet["id"]), pending["students"])
     ranked = {r["name_key"] for r in sheets.get_submissions(sheet["id"])}
@@ -1785,6 +1805,7 @@ def clear_roster(sid):
     sheet = owned_sheet(sid)
     snap_id = sheets.take_snapshot(sheet, "roster", "Before the class list was removed")
     removed = sheets.clear_roster(sheet["id"])
+    db.run("UPDATE sheets SET canvas_course_id = NULL, canvas_course = NULL WHERE id = :sid", sid=sheet["id"])
     auth.end_student_sessions(sheet["id"], removed)
     db.commit()
     session.pop("roster_report", None)

@@ -21,7 +21,7 @@ from sqlalchemy import create_engine, event, text
 import settings
 from util import iso, new_id
 
-SCHEMA_VERSION = "15"
+SCHEMA_VERSION = "16"
 SCHEMA_PATH = os.path.join(settings.BASE_DIR, "schema.sql")
 
 # Every table the app owns. On Postgres each gets row-level security turned
@@ -70,6 +70,7 @@ MIGRATIONS = [
     ("canvas_imports", "claimed_by", "TEXT"),
     ("sheets", "canvas_course_id", "TEXT"),
     ("sheets", "canvas_course", "TEXT"),
+    ("canvas_imports", "expires_at", "TEXT"),
 ]
 
 _engine = None
