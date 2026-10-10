@@ -309,6 +309,9 @@
     var show = function (i, focus) {
       at = Math.max(0, Math.min(i, steps.length - 1));
       steps.forEach(function (step, n) { step.hidden = n !== at; });
+      // The Draft pill, once there's a title to put in it.
+      var draftLine = document.querySelector("[data-draft-line]");
+      if (draftLine) draftLine.hidden = steps[at].getAttribute("data-wizard-step") === "name";
       if (progress) {
         var number = parseInt(steps[at].getAttribute("data-progress-number"), 10);
         progress.querySelector("[data-progress-step]").textContent =
@@ -349,6 +352,17 @@
     var start = steps.map(function (step) { return step.getAttribute("data-wizard-step"); })
       .indexOf(form.getAttribute("data-wizard-start"));
     show(start > 0 ? start : 0, false);
+    // The first question's box, ready to type in (once the page shows: a
+    // page still hidden while its fonts load can't take focus).
+    var ready = function () {
+      var box = steps[at].querySelector("input:not([type=hidden]), textarea");
+      if (at === 0 && box) box.focus({ preventScroll: true });
+    };
+    if (document.documentElement.classList.contains("fonts-loading")) {
+      document.addEventListener("page-shown", ready);
+    } else {
+      ready();
+    }
   });
 
   // The class-list questions: one step at a time, with Back. Each answer

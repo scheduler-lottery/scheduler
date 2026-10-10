@@ -2409,7 +2409,7 @@ def test_each_class_has_class_schedule_and_settings_tabs(prof, browser):
 
 def test_a_new_sheet_is_set_up_one_question_at_a_time(prof):
     page = text(prof.get("/teach/new"))
-    for asked in ("What's the class called?", "Which days can students present?",
+    for asked in ("What is your course title?", "Which days can students present?",
                   "How many presentations fit in one day?", "When should students have ranked by?",
                   "Anything students should know?", "Who can sign up?"):
         assert asked in page, asked
@@ -2729,7 +2729,8 @@ def test_setup_parts_link_back_and_the_sheet_is_a_draft_until_set_up(prof):
                                  "day_key": ["", ""], "capacity": "2"})
     sid = re.search(r"/teach/s/([^/#?]+)", r.headers["Location"]).group(1)
     page = raw(prof.get("/teach/new"))
-    assert "Draft" in page and "Untitled class" in page and "Cancel" in page
+    assert 'data-draft-line hidden' in page and "Cancel" in page  # no Draft pill until there's a title
+    assert '<h1 class="visually-hidden">New sign-up sheet</h1>' in page  # the question leads
     page = raw(prof.get(f"/teach/s/{sid}/setup"))
     assert 'class="draft-badge">Draft' in page and "Seminar" in page
     assert f'href="/teach/s/{sid}/edit?setup=1">About the class</a>' in page  # back into the first part

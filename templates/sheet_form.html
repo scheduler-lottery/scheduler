@@ -120,13 +120,23 @@
   {# The intake: making a sheet, or changing its first part's answers from
      the setup page (in_setup). Either way it's a draft until it's set up. #}
   {% set intake = mode == 'new' or in_setup %}
+  {% if mode == 'new' %}
+  {# Making a sheet: the question is the page's focus, so no visible
+     heading above it; the Draft pill shows once the course has a title
+     (app.js). #}
+  <div class="wizard-top">
+    <h1 class="visually-hidden">New sign-up sheet</h1>
+    <a class="link-muted" href="{{ url_for('teach.dashboard') }}">Cancel</a>
+  </div>
+  {% with draft_title = form.title, draft_hidden = True %}{% include "_draft_name.html" %}{% endwith %}
+  {% else %}
   <div class="admin-header">
     <h1>{{ 'New sign-up sheet' if intake else 'Edit sign-up sheet' }}</h1>
-    {% if mode == 'new' %}<a class="link-muted" href="{{ url_for('teach.dashboard') }}">Cancel</a>
-    {% elif in_setup %}<a class="link-muted" href="{{ url_for('teach.setup', sid=sheet.id, step='students') }}">Back without saving</a>
+    {% if in_setup %}<a class="link-muted" href="{{ url_for('teach.setup', sid=sheet.id, step='students') }}">Back without saving</a>
     {% else %}<a class="link-muted" href="{{ url_for('teach.sheet', sid=sheet.id) }}">← Back</a>{% endif %}
   </div>
   {% if intake %}{% with draft_title = form.title %}{% include "_draft_name.html" %}{% endwith %}{% endif %}
+  {% endif %}
 
   <form method="post" class="form-stack" novalidate{% if mode == 'new' %} data-wizard data-wizard-start="{{ wizard_start or 'name' }}"{% endif %}>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -152,7 +162,7 @@
 {% if mode == 'new' %}
     {% with progress = setup_progress(wizard_start or 'name') %}{% include "_setup_progress.html" %}{% endwith %}
     <section class="wizard-step" data-wizard-step="name" data-progress-number="{{ setup_progress('name').number }}">
-      <h2 class="wizard-q" tabindex="-1">What's the class called?</h2>
+      <h2 class="wizard-q" tabindex="-1">What is your course title?</h2>
       {{ f_title() }}
     </section>
     <section class="wizard-step" data-wizard-step="days" data-progress-number="{{ setup_progress('days').number }}">

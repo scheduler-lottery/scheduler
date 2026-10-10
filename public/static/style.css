@@ -2733,6 +2733,7 @@ button.icon-dock-label { border: 0; background: none; font-family: inherit; curs
 
 /* The class's name while it's set up: a dashed "Draft" pill. */
 .draft-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: -2px 0 16px; }
+.draft-line[hidden] { display: none; }
 .draft-pill {
   display: inline-flex; align-items: center; gap: 10px; max-width: 100%; margin: 0; padding: 6px 16px 6px 6px;
   border: 1.5px dashed var(--amber); border-radius: var(--radius-full); background: var(--amber-soft);
@@ -2761,6 +2762,13 @@ button.icon-dock-label { border: 0; background: none; font-family: inherit; curs
   margin: 4px 0 16px; font-size: clamp(1.45rem, 2.8vw, 1.8rem); line-height: 1.1;
   font-weight: calc(var(--w-h2) + var(--display-boost)); letter-spacing: var(--track-h2);
 }
+/* Making a sheet: no heading above the question, so the question leads,
+   large, with a large box to answer in. */
+.wizard-top { display: flex; justify-content: flex-end; margin: -4px 0 6px; }
+form[data-wizard] .wizard-q { margin: 18px 0 14px; font-size: clamp(1.9rem, 4.2vw, 2.55rem); line-height: 1.05; }
+form[data-wizard] .wizard-step .field input[type="text"],
+form[data-wizard] .wizard-step .field input[type="number"] { font-size: 1.2rem; padding: 14px 16px; }
+form[data-wizard] .wizard-step #title { width: 100%; }
 .wizard-q:focus { outline: none; }
 /* The question says what the field's own label would; keep the label for
    screen readers only. */
