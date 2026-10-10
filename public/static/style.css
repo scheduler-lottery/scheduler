@@ -3137,3 +3137,4 @@ details.guide:not([open]) { padding-bottom: 20px; }
 .canvas-helper .btn-large { margin: 2px 0 8px; }
 .helper-install-steps { margin: 10px 0 0; padding-left: 1.3em; display: grid; gap: 6px; line-height: 1.5; font-size: 0.95rem; }
 [data-bookmark-more] > .canvas-easy { margin-top: 8px; }
+[data-drag-only][hidden], [data-not-safari][hidden], [data-safari-only][hidden], [data-firefox-only][hidden] { display: none; }

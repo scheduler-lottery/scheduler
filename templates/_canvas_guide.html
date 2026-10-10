@@ -42,16 +42,19 @@
     </div>
     <ol class="canvas-easy-steps" data-button-new>
       <li>
-        <p><strong>Find your bookmarks bar</strong>: a thin row of bookmarks just under the address bar. Not there? Press <kbd data-key-mod>Ctrl</kbd> <kbd>Shift</kbd> <kbd>B</kbd><span data-safari-only hidden> (or, in Safari, choose View → Show Favorites Bar)</span>. If a bar you had disappears, it was already showing: press the same keys again.</p>
+        <p data-not-safari><strong>Find your bookmarks bar</strong>: a thin row of bookmarks just under the address bar. Not there? Press <kbd data-key-mod>Ctrl</kbd> <kbd>Shift</kbd> <kbd>B</kbd>. If a bar you had disappears, it was already showing: press the same keys again.</p>
+        <p data-safari-only hidden><strong>Show your Favorites bar</strong>: in Safari's <strong>View</strong> menu at the top of the screen, choose <strong>Show Favorites Bar</strong>. (Already there? Skip this.)</p>
       </li>
       <li>
-        <p><strong>Drag this button up onto that bar.</strong> Hold the mouse button down on it, move it up, then let go. You only do this once.</p>
+        <p data-drag-only><strong>Drag this button up onto that bar.</strong> Hold the mouse button down on it, move it up, then let go. You only do this once.</p>
+        <p data-safari-only hidden><strong>Add this button to your Favorites</strong>, once: Control-click it (or right-click), choose <strong>Add Link to Bookmarks…</strong>, pick <strong>Favorites</strong>, then click <strong>Add</strong>.</p>
+        <p data-firefox-only hidden><strong>Add this button to your bookmarks toolbar</strong>, once: right-click it, choose <strong>Bookmark Link…</strong>, pick <strong>Bookmarks Toolbar</strong>, then click <strong>Save</strong>.</p>
         <div class="bookmarklet-row">
           <a class="bookmarklet" href="{{ canvas_button() }}" data-bookmarklet>
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M7 3.5h10a1 1 0 0 1 1 1V21l-6-4-6 4V4.5a1 1 0 0 1 1-1z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
             Send to Scheduler</a>
         </div>
-        <svg class="canvas-pic drag-pic" viewBox="0 0 360 96" role="img" aria-label="Dragging the Send to Scheduler button up into the bookmarks bar, just under the address bar">
+        <svg class="canvas-pic drag-pic" data-drag-only viewBox="0 0 360 96" role="img" aria-label="Dragging the Send to Scheduler button up into the bookmarks bar, just under the address bar">
           <rect class="pic-frame" x="0.5" y="0.5" width="359" height="95" rx="10"/>
           <circle class="pic-dot" cx="14" cy="13" r="4"/><circle class="pic-dot" cx="27" cy="13" r="4"/><circle class="pic-dot" cx="40" cy="13" r="4"/>
           <rect class="pic-box" x="56" y="5" width="290" height="16" rx="8"/>

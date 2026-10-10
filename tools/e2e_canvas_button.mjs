@@ -314,6 +314,18 @@ try {
   await evaluate(me.session, `document.dispatchEvent(new CustomEvent("scheduler-button-check", { detail: { v: 2, key: "oldkey" } }))`);
   check(await until(me.session, `document.querySelector("[data-bookmarklet-said]").textContent.includes("out of date") && !document.querySelector(".canvas-easy-steps").hidden`),
     "an out-of-date button is spotted, and the steps to drag a new one show again");
+
+  // ---- 8. In Safari: the button is added with a right-click, no drag.
+  const safari = await newPage("about:blank");
+  await send("Network.setUserAgentOverride", { userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15" }, safari.session);
+  await evaluate(safari.session, `sessionStorage.setItem("quiz-step-${sid6}", "canvas")`).catch(() => {});
+  await go(safari.session, `${SITE}/teach/s/${sid6}/setup?step=students`);
+  await evaluate(safari.session, `sessionStorage.setItem("quiz-step-${sid6}", "canvas"); localStorage.removeItem("canvas-button-installed"); localStorage.removeItem("canvas-button-used")`);
+  await go(safari.session, `${SITE}/teach/s/${sid6}/setup?step=students&s=1`);
+  const safariSteps = await evaluate(safari.session, `[...document.querySelectorAll(".canvas-easy-steps p")].filter((p) => !p.hidden).map((p) => p.textContent).join(" | ")`);
+  check(safariSteps.includes("Add Link to Bookmarks") && safariSteps.includes("Show Favorites Bar") && !safariSteps.includes("Drag this button"),
+    "in Safari: Show Favorites Bar, then Control-click → Add Link to Bookmarks; no dragging");
+  check(await evaluate(safari.session, `document.querySelector(".drag-pic").hidden`), "and no dragging picture");
 } catch (err) {
   console.log("FAIL " + err.message);
   failures++;

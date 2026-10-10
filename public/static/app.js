@@ -603,7 +603,14 @@
     courseInput.addEventListener("input", function () { applyCourse(true); });
 
     if (isMac) stepBox.querySelectorAll("[data-key-mod]").forEach(function (key) { key.textContent = "⌘"; });
-    if (isSafari) guide.querySelectorAll("[data-safari-only]").forEach(function (el) { el.hidden = false; });
+    // Safari and Firefox add the button with a right-click; Chrome and Edge,
+    // which have no such menu item, by dragging.
+    if (isSafari) {
+      guide.querySelectorAll("[data-safari-only]").forEach(function (el) { el.hidden = false; });
+      guide.querySelectorAll("[data-not-safari]").forEach(function (el) { el.hidden = true; });
+    }
+    if (isSafari || isFirefox) guide.querySelectorAll("[data-drag-only]").forEach(function (el) { el.hidden = true; });
+    if (isFirefox) guide.querySelectorAll("[data-firefox-only]").forEach(function (el) { el.hidden = false; });
     if (isFirefox) {
       guide.querySelectorAll("[data-copy-how]").forEach(function (el) { el.hidden = true; });
       guide.querySelectorAll("[data-copy-how-firefox]").forEach(function (el) { el.hidden = false; });
@@ -717,7 +724,11 @@
     guide.querySelectorAll("[data-bookmarklet]").forEach(function (button) {
       button.addEventListener("click", function (e) {
         e.preventDefault();
-        say("Almost! Don't click it here: hold the mouse button down on it, move it up onto your bookmarks bar, "
+        say(isSafari ? "Almost! Don't click it here: Control-click it (or right-click), choose Add Link to Bookmarks…, "
+          + "pick Favorites, and click Add."
+          : isFirefox ? "Almost! Don't click it here: right-click it, choose Bookmark Link…, pick Bookmarks Toolbar, "
+          + "and click Save."
+          : "Almost! Don't click it here: hold the mouse button down on it, move it up onto your bookmarks bar, "
           + "then let go.");
       });
     });
