@@ -115,6 +115,33 @@ def test_only_code_shaped_paths_are_counted(prof, browser):
     assert misses(prof.app) == 2
 
 
+def test_a_paste_of_many_codes_counts_every_one_looked_up(prof, browser, monkeypatch):
+    import app as app_module
+
+    sid = prof.create_sheet()
+    short = short_of(prof, sid)
+    looked_up = []
+    real = sheets.by_short_code
+    monkeypatch.setattr(sheets, "by_short_code", lambda code: looked_up.append(code) or real(code))
+    s = browser()
+    # A page of made-up codes in the box: only the first few are looked up, and each one counts.
+    r = s.get("/join", query_string={"code": " ".join(guess() for _ in range(200))})
+    assert "couldn't find a sign-up" in follow(s, r)
+    assert len(looked_up) == app_module.CODE_READINGS
+    assert misses(prof.app) == 2 * app_module.CODE_READINGS
+    # A class's own short code pasted after made-up ones (longer, so looked up first): the class is
+    # found, and the made-up ones still count.
+    r = s.get("/join", query_string={"code": f"{guess(12)} {guess(12)} {short}"})
+    assert r.headers["Location"].endswith(f"/c/{sid}")
+    assert misses(prof.app) == 2 * (app_module.CODE_READINGS + 2)
+    # The same in a short link's place.
+    assert s.get(f"/{guess()}-{guess()}").status_code == 404
+    assert misses(prof.app) == 2 * (app_module.CODE_READINGS + 4)
+    # Words that can't be a code (no lookup) don't count against anyone.
+    assert "couldn't find a sign-up" in follow(s, s.get("/join?code=nope"))
+    assert misses(prof.app) == 2 * (app_module.CODE_READINGS + 4)
+
+
 def test_hits_are_not_counted(prof, browser):
     sid = prof.create_sheet()
     short = short_of(prof, sid)
