@@ -12,7 +12,10 @@ Off until the school's Canvas admins issue a developer key and the site has
 CANVAS_OAUTH_HOST, CANVAS_OAUTH_CLIENT_ID and CANVAS_OAUTH_CLIENT_SECRET
 (docs/northwestern-canvas-request.md). Between Canvas's answer and the
 professor's pick, the key waits in their own session, sealed (encrypted with
-a key only this site has) and good for ten minutes.
+a key only this site has) and good for ten minutes. Whichever way they leave
+the course list (a pick, its way back, Back to Canvas, Connect Canvas again,
+or too long a wait), the key is given back as soon as they're next on a
+Connect page; one simply abandoned runs out on Canvas's side within the hour.
 """
 
 import base64
@@ -167,9 +170,10 @@ def seal(token):
     return _box().encrypt(token.encode()).decode("ascii")
 
 
-def unseal(sealed):
-    """The key, if it was sealed here within the last ten minutes; else None."""
+def unseal(sealed, expired_too=False):
+    """The key, if it was sealed here within the last ten minutes; else None.
+    `expired_too`: however long ago, only to give it back."""
     try:
-        return _box().decrypt(str(sealed or "").encode("ascii"), ttl=SEALED_FOR).decode()
+        return _box().decrypt(str(sealed or "").encode("ascii"), ttl=None if expired_too else SEALED_FOR).decode()
     except (InvalidToken, ValueError):
         return None

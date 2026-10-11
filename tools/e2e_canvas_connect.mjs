@@ -7,8 +7,14 @@
 //         CANVAS_OAUTH_CLIENT_SECRET=fake-canvas-secret .venv/bin/flask --app app run --port 5051
 //     node tools/e2e_canvas_connect.mjs
 //
-// Signed out of Canvas: Connect Canvas, sign in, Authorize, pick the course,
-// and the class list is on the sheet, named.
+// (Another port: run Scheduler with --port 5052 and SITE=http://127.0.0.1:5052;
+// the stand-in Canvas takes any redirect address.)
+//
+// Signed out of Canvas: Connect Canvas, sign in, Authorize, and the course
+// list, which a reload just shows again. Its way back, and Back to Canvas's
+// Authorize page then Authorize again, both land calmly on the step. Then
+// pick the course, and the class list is on the sheet, named. "Pick a
+// different course" shows the course list again; next time, no picking.
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -17,7 +23,7 @@ import { join } from "node:path";
 const SITE = process.env.SITE || "http://127.0.0.1:5051";
 const CANVAS = process.env.CANVAS || "http://127.0.0.1:5077";
 const CHROME = process.env.CHROME || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const PORT = 9334;
+const PORT = Number(process.env.CDP_PORT || 9334);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
 const check = (ok, what) => { console.log((ok ? "PASS " : "FAIL ") + what); if (!ok) failures++; };
@@ -107,25 +113,64 @@ try {
   check(await until(me, `location.pathname === "/login/oauth2/auth" && document.body.innerText.includes("requesting access")`, 10000),
     "then Canvas's own Authorize page");
   await press(me, "Authorize");
-  check(await until(me, `location.href.startsWith(${JSON.stringify(SITE)}) && document.body.innerText.includes("Which course is")`, 10000),
-    "back on Scheduler, which asks which course");
+  const picker = `location.href === ${JSON.stringify(SITE + "/teach/canvas/oauth/pick")} && document.readyState === "complete" && document.body.innerText.includes("Which course is")`;
+  check(await until(me, picker, 10000), "back on Scheduler, which asks which course, on a page of its own");
   const choices = await evaluate(me, `document.body.innerText`);
   check(choices.includes("2026FA_BUSCOM_615_SEC1") && choices.includes("57 students") && !choices.includes("FACULTY_TRAINING"),
     "the professor's teaching courses, with sizes");
+  check(choices.includes("reads only that course's students' names and email addresses") && choices.includes("Nothing in Canvas changes"),
+    "and what's read, said before the list");
+  // A reload (it seemed slow): the same courses, no error.
+  await send("Page.reload", {}, me);
+  await sleep(300);
+  check(await until(me, picker, 10000) && await evaluate(me, `!document.querySelector(".flash-error")`),
+    "a reload just shows the courses again");
+  // Its way back: to the step, calmly.
+  const onStep = `location.pathname === "/teach/s/${sid}/setup" && document.readyState === "complete"`;
+  await press(me, "Back to the class list");
+  check(await until(me, onStep, 10000) && await until(me, `document.body.innerText.includes("Nothing was read from Canvas")`)
+    && await evaluate(me, `!document.querySelector(".flash-error")`), "“Back to the class list”: the step again, nothing read");
+  // Back to Canvas's Authorize page from the course list, and Authorize again: that answer was used already.
+  await send("Page.navigate", { url: `${SITE}/teach/s/${sid}/canvas/connect?setup=1` }, me);
+  check(await until(me, `location.pathname === "/login/oauth2/auth"`, 10000), "Connect Canvas again: Canvas's Authorize page");
+  await press(me, "Authorize");
+  check(await until(me, picker, 10000), "and the courses");
+  await evaluate(me, `history.back()`);
+  check(await until(me, `location.pathname === "/login/oauth2/auth" && document.readyState === "complete"`, 10000),
+    "Back: Canvas's Authorize page again");
+  await press(me, "Authorize");
+  check(await until(me, onStep, 10000) && await until(me, `document.body.innerText.includes("already been used, so nothing happened")`)
+    && await evaluate(me, `!document.querySelector(".flash-error")`),
+    "Authorize again: back on the step, calmly, not stranded on My sheets");
+  await send("Page.navigate", { url: `${SITE}/teach/s/${sid}/canvas/connect?setup=1` }, me);
+  await until(me, `location.pathname === "/login/oauth2/auth"`, 10000);
+  await press(me, "Authorize");
+  check(await until(me, picker, 10000), "Connect Canvas once more: the courses");
   await press(me, "2026FA_BUSCOM_615_SEC1");
   check(await until(me, `document.readyState === "complete" && /Added 57 students/.test(document.body.innerText)`, 10000),
     "one click on the course: 57 students on the sheet");
   check(await until(me, `document.body.innerText.includes("Who's on your list (57)")`), "named, right there");
 
-  // Next time: Connect Canvas, Authorize (signed in now), and that course's list comes back for a look.
+  // The wrong course? "Pick a different Canvas course" (connect?pick=1): the courses again, not the one remembered.
+  await send("Page.navigate", { url: `${SITE}/teach/s/${sid}/canvas/connect?pick=1&setup=1` }, me);
+  check(await until(me, `location.pathname === "/login/oauth2/auth"`, 10000), "picking again: Canvas's Authorize page");
+  await press(me, "Authorize");
+  check(await until(me, picker, 10000), "and the courses, though the sheet remembers one");
+  await press(me, "2026FA_LAW_540_SEC20");
+  check(await until(me, `location.pathname.includes("/roster/review/") && document.body.innerText.includes("2026FA_LAW_540_SEC20")`, 10000),
+    "the other course's list, shown before it replaces the first");
+
+  // Next time: Connect Canvas, Authorize (signed in now), and that course's list comes back for a look
+  // (or, when nothing changed in Canvas, word that the list already matches).
   await send("Page.navigate", { url: `${SITE}/teach/s/${sid}` }, me);
   await loaded(me, `${SITE}/teach/s/${sid}`);
   await evaluate(me, `document.querySelector(".canvas-update").open = true`);
   await press(me, "Connect Canvas");
   check(await until(me, `location.pathname === "/login/oauth2/auth"`, 10000), "next time: straight to Authorize");
   await press(me, "Authorize");
-  check(await until(me, `location.pathname.includes("/roster/review/") && document.body.innerText.includes("Check the new class list")`, 10000),
-    "and the course's list comes back with no picking, showing what changes");
+  check(await until(me, `(location.pathname.includes("/roster/review/") && document.body.innerText.includes("Check the new class list"))
+      || (location.pathname === "/teach/s/${sid}" && document.readyState === "complete" && /already matches/i.test(document.body.innerText))`, 10000),
+    "and the course's list comes back with no picking, showing what changes (or that nothing did)");
 } catch (err) {
   console.log("FAIL " + err.message);
   failures++;
