@@ -41,7 +41,7 @@
   {% endset %}
   {% set replace_button %}
     <button type="submit" name="action" value="replace" class="btn {{ 'btn-primary' if recommend == 'replace' else 'btn-secondary' }} btn-block"{% if warnings %} aria-describedby="review-warn"{% endif %}>
-      {% if not diff.current %}Add these {{ diff.incoming | plural(noun) }}{% elif doubtful %}It’s my class: replace my list with this one{% else %}Replace my list with this one{% endif %}
+      {% if not diff.current %}{{ 'Add this ' ~ noun if diff.incoming == 1 else 'Add these ' ~ (diff.incoming | plural(noun)) }}{% elif doubtful %}It’s my class: replace my list with this one{% else %}Replace my list with this one{% endif %}
     </button>
   {% endset %}
   {% set cancel_button %}

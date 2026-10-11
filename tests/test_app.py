@@ -3266,10 +3266,15 @@ def test_a_list_that_may_not_be_this_class_has_no_highlighted_button(prof):
     r = prof.post(f"/teach/s/{sid}/roster", {"roster": (io.BytesIO(other.encode()), "students.csv"), "replacing": "1"},
                   content_type="multipart/form-data")
     assert _buttons(raw(prof.get(r.headers["Location"])))[0] == ("It’s my class: replace my list with this one", True)
-    # Pasted names are more names: Add, as ever.
+    # Pasted names are more names: Add, as ever...
     r = prof.post(f"/teach/s/{sid}/roster", {"pasted": "Late Comer, late@school.edu"})
     assert ("Add the 1 new name to my list (keep everyone already on it)", True) in _buttons(
         raw(prof.get(r.headers["Location"])))
+    # ...but pasted into a box for replacing the list (the same form as its file), they're the new list.
+    r = prof.post(f"/teach/s/{sid}/roster", {"pasted": "Late Comer, late@school.edu", "replacing": "1"})
+    assert _buttons(raw(prof.get(r.headers["Location"]))) == [
+        ("Add the 1 new name to my list (keep everyone already on it)", False),
+        ("Replace my list with this one", True), ("Cancel — keep my current list", False)]
     # In setup, before anyone has the link, a second Canvas course is fixing a wrong pick: Replace.
     c = prof.create_sheet(title="Torts", allow_unlisted=False)
     prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=4, names=four, course_id="505", course="BUSCOM"),
@@ -3304,6 +3309,14 @@ def test_the_wrong_file_on_an_empty_list_offers_just_add_or_choose_another(prof)
     page = follow(prof, prof.post(r.headers["Location"], {"action": "replace"}))
     assert re.search(r'class="report report-warn">.*?<ul class="tips"><li>This file has no Name or Email column',
                      page, re.S)
+    # The list taken off while another waited to be checked (even one with a note): its one button is the one.
+    b = prof.create_sheet(title="Meanwhile")
+    prof.upload(b)
+    r = prof.upload(b, "Name,Email,Section\nZed Zane,zed@x.edu,BIO 101\n", "other.csv")
+    prof.post(f"/teach/s/{b}/roster/clear")
+    page = raw(prof.get(r.headers["Location"]))
+    assert "BIO 101" in text(page)  # the note
+    assert _buttons(page) == [("Add this student", True), ("Cancel — choose a different file", False)]
 
 
 def test_cancel_and_upload_errors_go_back_to_the_box_the_file_came_from(prof):

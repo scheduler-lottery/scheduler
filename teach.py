@@ -1877,22 +1877,23 @@ def review_roster(sid, pid):
             f"The new list has no email for {plural(len(diff['keeps_email']), 'student')} who already "
             "had one. If you replace, we'll keep the emails we have for them."
         )
-    # Which button to highlight. Pasted names are more names: Add. A file
-    # that came to replace the list: Replace, unless it looks like the wrong
-    # file. A list that may not be this class (another course's, the wrong
-    # file, few names in common): none, since adding would mix two classes
-    # and replacing would lose this one; but from Canvas in setup, before
-    # anyone has the link, it's fixing a wrong pick: Replace.
+    # Which button to highlight. A file (or names pasted) that came to
+    # replace the list: Replace, unless it looks like the wrong file. Other
+    # pasted names are more names: Add. A list that may not be this class
+    # (another course's, the wrong file, few names in common): none, since
+    # adding would mix two classes and replacing would lose this one; but
+    # from Canvas in setup, before anyone has the link, it's fixing a wrong
+    # pick: Replace. With no list yet, its one button ("Add these").
     doubtful = not pending.get("pasted") and bool(pending.get("look_first") or (diff["current"] >= 4 and overlap < 0.5))
-    if pending.get("pasted"):
-        recommend = "add"
-    elif pending.get("replacing") and not pending.get("look_first"):
+    if pending.get("replacing") and not pending.get("look_first"):
         recommend = "replace"
+    elif pending.get("pasted"):
+        recommend = "add" if diff["current"] else "replace"
     elif doubtful:
         fixing_setup = from_canvas and pending.get("setup") and not sheet["shared_at"] and not ranked
         recommend = "replace" if fixing_setup else ""
     else:
-        recommend = "add" if warnings else "replace"
+        recommend = "add" if warnings and diff["current"] else "replace"
     return render_template(
         "roster_review.html", sheet=sheet, pid=pid, pending=pending, diff=diff, warnings=warnings,
         recommend=recommend, doubtful=doubtful, from_canvas=from_canvas, from_file=from_file,
