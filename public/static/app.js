@@ -306,8 +306,33 @@
       if (status) status.textContent = "Reading “" + input.files[0].name + "”…";
       var pasted = form.querySelector('textarea[name="pasted"]');
       if (pasted) pasted.value = "";
-      form.dispatchEvent(new CustomEvent("file-chosen", { bubbles: true })); // (Canvas beside the page can close)
       form.submit();
+    }
+    // Canvas's file: the window to choose it opens right in Downloads,
+    // showing only files like it (Chrome and Edge; elsewhere, the usual
+    // window, and the step says to click Downloads in it).
+    var plainWindow = false;
+    if (form.hasAttribute("data-from-downloads") && typeof window.showOpenFilePicker === "function") {
+      input.addEventListener("click", function (e) {
+        if (plainWindow) return;
+        e.preventDefault();
+        window.showOpenFilePicker({
+          startIn: "downloads",
+          excludeAcceptAllOption: true,
+          types: [{ description: "Canvas's file", accept: {
+            "application/zip": [".zip"], "text/csv": [".csv", ".tsv", ".txt"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"] } }],
+        }).then(function (handles) { return handles[0].getFile(); }).then(function (file) {
+          var one = new DataTransfer();
+          one.items.add(file);
+          input.files = one.files;
+          upload();
+        }).catch(function (err) {
+          if (err && err.name === "AbortError") return; // closed without choosing: nothing to do
+          plainWindow = true; // (that window couldn't open here: the usual one, next click)
+          if (status) status.textContent = "Click the box again, then Downloads on the left of the window that opens.";
+        });
+      });
     }
     form.takeDrop = function (dt) {
       var item = dt.items && dt.items[0];
@@ -515,7 +540,7 @@
           quiz.setAttribute("data-canvas-host", answer.data.domain);
           quiz.dispatchEvent(new CustomEvent("canvas-school")); // (the Canvas step's offer may change)
           quiz.querySelectorAll("[data-school-name]").forEach(function (el) { el.textContent = answer.data.name; });
-          quiz.querySelectorAll("[data-school-domain]").forEach(function (el) { el.textContent = answer.data.domain; });
+          quiz.querySelectorAll("[data-school-domain]").forEach(function (el) { el.textContent = "(" + answer.data.domain + ")"; });
           // (Next time, "Change" asks the short question again; the search
           // keeps what was found, for "a different school".)
           if (search && search.hasAttribute("data-start-hidden")) search.hidden = true;
@@ -608,7 +633,6 @@
   if (guide) (function () { // (its own scope: its names never clash with the rest of this file's)
     var quizBox = guide.closest("[data-quiz]");
     var stepBox = guide.closest(".quiz-step") || guide.parentNode;
-    var panel = guide.closest("[data-canvas-panel]") || guide.parentNode;
     var savedCourse = guide.getAttribute("data-canvas-course-id") || "";
     var forgotCourse = ""; // this sheet's course, which Canvas no longer has: the next list's course replaces it
     var hasList = guide.hasAttribute("data-has-list");
@@ -651,6 +675,12 @@
     }
     var pageName = document.title.split(" — ")[0];
     guide.querySelectorAll("[data-page-title]").forEach(function (el) { el.textContent = pageName; });
+    // Chrome and Edge can open the file window right in Downloads (the
+    // box does: app.js, above), so step 4 says so.
+    if (!isPhone && typeof window.showOpenFilePicker === "function") {
+      stepBox.querySelectorAll("[data-picker-downloads]").forEach(function (el) { el.hidden = false; });
+      stepBox.querySelectorAll("[data-picker-plain]").forEach(function (el) { el.hidden = true; });
+    }
 
     // Something to show in the guide: its step of the class-list questions
     // comes into view, and any folded section around it opens.
@@ -660,48 +690,19 @@
       if (quizBox && step) quizBox.dispatchEvent(new CustomEvent("quiz-go", { detail: step }));
     };
 
-    // Canvas beside this page, for downloading the file: a window on the
-    // right (or a tab), with the picture steps on the left. It's cut off from
-    // this page (no window.opener): it only needs to show Canvas.
+    // Canvas, for downloading the file: in a tab of its own, with the
+    // browser's usual top (where its downloads show), cut off from this
+    // page (no window.opener): it only needs to show Canvas. Pressed again,
+    // the same tab comes forward.
     var canvasWindow = null;
-    var watching = null;
     var download = guide.querySelector("[data-canvas-download]");
-    var opener = guide.querySelector("[data-canvas-beside]");
-    var done = guide.querySelector("[data-canvas-close]");
-    var openLabel = isPhone ? "Open Canvas" : "Open Canvas beside this page";
-    opener.textContent = openLabel;
-    var guideOn = function (on) {
-      document.documentElement.classList.toggle("canvas-beside", on);
-      panel.classList.toggle("is-beside", on);
-      done.hidden = !on;
-      opener.textContent = on ? "Show Canvas again" : openLabel;
-    };
-    var watch = function () {
-      clearInterval(watching);
-      watching = setInterval(function () {
-        if (!canvasWindow || canvasWindow.closed) { clearInterval(watching); guideOn(false); }
-      }, 1000);
-    };
+    var opener = guide.querySelector("[data-canvas-open]");
     opener.addEventListener("click", function () {
-      if (canvasWindow && !canvasWindow.closed) { canvasWindow.focus(); return; } // already open: just bring it forward
-      var url = analyticsUrl();
-      var width = Math.min(screen.availWidth - 380, Math.max(760, Math.round(screen.availWidth * 0.6)));
-      canvasWindow = (isPhone ? null : window.open("", "scheduler-canvas", "popup=yes,width=" + width + ",height="
-        + screen.availHeight + ",left=" + ((screen.availLeft || 0) + screen.availWidth - width) + ",top=" + (screen.availTop || 0)))
-        || window.open("", "scheduler-canvas");
-      if (!canvasWindow) return;
+      if (canvasWindow && !canvasWindow.closed) { canvasWindow.focus(); return; }
+      canvasWindow = window.open("", "scheduler-canvas");
+      if (!canvasWindow) { window.open(analyticsUrl(), "_blank", "noopener"); return; }
       try { canvasWindow.opener = null; } catch (err) { /* fine */ }
-      canvasWindow.location.href = url;
-      if (!isPhone) guideOn(true);
-      watch();
-    });
-    done.addEventListener("click", function () {
-      guideOn(false);
-      if (canvasWindow && !canvasWindow.closed) canvasWindow.close();
-    });
-    // Canvas's file chosen: Canvas's window has done its job.
-    guide.addEventListener("file-chosen", function () {
-      if (canvasWindow && !canvasWindow.closed) canvasWindow.close();
+      canvasWindow.location.href = analyticsUrl();
     });
 
     // A class list, here to look over before anything changes.
@@ -1096,9 +1097,9 @@
       });
     }
 
-    // Back from Canvas (this page hidden, then looked at again: a tab, or a
-    // phone) after opening it for the file: point at the last step, and its
-    // box is ready to click. (Beside this page, the steps never left.)
+    // Back from Canvas (this page hidden, then looked at again) after
+    // opening it for the file: point at the last step, and its box is ready
+    // to click.
     var canvasSteps = guide.querySelector("[data-canvas-steps]");
     var welcome = guide.querySelector("[data-canvas-welcome]");
     var dropBox = guide.querySelector("form[data-dropzone]");
@@ -1115,8 +1116,11 @@
       welcome.textContent = isPhone
         ? "Welcome back. Has Canvas saved its file? Tap the box in step 4 and choose it: it's in Downloads, and its "
           + "name ends in .zip. Not yet? The pictures show where to tap in Canvas."
-        : "Welcome back. Downloaded Canvas's file? Follow step 4: click the box, then Downloads on the left of the "
-          + "window that opens. Not there yet? The pictures show where to click in Canvas.";
+        : typeof window.showOpenFilePicker === "function"
+          ? "Welcome back. Downloaded Canvas's file? Click the box in step 4: it opens right in your Downloads folder. "
+            + "Not there yet? The pictures show where to click in Canvas."
+          : "Welcome back. Downloaded Canvas's file? Click the box in step 4, then Downloads on the left of the window "
+            + "that opens. Not there yet? The pictures show where to click in Canvas.";
       if (canvasSteps) canvasSteps.querySelectorAll("[data-canvas-step]").forEach(function (li) {
         li.classList.toggle("is-next", li.getAttribute("data-canvas-step") === "drop");
       });

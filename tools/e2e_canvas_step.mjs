@@ -8,7 +8,7 @@
 //
 // Chrome and Edge: "Add Scheduler Helper", with their own steps, and the file
 // folded under it. Safari and Firefox (no helper to add yet): the file, open,
-// first; an iPhone: a phone's words. The file: Canvas opens beside the page,
+// first; an iPhone: a phone's words. The file: Canvas opens in a tab of its own,
 // both files from Safari's folder dropped at once send the student file, and
 // the file goes in. Then the class page: its links open what they point at,
 // and messages come up where screen readers read them.
@@ -167,7 +167,7 @@ try {
   await send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 }, me);
   await as("Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1");
   words = await visibleText();
-  check(await evaluate(me, `document.querySelector("[data-canvas-beside]").textContent`) === "Open Canvas",
+  check(await evaluate(me, `document.querySelector("[data-canvas-open]").textContent`) === "Open Canvas",
     "iPhone: the button says Open Canvas");
   check(words.includes("This part is easiest on a computer") && words.includes("Tap the box below") && words.includes("Browse"),
     "iPhone: what to do on a phone, and how to get back to this page later");
@@ -181,15 +181,17 @@ try {
   await as("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15");
   check((await visibleText()).includes("If Safari turned it into a folder"), "Safari on a Mac: the folder line");
 
-  // The file: Canvas opens beside this page (a window of its own), and the file goes in.
-  await evaluate(me, `(() => { window.__opened = []; window.open = (u, n, f) => { const w = { closed: false, focus() {}, close() { w.closed = true; } };
-    w.location = { set href(x) { window.__opened.push(x); } }; return w; }; })()`);
-  await evaluate(me, `document.querySelector("[data-canvas-beside]").click()`);
-  check(await evaluate(me, `document.documentElement.classList.contains("canvas-beside") && window.__opened[0] === "http://127.0.0.1:5077/"`),
-    "Open Canvas beside this page: Canvas (its Dashboard) on the right, the steps on the left");
-  await evaluate(me, `document.querySelector("[data-canvas-beside]").click()`);
-  check(await evaluate(me, `window.__opened.length === 1 && document.querySelector("[data-canvas-beside]").textContent === "Show Canvas again"`),
+  // The file: Canvas opens in a tab of its own (the browser's usual top, where downloads show), and the file goes in.
+  await evaluate(me, `(() => { window.__opened = []; window.open = (u, n, f) => { const w = { closed: false, focus() { window.__focused = true; }, close() { w.closed = true; } };
+    window.__features = f; w.location = { set href(x) { window.__opened.push(x); } }; return w; }; })()`);
+  await evaluate(me, `document.querySelector("[data-canvas-open]").click()`);
+  check(await evaluate(me, `window.__opened[0] === "http://127.0.0.1:5077/" && !window.__features`),
+    "Open Canvas: Canvas (its Dashboard) in a tab of its own, not a small window without downloads");
+  await evaluate(me, `document.querySelector("[data-canvas-open]").click()`);
+  check(await evaluate(me, `window.__opened.length === 1 && window.__focused === true`),
     "pressed again, it brings Canvas forward rather than starting it over");
+  check(await evaluate(me, `typeof window.showOpenFilePicker === "function"`) ? (await visibleText()).includes("opens right in your Downloads folder")
+    : true, "Chrome: the box's window opens right in Downloads, and step 4 says so");
   const csv = join(profile, "students.csv");
   writeFileSync(csv, "Student Name,Student ID,Student SIS ID,Email,Section Name\nAlex Kim,1,111,akim@u.school.edu,Sec 1\nSam Lee,2,112,slee@u.school.edu,Sec 1\n");
   const { root } = await send("DOM.getDocument", {}, me);

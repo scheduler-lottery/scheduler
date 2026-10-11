@@ -51,7 +51,8 @@ CREATE TABLE IF NOT EXISTS sheets (
     tested_at          TEXT,
     shared_at          TEXT,
     backup_emailed_at  TEXT,
-    short_url          TEXT,  -- a short link made on request (is.gd or TinyURL)
+    short_url          TEXT,  -- an outside service's short link, from before (no longer made or shown)
+    short_code         TEXT,  -- its short link on this site: example.com/<short_code>
     archived_at        TEXT,  -- tucked away on the dashboard (still works for students)
     theme              TEXT,  -- the class's look, set by its instructor (NULL = the standard look)
     font               TEXT,

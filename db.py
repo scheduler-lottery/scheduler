@@ -21,7 +21,7 @@ from sqlalchemy import create_engine, event, text
 import settings
 from util import iso, new_id
 
-SCHEMA_VERSION = "16"
+SCHEMA_VERSION = "17"
 SCHEMA_PATH = os.path.join(settings.BASE_DIR, "schema.sql")
 
 # Every table the app owns. On Postgres each gets row-level security turned
@@ -71,6 +71,12 @@ MIGRATIONS = [
     ("sheets", "canvas_course_id", "TEXT"),
     ("sheets", "canvas_course", "TEXT"),
     ("canvas_imports", "expires_at", "TEXT"),
+    ("sheets", "short_code", "TEXT"),
+]
+
+# Indexes on columns added above (so made after them).
+LATE_INDEXES = [
+    "CREATE UNIQUE INDEX IF NOT EXISTS sheets_by_short_code ON sheets (short_code)",
 ]
 
 _engine = None
@@ -156,6 +162,8 @@ def apply_schema(connection):
         existing = {c["name"] for c in inspector.get_columns(table)}
         if column not in existing:
             connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+    for statement in LATE_INDEXES:
+        connection.execute(text(statement))
     if connection.dialect.name == "postgresql":
         for table in TABLES:
             connection.execute(text(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY"))

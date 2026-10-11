@@ -70,6 +70,28 @@ def get_sheet(sid):
 # one. Older sheets keep their 8-character codes.
 SHEET_ID_LENGTH = 12
 SHEET_ID_LENGTHS = (8, 12)
+# A class's short link, on this site (no outside link-shortener, so no ads
+# and nobody else told the link): example.com/<6 characters>, always with a
+# digit, so it's never a word one of the site's own pages uses.
+SHORT_CODE_LENGTH = 6
+
+
+def short_code(sid):
+    """The sheet's short-link code, made the first time it's asked for."""
+    code = db.scalar("SELECT short_code FROM sheets WHERE id = :sid", sid=sid)
+    while not code:
+        made = new_id(SHORT_CODE_LENGTH)
+        if not any(ch.isdigit() for ch in made) or db.scalar("SELECT 1 FROM sheets WHERE short_code = :c", c=made):
+            continue
+        db.run("UPDATE sheets SET short_code = :c WHERE id = :sid AND short_code IS NULL", c=made, sid=sid)
+        db.commit()
+        code = db.scalar("SELECT short_code FROM sheets WHERE id = :sid", sid=sid)
+    return code
+
+
+def by_short_code(code):
+    """The sheet whose short link ends in `code` (its id), or None."""
+    return db.scalar("SELECT id FROM sheets WHERE short_code = :c", c=(code or "").lower())
 
 
 def new_sheet_id():

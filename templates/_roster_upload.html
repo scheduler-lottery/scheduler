@@ -5,7 +5,7 @@
    `replacing` says the professor came here to replace a wrong list;
    `paste_box` (default on) adds "Or paste names". #}
 {% set drop_id = drop_id if drop_id is defined else 'roster-file' %}
-<form method="post" action="{{ url_for('teach.upload_roster', sid=sheet.id) }}" enctype="multipart/form-data" data-dropzone>
+<form method="post" action="{{ url_for('teach.upload_roster', sid=sheet.id) }}" enctype="multipart/form-data" data-dropzone{% if from_canvas is defined and from_canvas %} data-from-downloads{% endif %}>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   {% if setup %}<input type="hidden" name="setup" value="1">{% endif %}
   <input type="hidden" name="box" value="{{ drop_id }}">

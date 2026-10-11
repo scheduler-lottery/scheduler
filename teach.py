@@ -1110,6 +1110,7 @@ def _sheet_page(sid, tab):
     can_fill = bool(fill_plan) and (published or not stale)
 
     share_url = url_for("student.signin", sid=sid, _external=True)
+    short_url = url_for("short_link", code=sheets.short_code(sid), _external=True)
     # "Nudge": a reminder to everyone on the list who hasn't ranked, from the
     # instructor's own email (their addresses in Bcc).
     waiting_emails = [r["email"] for r in not_yet if r["email"]]
@@ -1215,6 +1216,7 @@ def _sheet_page(sid, tab):
         move_people=move_people,
         seat_warning=_seat_warning(sheet, days, counts),
         share_url=share_url,
+        short_url=short_url,
         announcement=_announcement(sheet, share_url, counts),
         publish_announcement=_publish_announcement(sheet, share_url, counts, without_day),
         pin_waiting=pin_waiting,
@@ -3057,51 +3059,6 @@ def archive_sheet(sid):
     else:
         flash(f"“{sheet['title']}” is back on your list.", "success")
     return redirect(url_for("teach.dashboard"))
-
-
-# Free link-shortening services, tried in order. Only the class link is
-# sent, and only after the instructor agrees to it.
-SHORTENERS = (
-    ("is.gd", "https://is.gd/create.php?format=simple&url={}", re.compile(r"^https://is\.gd/[A-Za-z0-9_]{1,30}$")),
-    ("TinyURL", "https://tinyurl.com/api-create.php?url={}", re.compile(r"^https://tinyurl\.com/[A-Za-z0-9_-]{1,40}$")),
-)
-
-
-def _shorten(url):
-    """A short link to `url` from the first service that answers, or ""."""
-    import urllib.parse
-    import urllib.request
-
-    for _name, api, shape in SHORTENERS:
-        try:
-            ask = urllib.request.Request(api.format(urllib.parse.quote(url, safe="")),
-                                         headers={"User-Agent": f"{settings.APP_NAME} (link shortener)"})
-            with urllib.request.urlopen(ask, timeout=8) as answer:
-                short = answer.read(300).decode("utf-8", "replace").strip()
-        except Exception:  # noqa: BLE001 - a service being down just means trying the next
-            continue
-        if short.startswith("http://"):
-            short = "https://" + short[len("http://"):]
-        if shape.match(short):
-            return short
-    return ""
-
-
-@bp.route("/s/<sid>/shorten", methods=["POST"])
-@instructor_required
-def shorten_link(sid):
-    sheet = owned_sheet(sid)
-    if not sheet["short_url"]:
-        short = _shorten(url_for("student.signin", sid=sheet["id"], _external=True))
-        if not short:
-            flash("The link-shortening services didn't answer just now. Please try again in a minute; your full "
-                  "link works either way.", "error")
-            return _back(sheet)
-        db.run("UPDATE sheets SET short_url = :url WHERE id = :sid", url=short, sid=sheet["id"])
-        db.commit()
-        sheet = sheets.get_sheet(sheet["id"])
-    flash(f"Short link: {sheet['short_url']}. It opens the same sign-up page as the full link.", "success")
-    return _back(sheet)
 
 
 @bp.route("/s/<sid>/delete-sheet", methods=["POST"])

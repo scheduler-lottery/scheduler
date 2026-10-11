@@ -307,6 +307,10 @@ def find_code(raw):
         if len(token) in sheets.SHEET_ID_LENGTHS and all(ch in ID_ALPHABET for ch in token) and (
                 sheets.get_sheet(token) or _was_deleted(token)):
             return token
+        if len(token) == sheets.SHORT_CODE_LENGTH and all(ch in ID_ALPHABET for ch in token):
+            sid = sheets.by_short_code(token)
+            if sid:
+                return sid
     return ""
 
 
@@ -358,7 +362,8 @@ def join():
 
 @app.route("/<code>")
 def short_link(code):
-    """example.com/k7q2mx9pa3fh works as well as example.com/c/k7q2mx9pa3fh."""
+    """example.com/k7q2mx9pa3fh works as well as example.com/c/k7q2mx9pa3fh, and so
+    does the class's short link, example.com/k7q2mx."""
     sid = find_code(code)
     if sid:
         return redirect(url_for("student.signin", sid=sid))

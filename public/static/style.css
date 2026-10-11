@@ -1338,6 +1338,8 @@ fieldset.field { border: none; margin: 0; padding: 0; min-width: 0; }
 .more-options[open] { padding-bottom: 14px; }
 .more-options .field + .field, .more-options .field + .choice { margin-top: 16px; }
 .form-actions { display: flex; gap: 10px; }
+/* A dialog's way out (Done) on the right, as in the other dialogs; its smaller choice on the left. */
+.dialog-actions { justify-content: space-between; align-items: center; }
 
 .day-rows { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 8px; counter-reset: day; }
 .day-row { display: flex; gap: 6px; align-items: center; counter-increment: day; }
@@ -3006,11 +3008,8 @@ details.guide:not([open]) { padding-bottom: 20px; }
 .card[id], .fold-card { scroll-margin-top: 92px; }  /* a link to a card lands below the top bar */
 
 /* Canvas: steps with pictures of where to click (drawn like Canvas, in this
-   site's colors), and, while Canvas is open in its own window on the right,
-   the steps and the file box in a panel on the left. */
+   site's colors). */
 .canvas-guide-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 8px 0 16px; }
-.canvas-guide-done { margin-left: auto; }
-.canvas-guide-done[hidden] { display: none; }
 .canvas-steps { margin: 0 0 12px; padding: 0; list-style: none; counter-reset: canvas-step; display: grid; gap: 14px; }
 .canvas-step { counter-increment: canvas-step; position: relative; padding-left: 38px; }
 .canvas-step::before {
@@ -3046,18 +3045,6 @@ details.guide:not([open]) { padding-bottom: 20px; }
 .canvas-more[open] > summary { margin-bottom: 8px; }
 .canvas-more textarea { width: 100%; font-size: 0.9rem; }
 .canvas-step code { font-size: 0.85em; }
-@media (min-width: 900px) {
-  /* With Canvas open beside the page, the steps (the class-list questions,
-     or "Update from Canvas") sit in a panel on the left, clear of it. */
-  .canvas-beside .is-beside[data-canvas-panel] {
-    position: fixed; z-index: 66; top: 76px; left: 16px; bottom: 16px; width: min(38vw, 520px);
-    margin: 0; padding: 18px; overflow-y: auto; overscroll-behavior: contain;
-    border: 1px solid var(--border); border-radius: 16px; background: var(--card-bg); box-shadow: var(--shadow-lg);
-  }
-  /* The rest of the page, behind it, out of sight (and out of reach) until
-     Canvas closes; the top bar (z-index 40) stays. */
-  html.canvas-beside body::before { content: ""; position: fixed; inset: 0; z-index: 39; background: var(--bg); }
-}
 
 /* Canvas, the easy way: Scheduler Helper's one button (or Connect Canvas),
    then a list that arrives right here to look over. */

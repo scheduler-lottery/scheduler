@@ -1877,32 +1877,30 @@ def test_archiving_tucks_a_sheet_away_and_deleting_offers_it_first(prof, browser
     assert "Nothing was deleted" in follow(prof, r)
 
 
-def test_shortening_a_link_happens_only_when_asked(prof, monkeypatch):
-    import teach
-
-    sent = []
-    monkeypatch.setattr(teach, "_shorten", lambda url: sent.append(url) or "https://is.gd/AbC12")
-    sid = prof.create_sheet()
-    page = html(prof.get(f"/teach/s/{sid}"))
-    assert "Shorten this link" in page and "is.gd" in page and not sent  # nothing goes out by itself
-    page = text(follow(prof, prof.post(f"/teach/s/{sid}/shorten")))
-    assert sent == [f"http://localhost/c/{sid}"] and "Short link: https://is.gd/AbC12" in page
-    assert 'value="https://is.gd/AbC12"' in html(prof.get(f"/teach/s/{sid}"))
-    prof.post(f"/teach/s/{sid}/shorten")
-    assert len(sent) == 1  # made once, then reused
-
-
-def test_shortener_accepts_only_short_links_it_expects(monkeypatch):
-    import io
+def test_the_short_link_is_this_sites_own(prof, browser, monkeypatch):
     import urllib.request
 
-    import teach
+    def no_outside_service(*a, **k):
+        raise AssertionError("a short link must not go to an outside service (they show ads)")
 
-    answers = iter([b"<html>error</html>", b"https://tinyurl.com/2p8xk3ab"])
-    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: io.BytesIO(next(answers)))
-    assert teach._shorten("https://example.edu/c/x") == "https://tinyurl.com/2p8xk3ab"  # is.gd failed: TinyURL
-    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: io.BytesIO(b"javascript:alert(1)"))
-    assert teach._shorten("https://example.edu/c/x") == ""
+    monkeypatch.setattr(urllib.request, "urlopen", no_outside_service)
+    sid = prof.create_sheet()
+    page = html(prof.get(f"/teach/s/{sid}"))
+    short = re.search(r'id="short-url" type="text" readonly value="http://localhost/([a-z0-9]{6})"', page).group(1)
+    assert any(ch.isdigit() for ch in short) and "is.gd" not in page and "TinyURL" not in page
+    assert short in html(prof.get(f"/teach/s/{sid}"))  # the same one each time
+    s = browser()
+    assert s.get(f"/{short}").headers["Location"].endswith(f"/c/{sid}")
+    assert s.get(f"/{short.upper()}").headers["Location"].endswith(f"/c/{sid}")
+    assert s.get(f"/join?code={short}").headers["Location"].endswith(f"/c/{sid}")  # typed in the box, too
+    other = prof.create_sheet(title="Another class")
+    assert sheets_short(prof, other) != short
+    assert s.get("/zz9zz9").status_code == 404
+
+
+def sheets_short(prof, sid):
+    page = html(prof.get(f"/teach/s/{sid}"))
+    return re.search(r'id="short-url" type="text" readonly value="http://localhost/([a-z0-9]{6})"', page).group(1)
 
 
 def test_the_class_list_steps_aside_once_it_is_in(prof):
@@ -2753,7 +2751,8 @@ def test_setup_parts_link_back_and_the_sheet_is_a_draft_until_set_up(prof):
 def test_messages_can_be_closed_and_canvas_steps_pick_up_after_signing_in(prof, browser):
     sid = prof.create_sheet(allow_unlisted=False)
     page = html(prof.get(f"/teach/s/{sid}"))
-    assert "Open Canvas beside this page" in page and 'data-canvas-went="signin"' in page  # or in a tab
+    assert "Open Canvas" in page and 'data-canvas-went="signin"' in page  # in a tab of its own, where downloads show
+    assert "popup=" not in raw(prof.get("/static/app.js"))  # (not a small window with no downloads to see)
     assert page.count('class="canvas-pic"') == 3 and "Click Course Analytics" in page  # where to click, drawn
     assert "data-canvas-welcome" in page
     # No AI-assistant route for student data (agents' makers advise against using them on pages with

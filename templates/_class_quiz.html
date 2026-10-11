@@ -2,7 +2,7 @@
    JavaScript every step simply shows, in order. Used on the class page and
    on the setup page (where `setup` is set: each form then says so, and
    comes back to the setup). #}
-<div class="quiz" data-quiz data-canvas-panel data-sheet="{{ sheet.id }}"
+<div class="quiz" data-quiz data-sheet="{{ sheet.id }}"
      data-schools-url="{{ url_for('teach.canvas_schools') }}" data-school-save="{{ url_for('teach.canvas_school') }}"
      {% if canvas %}data-canvas-host="{{ canvas.domain }}"{% endif %}>
 
@@ -24,7 +24,7 @@
     <button type="button" class="quiz-back" data-back>← Back</button>
     <h3 class="quiz-q" tabindex="-1">Which school's Canvas do you use?</h3>
     {% if canvas and canvas.saved %}
-    <p class="quiz-guess">Right now: <strong data-school-name>{{ canvas.name }}</strong> <span class="muted">(<span data-school-domain>{{ canvas.domain }}</span>)</span>.</p>
+    <p class="quiz-guess">Right now: <strong data-school-name>{{ canvas.name }}</strong> <span class="muted" data-school-domain>({{ canvas.domain }})</span>.</p>
     <div class="quiz-choices">
       <button type="button" class="quiz-choice" data-go="canvas">
         <strong>Keep this school</strong>

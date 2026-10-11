@@ -26,19 +26,10 @@
             data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}">Copy student link</button>
   </div>
   <div class="short-row">
-    {% if sheet.short_url %}
-    <label for="short-url" class="mini-hint">Short link:</label>
-    <input id="short-url" type="text" readonly value="{{ sheet.short_url }}" class="share-input share-short">
+    <label for="short-url" class="mini-hint">Short link, for a slide or the board:</label>
+    <input id="short-url" type="text" readonly value="{{ short_url }}" class="share-input share-short">
     <button class="btn btn-secondary btn-small" type="button" data-copy="#short-url"
             data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}">Copy short link</button>
-    {% else %}
-    <form method="post" action="{{ url_for('teach.shorten_link', sid=sheet.id) }}"
-          data-confirm="Make a short link? Your class link will be sent to is.gd, a free link-shortening service (or TinyURL, if is.gd is down), which then knows the link. Anyone with the short link can open your sign-up page, just as with the full link, and short links are easier for strangers to come across. Students still need to be on your class list and confirm with an emailed code to sign in.">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit" class="btn btn-ghost btn-small">Shorten this link</button>
-    </form>
-    <span class="mini-hint">Uses a free outside service; you'll be asked first.</span>
-    {% endif %}
   </div>
   <nav class="sheet-tabs" aria-label="This class">
     <a class="sheet-tab{{ ' is-current' if tab == 'class' }}" href="{{ url_for('teach.sheet', sid=sheet.id) }}"{% if tab == 'class' %} aria-current="page"{% endif %}>Class</a>
