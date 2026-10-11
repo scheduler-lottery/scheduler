@@ -45,11 +45,11 @@ def test_the_canvas_step_has_words_for_each_kind_of_computer(prof):
 def test_the_pages_about_canvas_say_what_happens_on_this_site(prof, monkeypatch):
     privacy = text(prof.get("/privacy"))
     assert "comes to this site as soon as the instructor chooses it" in privacy
-    assert "Scheduler Helper" not in privacy and "Connect Canvas" not in privacy  # neither is offered here yet
-    assert "isn't offered on this site yet" in text(prof.get("/helper"))
-    monkeypatch.setattr(settings, "CANVAS_HELPER_IDS", ["abcdefghijklmnopabcdefghijklmnop"])
-    assert "Scheduler Helper" in text(prof.get("/privacy"))
+    assert "Scheduler Helper" in privacy and "Connect Canvas" not in privacy  # the helper is in Chrome's store
     assert "isn't offered on this site yet" not in text(prof.get("/helper"))
+    monkeypatch.setattr(settings, "CANVAS_HELPER_IDS", [])
+    assert "Scheduler Helper" not in text(prof.get("/privacy"))
+    assert "isn't offered on this site yet" in text(prof.get("/helper"))
 
 
 def test_connect_canvas_shows_only_for_the_school_whose_key_this_site_has(prof, monkeypatch):

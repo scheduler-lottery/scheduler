@@ -3151,7 +3151,12 @@ def test_after_a_list_goes_in_the_instructor_sees_who_came_over(prof):
 
 def test_scheduler_helper_is_offered_only_once_it_exists(prof, monkeypatch):
     sid = prof.create_sheet(allow_unlisted=False)
-    assert "data-helper-go" not in raw(prof.get(f"/teach/s/{sid}"))  # not published yet: not offered
+    # The one in the Chrome Web Store, with no setting at all.
+    page = raw(prof.get(f"/teach/s/{sid}"))
+    assert f'data-helper-ids="{settings.CHROME_HELPER_ID}"' in page and "data-helper-go" in page
+    assert 'data-helper-store="https://chromewebstore.google.com/detail/scheduler-helper/hafmidgmpikkkjphmcbnggidbaeoiapd"' in page
+    monkeypatch.setattr(settings, "CANVAS_HELPER_IDS", [])
+    assert "data-helper-go" not in raw(prof.get(f"/teach/s/{sid}"))  # none: not offered
     monkeypatch.setattr(settings, "CANVAS_HELPER_IDS", ["abcdefghijklmnopabcdefghijklmnop"])
     monkeypatch.setattr(settings, "CANVAS_HELPER_STORE_URL", "https://chromewebstore.google.com/detail/x")
     monkeypatch.setattr(settings, "CANVAS_HELPER_SAFARI_URL", "https://apps.apple.com/app/id1")

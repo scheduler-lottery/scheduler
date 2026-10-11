@@ -92,12 +92,13 @@ CONTACT_EMAIL = _env("CONTACT_EMAIL").lower()
 # can check what it does with a class list.
 SOURCE_URL = _env("SOURCE_URL", "https://github.com/scheduler-lottery/scheduler")
 
-# Scheduler Helper, the browser extension that fetches a class list from
-# Canvas when the class-list step asks (extension/): its id(s) in the
-# browser's extension store (more than one if, say, Edge's differs), and the
-# store page that installs it. Until they're set, the class-list step
-# doesn't offer it.
-CANVAS_HELPER_IDS = [i.strip() for i in _env("CANVAS_HELPER_IDS").split(",") if i.strip()]
+# Scheduler Helper, the Chrome extension that fetches a class list from
+# Canvas when the class-list step asks (extension/): its id in the Chrome Web
+# Store, and the store page that installs it. CANVAS_HELPER_IDS can add more
+# ids (a copy loaded for testing, say); the store's is always one.
+CHROME_HELPER_ID = "hafmidgmpikkkjphmcbnggidbaeoiapd"
+CANVAS_HELPER_IDS = [CHROME_HELPER_ID] + [
+    i.strip() for i in _env("CANVAS_HELPER_IDS").split(",") if i.strip() and i.strip() != CHROME_HELPER_ID]
 # The schools whose Canvas the helper can read, by email domain (a professor
 # at law.northwestern.edu is at northwestern.edu): the school's name and its
 # Canvas. Their professors are taken to be at that school without asking the
@@ -111,7 +112,8 @@ CANVAS_HELPER_HOSTS = [host for _name, host in CANVAS_HELPER_SCHOOLS.values()]
 CANVAS_DEV_HOST = "" if IS_VERCEL else _env("CANVAS_DEV_HOST")
 if not re.fullmatch(r"(127\.0\.0\.1|localhost):\d{2,5}", CANVAS_DEV_HOST):
     CANVAS_DEV_HOST = ""
-CANVAS_HELPER_STORE_URL = _env("CANVAS_HELPER_STORE_URL")
+CANVAS_HELPER_STORE_URL = _env("CANVAS_HELPER_STORE_URL",
+                               "https://chromewebstore.google.com/detail/scheduler-helper/" + CHROME_HELPER_ID)
 # Safari's Scheduler Helper, once it's on the Mac App Store: its page there
 # (and its identifier, "<bundle id> (<team id>)", in CANVAS_HELPER_IDS).
 CANVAS_HELPER_SAFARI_URL = _env("CANVAS_HELPER_SAFARI_URL")

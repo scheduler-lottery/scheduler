@@ -1111,9 +1111,10 @@
           };
           var slow = setTimeout(still, 8000);
           nudge = still;
-          // Three minutes without a word from the helper (it says "wait"
-          // through a sign-in): Canvas isn't answering, so say so, and the
-          // button works again.
+          // Three minutes without a word from the helper: Canvas isn't
+          // answering, so say so, and the button works again. While Canvas's
+          // sign-in page is up, eleven (the helper waits ten for a sign-in;
+          // 1.0.0 says nothing meanwhile, later ones say "wait").
           var quiet = null;
           var hush = function () {
             clearTimeout(quiet);
@@ -1121,15 +1122,15 @@
               done();
               try { port.disconnect(); } catch (err) { /* gone */ }
               answer({ type: "problem", why: "slow" });
-            }, 3 * 60 * 1000);
+            }, (signinUp ? 11 : 3) * 60 * 1000);
           };
           var done = function () { clearTimeout(slow); clearTimeout(quiet); clearInterval(beat); nudge = null; };
           hush();
           port.onMessage.addListener(function (msg) {
             if (msg && msg.type === "wait") { hush(); return; } // still signing in
             if (msg && msg.type === "signin") {
-              hush();
               signinUp = true;
+              hush();
               helperSay("Canvas's sign-in page just came up. Sign in there as usual, and you'll be brought back here.");
               return;
             }
