@@ -1889,7 +1889,7 @@ def test_the_short_link_is_this_sites_own(prof, browser, monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", no_outside_service)
     sid = prof.create_sheet()
     page = html(prof.get(f"/teach/s/{sid}"))
-    short = re.search(r'id="short-url" type="text" readonly value="http://localhost/([a-z0-9]{6})"', page).group(1)
+    short = re.search(r'id="short-url" type="text" readonly value="http://localhost/([a-z0-9]{8})"', page).group(1)
     assert any(ch.isdigit() for ch in short) and "is.gd" not in page and "TinyURL" not in page
     assert short in html(prof.get(f"/teach/s/{sid}"))  # the same one each time
     s = browser()
@@ -1903,7 +1903,7 @@ def test_the_short_link_is_this_sites_own(prof, browser, monkeypatch):
 
 def sheets_short(prof, sid):
     page = html(prof.get(f"/teach/s/{sid}"))
-    return re.search(r'id="short-url" type="text" readonly value="http://localhost/([a-z0-9]{6})"', page).group(1)
+    return re.search(r'id="short-url" type="text" readonly value="http://localhost/([a-z0-9]{8})"', page).group(1)
 
 
 def test_the_class_list_steps_aside_once_it_is_in(prof):

@@ -23,6 +23,9 @@ from util import iso, new_id
 
 SCHEMA_VERSION = "17"
 SCHEMA_PATH = os.path.join(settings.BASE_DIR, "schema.sql")
+# Postgres advisory lock held while one server upgrades the schema (any
+# number, as long as nothing else in the database uses the same one).
+SCHEMA_LOCK_KEY = 4173
 
 # Every table the app owns. On Postgres each gets row-level security turned
 # on with no policies, which shuts Supabase's auto-generated public REST API
@@ -198,6 +201,21 @@ def ensure_schema():
             return
         with get_engine().connect() as connection:
             if _current_version(connection) != SCHEMA_VERSION:
+                if connection.dialect.name == "postgresql":
+                    # Several servers can start at once after a deploy. One
+                    # upgrades; the others wait here, then find it done. The
+                    # read above is ended first so nothing is held while
+                    # waiting. The lock lasts until apply_schema commits (or
+                    # the connection closes on an error).
+                    connection.rollback()
+                    connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": SCHEMA_LOCK_KEY})
+                    # Checked this way first: on an empty database a failed
+                    # read would roll back, and with it the lock.
+                    made = connection.execute(text("SELECT to_regclass('app_state')")).scalar()
+                    if made is not None and _current_version(connection) == SCHEMA_VERSION:
+                        connection.rollback()
+                        _schema_ready = True
+                        return
                 apply_schema(connection)
         _schema_ready = True
 

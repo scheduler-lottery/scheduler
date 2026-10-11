@@ -23,7 +23,7 @@ from types import SimpleNamespace
 import db
 from matching_engine import ALGORITHMS, DEFAULT_ALGORITHM, EXCLUDED, MANUAL, OVERFLOW, UNRANKED, build_student_prefs
 from roster import SAME_NAME_SUFFIX, base_key, numbered
-from util import in_zone, iso, iso_precise, new_id, normalize_name, now, plural, read_date, slugify
+from util import ID_ALPHABET, in_zone, iso, iso_precise, new_id, normalize_name, now, plural, read_date, slugify
 
 MAX_DAYS = 30
 MAX_BACKUP_JSON_BYTES = 5 * 1024 * 1024
@@ -39,7 +39,7 @@ SHEET_FIELDS = (
     "id", "title", "note", "rank_by", "capacity_per_day", "algorithm", "bidding_open",
     "allow_unlisted", "show_preview", "include_unranked", "lottery_seed", "last_algorithm",
     "scheduled_at", "schedule_signature", "published_at", "roster_updated_at", "created_at",
-    "updated_at", "canvas_course_id", "canvas_course",
+    "updated_at", "canvas_course_id", "canvas_course", "short_code",
 )
 # What a restore puts back. Whether sign-ups are open, and whether the
 # schedule is published, are left as they are now: going back to an earlier
@@ -71,22 +71,40 @@ def get_sheet(sid):
 SHEET_ID_LENGTH = 12
 SHEET_ID_LENGTHS = (8, 12)
 # A class's short link, on this site (no outside link-shortener, so no ads
-# and nobody else told the link): example.com/<6 characters>, always with a
-# digit, so it's never a word one of the site's own pages uses.
-SHORT_CODE_LENGTH = 6
+# and nobody else told the link): example.com/<8 characters>, always with a
+# digit, so it's never a word one of the site's own pages uses. With 31^8 of
+# them, trying codes until one is a class's gets nowhere, even from many
+# network addresses at once (each held to app.py's limit on wrong codes).
+# The first short links were 6 characters; those keep working.
+SHORT_CODE_LENGTH = 8
+SHORT_CODE_LENGTHS = (6, 8)
 
 
 def short_code(sid):
-    """The sheet's short-link code, made the first time it's asked for."""
-    code = db.scalar("SELECT short_code FROM sheets WHERE id = :sid", sid=sid)
-    while not code:
+    """The sheet's short-link code, made the first time it's asked for. None
+    if the sheet isn't there (deleted from another tab while its page was
+    loading), rather than trying for ever."""
+    for _ in range(20):
+        found = db.row("SELECT short_code FROM sheets WHERE id = :sid", sid=sid)
+        if not found or found["short_code"]:
+            return found["short_code"] if found else None
         made = new_id(SHORT_CODE_LENGTH)
-        if not any(ch.isdigit() for ch in made) or db.scalar("SELECT 1 FROM sheets WHERE short_code = :c", c=made):
-            continue
-        db.run("UPDATE sheets SET short_code = :c WHERE id = :sid AND short_code IS NULL", c=made, sid=sid)
-        db.commit()
-        code = db.scalar("SELECT short_code FROM sheets WHERE id = :sid", sid=sid)
-    return code
+        if _short_code_free(made):
+            db.run("UPDATE sheets SET short_code = :c WHERE id = :sid AND short_code IS NULL", c=made, sid=sid)
+            db.commit()
+    return None
+
+
+def _short_code_free(code):
+    """Whether `code` can be a sheet's short code: shaped like one, and not
+    another class's short code or class code (older classes have 8-character
+    codes too, and those are looked up first), even a deleted class's."""
+    return (
+        isinstance(code, str) and len(code) in SHORT_CODE_LENGTHS and all(ch in ID_ALPHABET for ch in code)
+        and any(ch.isdigit() for ch in code)
+        and not db.scalar("SELECT 1 FROM sheets WHERE short_code = :c OR id = :c", c=code)
+        and not db.scalar("SELECT 1 FROM snapshots WHERE sheet_id = :c", c=code)
+    )
 
 
 def by_short_code(code):
@@ -1201,6 +1219,12 @@ def restore(sheet_id, owner_id, data, keep_newer=True, parts=None):
         )
         parts = {"settings", "days", "roster", "submissions", "assignments"}
         keep_newer = False
+        # The same short link as before (it may be on a slide or a syllabus),
+        # unless another class has it now. A backup brought back as a new
+        # sheet has a new id, so it never takes one.
+        code = saved.get("short_code")
+        if saved.get("id") == sheet_id and _short_code_free(code):
+            db.run("UPDATE sheets SET short_code = :c WHERE id = :sid", c=code, sid=sheet_id)
 
     if "settings" in parts:
         db.run(
