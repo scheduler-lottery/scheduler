@@ -439,31 +439,27 @@ def replace_roster(sid, students):
     return _signin_changes(before, {s["name_key"]: s["email"] for s in incoming}, pinned)
 
 
-def _whose_new_email(current, students, s):
-    """The student `s` must be, by elimination, when `s` comes with an email
-    we don't have under a name students share: the only one of that name
-    with no email, when everyone else of that name is in `students` by
-    their email, `s` is the only one there with a new email, and none there
-    has no email (who'd more likely be them). Whatever number the list gave
-    `s`. None otherwise, as for a late joiner typed in on their own."""
-    name = _same_name(s["display_name"])
-    group = [r for r in current.values() if not r["is_test"] and _same_name(r["display_name"]) == name]
-    blanks = [r for r in group if not r["email"]]
-    known = {r["email"] for r in current.values() if r["email"]}
-    listed = [t for t in students if _same_name(t["display_name"]) == name]
-    if (len(blanks) == 1 and all(t["email"] for t in listed)
-            and [t["email"] for t in listed if t["email"] not in known] == [s["email"]]
-            and {r["email"] for r in group if r["email"]} <= {t["email"] for t in listed}):
-        return blanks[0]
-    return None
-
-
 def add_to_roster(sid, students):
     """Add the names that aren't on the list yet, and fill in emails that
     were missing. Never changes or removes anything else. Returns (added,
-    emails_filled_in, keys whose way of signing in changed)."""
-    current = {r["name_key"]: r for r in get_roster(sid)}
-    emails = {r["email"] for r in current.values() if r["email"]}
+    emails_filled_in, keys whose way of signing in changed).
+
+    Students who share a name: where `students` has as many of a name as
+    the list does (or more), who's who is carry_over's, just as the review
+    page shows it, so a newcomer never takes anyone's name, and a student
+    with no email gets one only by elimination ("Sam Rivera (2)", when the
+    other Sam Rivera's email is there too). Where it has fewer (one typed
+    in, or someone left), nothing says which of them a new email is, so
+    it's someone new, numbered: never filled in for one of them."""
+    rows = get_roster(sid)
+    current = {r["name_key"]: r for r in rows}
+    emails = {r["email"] for r in rows if r["email"]}
+    have = Counter(_same_name(r["display_name"]) for r in rows if not r["is_test"])
+    listed = Counter(_same_name(s["display_name"]) for s in students)
+    whole = {name for name, n in listed.items() if 0 < have[name] <= n}
+    unclear = {name for name, n in have.items() if n > 1 and listed[name] < n}
+    students = carry_over(rows, [s for s in students if _same_name(s["display_name"]) in whole])[0] + [
+        s for s in students if _same_name(s["display_name"]) not in whole]
     added, filled, changed = 0, 0, []
     for s in students:
         if s["email"] and any(r["email"] == s["email"] and base_key(r["name_key"]) == base_key(s["name_key"])
@@ -471,12 +467,9 @@ def add_to_roster(sid, students):
             continue  # already on the list
         here = current.get(s["name_key"])
         email = s["email"] if s["email"] not in emails else ""
-        if email and (here is None or here["email"]):
-            blank = _whose_new_email(current, students, s)
-            if blank:
-                here, s = blank, {**s, "name_key": blank["name_key"], "display_name": blank["display_name"]}
-        if here is not None and not here["is_test"] and here["email"] and email and here["email"] != email:
-            # A different student with the same name: add them too, numbered.
+        if here is not None and not here["is_test"] and email and here["email"] != email and (
+                here["email"] or _same_name(here["display_name"]) in unclear):
+            # A different student with the same name (or nothing says it's this one): add them too, numbered.
             n = 2
             while normalize_name(numbered(s["display_name"], n)) in current:
                 n += 1

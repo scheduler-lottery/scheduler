@@ -213,6 +213,42 @@ def test_a_late_joiner_typed_in_with_a_twins_name_is_added_numbered(prof, browse
     assert gets_in_with_pin(browser, sid, "Sam Rivera (2)", "4831")
 
 
+def test_a_late_joiner_typed_in_beside_two_pin_twins_never_gets_one_of_their_names(prof, browser):
+    """Neither twin has an email, so nothing says the typed one is either of them: someone new."""
+    sid = prof.create_sheet(allow_unlisted=False)
+    prof.upload(sid, HEAD + "Sam Rivera,1005,\nSam Rivera,1006,\n" + OTHERS, "students.csv")
+    keys = day_keys(sid)
+    browser().sign_in_student(sid, "Sam Rivera", pin="5927").rank(sid, keys[::-1])
+    browser().sign_in_student(sid, "Sam Rivera (2)", pin="4831").rank(sid, keys)
+    page = follow(prof, prof.post(f"/teach/s/{sid}/roster/quick-add", {"people": "Sam Rivera, aa@u.school.edu"}))
+    assert "Added 1 student: Sam Rivera (3)" in text(page)
+    rows = roster(prof.app, sid)
+    assert rows["sam rivera"] == "" and rows["sam rivera 2"] == "" and rows["sam rivera 3"] == "aa@u.school.edu"
+    assert gets_in_with_pin(browser, sid, "Sam Rivera", "5927") and gets_in_with_pin(browser, sid, "Sam Rivera (2)", "4831")
+
+
+def test_adding_a_newcomer_beside_a_pin_student_does_what_the_review_page_says(prof, browser):
+    """The new list numbers the newcomer, who has an email, first. The review page says they're new, as
+    “Sam Rivera (2)”, and Add does just that: the student known by their PIN keeps their name, PIN, ranking
+    and note."""
+    sid = prof.create_sheet(allow_unlisted=False)
+    prof.upload(sid, HEAD + "Sam Rivera,1005,\n" + OTHERS, "students.csv")
+    keys = day_keys(sid)
+    first = browser().sign_in_student(sid, "Sam Rivera", pin="5927")
+    first.rank(sid, keys, comments={keys[0]: "my private note"})
+    page = review(prof, prof.upload(sid, HEAD + "Sam Rivera,1005,\nSam Rivera,1009,aa@u.school.edu\n" + OTHERS
+                                    + LATE, "students.csv"), action="add")
+    assert "2 new: Li Wu , Sam Rivera (2)" in page and "Add the 2 new names" in page
+    assert roster(prof.app, sid) == {"sam rivera": "", "sam rivera 2": "aa@u.school.edu", "maya patel": "mp@u.school.edu",
+                                     "jo park": "jp@u.school.edu", "li wu": "lw@u.school.edu"}
+    assert gets_in_with_pin(browser, sid, "Sam Rivera", "5927") and ranking(prof.app, sid, "sam rivera") == keys
+    newcomer = browser()
+    newcomer.post(f"/c/{sid}/login", {"name": "Sam Rivera (2)"})
+    assert newcomer.outbox[-1].to == ["aa@u.school.edu"]
+    newcomer.post(f"/c/{sid}/verify", {"code": newcomer.last_code("aa@u.school.edu")})
+    assert "my private note" not in html(newcomer.get(f"/c/{sid}/rank"))
+
+
 def test_a_student_with_no_email_signs_in_by_their_number_beside_twins_with_emails(prof, browser):
     sid = prof.create_sheet(allow_unlisted=False)
     prof.upload(sid, HEAD + "Sam Rivera,1005,\nSam Rivera,1006,zz@u.school.edu\nSam Rivera,1008,aa@u.school.edu\n"
