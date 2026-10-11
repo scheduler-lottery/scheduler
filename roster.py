@@ -868,11 +868,11 @@ def _same_name_tips(result):
     for first, others in list(groups.items())[:5]:
         count = {2: "Two", 3: "Three", 4: "Four"}.get(len(others) + 1, str(len(others) + 1))
         listed = _listed([f"“{name}”" for name in [first] + others])
-        no_email = [name for name in others if name in result.pin_twins]
+        no_email = [name for name in [first] + others if not emails.get(name)]
         if not no_email:
             tips.append(f"{count} students are named {first}, so they're listed as {listed}. Each one signs in "
                         "with a code sent to their own email, so they can't mix them up.")
-        elif not emails.get(first):
+        elif len(no_email) == len(others) + 1:
             tips.append(f"{count} students are named {first} and the list has no email for them, so they're listed "
                         f"as {listed} and sign in with a PIN. Tell each one which name is theirs, or add their "
                         "emails under “See or change the list”.")
@@ -886,8 +886,10 @@ def _same_name_tips(result):
     return tips
 
 
-def describe(result, source=""):
-    """A plain-English summary for the instructor: (message, [tips])."""
+def describe(result, source="", known=frozenset()):
+    """A plain-English summary for the instructor: (message, [tips]).
+    `known`: names already on the class list (whoever of them has no email
+    already signs in with a PIN of their own: no note about making one up)."""
     from signin import PIN_MAX_DIGITS, PIN_MIN_DIGITS
 
     n = len(result.students)
@@ -919,7 +921,7 @@ def describe(result, source=""):
         # Those with an incomplete address have a note of their own.
         incomplete = {name for name, _ in result.bad_emails}
         missing = [s["display_name"] for s in result.students
-                   if not s["email"] and s["display_name"] not in incomplete]
+                   if not s["email"] and s["display_name"] not in incomplete and s["display_name"] not in known]
         if missing:
             one = len(missing) == 1
             shown = _listed(missing) if len(missing) <= 3 else f"{', '.join(missing[:3])} and {len(missing) - 3} more"

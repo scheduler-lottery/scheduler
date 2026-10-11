@@ -6,6 +6,7 @@ Every route that touches a sheet goes through owned_sheet(), which answers
 There is no other way in, for anyone — including the site's owner.
 """
 
+import dataclasses
 import hashlib
 import hmac
 import json
@@ -38,7 +39,7 @@ from matching_engine import (
     ALGORITHMS, CHOOSABLE, COMPARE_TRIALS, DEFAULT_ALGORITHM, MANUAL, compare_algorithms,
     compute_assignment, fill_open_seats, verdict,
 )
-from roster import RosterResult, describe, find_email, flip_last_first, parse_people, parse_roster, _is_last_first
+from roster import SAME_NAME_SUFFIX, RosterResult, describe, find_email, flip_last_first, parse_people, parse_roster, _is_last_first
 from util import (
     clean_name, clean_text, date_label, fold, in_zone, iso, mask_email, new_id, normalize_name, now, parse_iso,
     plural, read_date, slugify, valid_email,
@@ -1603,11 +1604,25 @@ def _take_list(sheet, data, source, source_label, pasted=False, setup=False, par
     # A file with no name column and no emails may be the wrong file (say,
     # the grades file from the folder Safari makes of Canvas's download):
     # a look before it goes in.
-    wrong_file = bool(source and not pasted and not result.name_column and not result.with_email and not look_first)
+    wrong_file = bool(source and not pasted and not canvas and not result.name_column and not result.with_email
+                      and not look_first)  # (a list from Canvas itself has names, with no column of them)
     if wrong_file:
         look_first = ("This file has no Name or Email column, so it may not be your class list. If Canvas's download "
                       "became a folder, choose the file with “student” in its name.")
-    message, tips = describe(result, source)
+    # A list that would change one already here: its notes name students as
+    # they'll be once it's in (two students sharing a name keep their own
+    # names: sheets.carry_over), and say nothing about making up a PIN to
+    # those who already have one.
+    on_list = [r for r in sheets.get_roster(sheet["id"]) if not r["is_test"]]
+    if on_list:
+        planned = sheets.carry_over(on_list, result.students)[0]
+        groups = Counter(SAME_NAME_SUFFIX.sub("", s["display_name"]) for s in planned)
+        named = dataclasses.replace(result, students=planned, numbered=[
+            s["display_name"] for s in planned
+            if groups[SAME_NAME_SUFFIX.sub("", s["display_name"])] > 1 and SAME_NAME_SUFFIX.search(s["display_name"])])
+        message, tips = describe(named, source, known={r["display_name"] for r in on_list if not r["email"]})
+    else:
+        message, tips = describe(result, source)
     if wrong_file:
         # Its "no email addresses" note (the one a list without emails gets) is no help with the wrong file.
         tips = [t for t in tips if t not in describe(RosterResult())[1]]

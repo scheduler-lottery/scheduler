@@ -81,3 +81,15 @@ def test_connect_canvas_brings_the_course_the_sheet_is_named_for(prof, monkeypat
     other = prof.create_sheet(title="Seminar on Privacy", allow_unlisted=False)
     back = _authorize(canvas, prof.get(f"/teach/s/{other}/canvas/connect").headers["Location"])
     assert prof.get(back.path + "?" + back.query).headers["Location"].endswith("/teach/canvas/oauth/pick")
+
+
+def test_a_list_from_canvas_without_emails_is_not_taken_for_the_wrong_file(prof):
+    import json
+
+    sid = prof.create_sheet(allow_unlisted=False)
+    prof.upload(sid, "Name,Email\nAna Lima,ana@school.edu\n")  # a list already there: the next one is looked over
+    listed = json.dumps({"type": "scheduler-class-list", "v": 2, "courseId": "77", "course": "LAW 540",
+                         "students": [{"name": "Ana Lima", "email": ""}, {"name": "Bo Chen", "email": ""}]})
+    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": listed, "how": "helper"})
+    page = text(prof.get(r.headers["Location"]))
+    assert "no Name or Email column" not in page

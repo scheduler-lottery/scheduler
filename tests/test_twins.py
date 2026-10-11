@@ -120,8 +120,8 @@ def test_a_pin_twin_whose_email_now_shows_keeps_their_name_and_ranking(prof, bro
 
 def test_through_scheduler_helper_a_twin_dropping_leaves_the_other_their_pin(prof, browser):
     sid = prof.create_sheet(allow_unlisted=False)
-    review(prof, prof.post(f"/teach/s/{sid}/canvas-list",
-                           {"list": helper_list(["Sam Rivera", "Sam Rivera", "Maya Patel", "Jo Park"])}))
+    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": helper_list(["Sam Rivera", "Sam Rivera", "Maya Patel", "Jo Park"])})
+    assert r.headers["Location"].endswith("#class-list")  # a first list from Canvas, with no emails: straight in
     assert sorted(roster(prof.app, sid)) == ["jo park", "maya patel", "sam rivera", "sam rivera 2"]
     keys = day_keys(sid)
     browser().sign_in_student(sid, "Sam Rivera", pin="5927").rank(sid, keys[::-1])
@@ -238,7 +238,9 @@ def test_adding_a_newcomer_beside_a_pin_student_does_what_the_review_page_says(p
     first.rank(sid, keys, comments={keys[0]: "my private note"})
     page = review(prof, prof.upload(sid, HEAD + "Sam Rivera,1005,\nSam Rivera,1009,aa@u.school.edu\n" + OTHERS
                                     + LATE, "students.csv"), action="add")
-    assert "2 new: Li Wu , Sam Rivera (2)" in page and "Add the 2 new names" in page
+    assert "2 new: Li Wu , Sam Rivera (2)" in page and "Add Li Wu and Sam Rivera (2)" in page
+    # The notes name them as they'll be: the student already here (no email) keeps "Sam Rivera" and their PIN.
+    assert "the one with no email is “Sam Rivera”" in page and "make up their own PIN" not in page
     assert roster(prof.app, sid) == {"sam rivera": "", "sam rivera 2": "aa@u.school.edu", "maya patel": "mp@u.school.edu",
                                      "jo park": "jp@u.school.edu", "li wu": "lw@u.school.edu"}
     assert gets_in_with_pin(browser, sid, "Sam Rivera", "5927") and ranking(prof.app, sid, "sam rivera") == keys

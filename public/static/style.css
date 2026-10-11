@@ -1625,7 +1625,7 @@ section[id], main[id] { scroll-margin-top: 80px; }
 }
 .short-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
 .short-row form { margin: 0; }
-.share-short { max-width: 260px; }
+.share-short { width: 100%; max-width: 26em; } /* (the whole short link shows, code and all) */
 
 .confirm-box {
   border: 1px solid var(--danger);
