@@ -540,7 +540,9 @@
           quiz.setAttribute("data-canvas-host", answer.data.domain);
           quiz.dispatchEvent(new CustomEvent("canvas-school")); // (the Canvas step's offer may change)
           quiz.querySelectorAll("[data-school-name]").forEach(function (el) { el.textContent = answer.data.name; });
-          quiz.querySelectorAll("[data-school-domain]").forEach(function (el) { el.textContent = "(" + answer.data.domain + ")"; });
+          quiz.querySelectorAll("[data-school-domain]").forEach(function (el) {
+            el.textContent = answer.data.name === answer.data.domain ? "" : "(" + answer.data.domain + ")";
+          });
           // (Next time, "Change" asks the short question again; the search
           // keeps what was found, for "a different school".)
           if (search && search.hasAttribute("data-start-hidden")) search.hidden = true;
@@ -611,10 +613,17 @@
 
   // Connect Canvas's course choice: the course's name goes with its number
   // (for the review and the sheet), set from the button pressed.
+  // One course only: a second click (or a double-click) would send the
+  // same one-time Canvas permission again, after it's been given back.
   document.querySelectorAll(".connect-courses").forEach(function (form) {
     form.addEventListener("click", function (e) {
       var pick = e.target.closest("button[data-name]");
       if (pick) form.querySelector("[data-course-name]").value = pick.getAttribute("data-name");
+    });
+    form.addEventListener("submit", function (e) {
+      if (form.hasAttribute("data-sent")) { e.preventDefault(); return; }
+      form.setAttribute("data-sent", "");
+      form.setAttribute("aria-busy", "true");
     });
   });
 

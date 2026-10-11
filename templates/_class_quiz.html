@@ -24,7 +24,7 @@
     <button type="button" class="quiz-back" data-back>← Back</button>
     <h3 class="quiz-q" tabindex="-1">Which school's Canvas do you use?</h3>
     {% if canvas and canvas.saved %}
-    <p class="quiz-guess">Right now: <strong data-school-name>{{ canvas.name }}</strong> <span class="muted" data-school-domain>({{ canvas.domain }})</span>.</p>
+    <p class="quiz-guess">Right now: <strong data-school-name>{{ canvas.name }}</strong> {% if canvas.name != canvas.domain %}<span class="muted" data-school-domain>({{ canvas.domain }})</span>{% endif %}.</p>
     <div class="quiz-choices">
       <button type="button" class="quiz-choice" data-go="canvas">
         <strong>Keep this school</strong>
@@ -34,7 +34,7 @@
       </button>
     </div>
     {% elif canvas %}
-    <p class="quiz-guess">From your email address, it looks like <strong>{{ canvas.name }}</strong> <span class="muted">({{ canvas.domain }})</span>.</p>
+    <p class="quiz-guess">From your email address, it looks like <strong>{{ canvas.name }}</strong>{% if canvas.name != canvas.domain %} <span class="muted">({{ canvas.domain }})</span>{% endif %}.</p>
     <div class="quiz-choices">
       <button type="button" class="quiz-choice" data-school-pick data-domain="{{ canvas.domain }}" data-name="{{ canvas.name }}">
         <strong>Yes, that's my school</strong>

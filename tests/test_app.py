@@ -3455,6 +3455,8 @@ def test_canvas_names_written_last_first_are_turned_round_not_cut(prof):
 # -- Checking a new class list, and getting back from the wrong one ----------
 
 GRADES = "Assignment Name,Points Possible,Average\nEssay 1,10,8.5\nReading Response 2,5,4.1\nMidterm Paper,20,17\n"
+# A file with no Name or Email column that isn't Canvas's grades file (that one is turned away): a look first.
+NO_HEADINGS = "Alex Kim,2L,Torts\nSam Lee,3L,Contracts\nRiya Patel,2L,Torts\n"
 
 
 def _buttons(page):
@@ -3495,8 +3497,7 @@ def test_a_list_that_changes_nothing_just_says_so(prof):
     prof.upload(b)
     page = follow(prof, prof.upload(b, CANVAS_ROSTER, "course_analytics_students.csv"))
     assert ("already matches “course_analytics_students.csv”: all 3 students, nobody new and nobody gone. Nothing "
-            "changed. Just downloaded a new file from Canvas? Choose the newest one in Downloads: its name may end in "
-            "(1) or (2).") in page
+            "changed. Just downloaded a new file from Canvas? Choose the newest one in Downloads.") in page
     # A sheet whose list came from a file learns its Canvas course from a matching list.
     same = json.dumps({"type": "scheduler-class-list", "v": 2, "courseId": "777", "course": "SEM", "students": [
         {"name": "Alex Johnson", "email": "alex@school.edu"}, {"name": "Sam Lee", "email": "sam@school.edu"},
@@ -3558,7 +3559,7 @@ def test_the_wrong_file_on_an_empty_list_offers_just_add_or_choose_another(prof)
     import roster
 
     sid = prof.create_sheet(allow_unlisted=False)
-    r = prof.post(f"/teach/s/{sid}/roster", {"roster": (io.BytesIO(GRADES.encode()), "course_grade.csv"), "setup": "1",
+    r = prof.post(f"/teach/s/{sid}/roster", {"roster": (io.BytesIO(NO_HEADINGS.encode()), "course_grade.csv"), "setup": "1",
                                              "box": f"canvas-file-{sid}"}, content_type="multipart/form-data")
     page = raw(prof.get(r.headers["Location"]))
     n = re.search(r"“course_grade.csv”: (\d+) names\. Your list now: 0 students", text(page)).group(1)
@@ -3570,9 +3571,9 @@ def test_the_wrong_file_on_an_empty_list_offers_just_add_or_choose_another(prof)
     assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students#canvas-file-{sid}")
     assert "Nothing was added. Choose a different file in the box below." in follow(prof, r)
     # Put in anyway: the warning heads the report, in yellow.
-    r = prof.upload(sid, GRADES, "course_grade.csv")
+    r = prof.upload(sid, NO_HEADINGS, "course_grade.csv")
     page = follow(prof, prof.post(r.headers["Location"], {"action": "replace"}))
-    assert re.search(r'class="report report-warn">.*?<ul class="tips"><li>This file has no Name or Email column',
+    assert re.search(r'class="report report-warn"[^>]*>.*?<ul class="tips"><li>This file has no Name or Email column',
                      page, re.S)
     # The list taken off while another waited to be checked (even one with a note): its one button is the one.
     b = prof.create_sheet(title="Meanwhile")
@@ -3596,7 +3597,7 @@ def test_cancel_and_upload_errors_go_back_to_the_box_the_file_came_from(prof):
     assert r.headers["Location"].endswith(f"/teach/s/{sid}#roster-file")
     assert "Kept your current class list. Nothing changed." in follow(prof, r)
     # The wrong file, with a list in place.
-    r = upload(GRADES, "course_grade.csv", box="roster-file")
+    r = upload(NO_HEADINGS, "course_grade.csv", box="roster-file")
     page = follow(prof, prof.post(r.headers["Location"], {"action": "cancel"}))
     assert "Kept your current class list. Nothing changed. Choose a different file in the box below." in page
     # A file that can't be read, and no file at all: back at the box, from setup too.

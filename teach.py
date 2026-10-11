@@ -300,6 +300,11 @@ def restart():
 
 @bp.route("/logout", methods=["POST"])
 def logout():
+    # A Canvas permission still waiting on a course list: given back, not just forgotten.
+    sealed = (session.get("canvas_connect") or {}).get("token")
+    token = canvas_oauth.unseal(sealed) if sealed else None
+    if token:
+        canvas_oauth.revoke(token, session["canvas_connect"].get("host"))
     for key in ("instructor_id", "pending_teach", "dev_code", "teach_next", "roster_report", "undo", "canvas_connect"):
         session.pop(key, None)
     auth.sign_out_all_students()  # including "see it as a student" sign-ins
@@ -1530,7 +1535,8 @@ def _take_list(sheet, data, source, source_label, pasted=False, setup=False, par
     if not source:
         message = message.replace(" from “”", "")
     warn = bool(result.duplicates or result.bad_emails or result.suspicious or result.garbled
-                or result.email_only or result.skipped or getattr(result, "pin_twins", None))
+                or result.email_only or result.skipped or getattr(result, "pin_twins", None)
+                or getattr(result, "merged", None))
     sections = dict(result.sections)
 
     current = [r for r in sheets.get_roster(sheet["id"]) if not r["is_test"]]
@@ -1553,8 +1559,7 @@ def _take_list(sheet, data, source, source_label, pasted=False, setup=False, par
             everyone = f"all {plural(len(current), 'student')}" if len(current) > 1 else "1 student"
             said = f"Your class list already matches {where}: {everyone}, nobody new and nobody gone. Nothing changed."
             if not course and not pasted:
-                said += (" Just downloaded a new file from Canvas? Choose the newest one in Downloads: its name may "
-                         "end in (1) or (2).")
+                said += " Just downloaded a new file from Canvas? Choose the newest one in Downloads."
             flash(said, "success")
             return _list_back(sheet, setup)
     pid = _store_pending(sheet, "roster", {
@@ -1594,9 +1599,11 @@ def _take_canvas_list(sheet, data, setup=False, forget=None):
             look_first = (f"This sheet's class list came from {before} in Canvas; this one is from {course}. "
                           "Is it the right course?")
     host = canvasdir.clean_host(data.get("host"))
-    if host:
-        db.run("UPDATE instructors SET canvas_host = :host, canvas_school = COALESCE(canvas_school, :host) "
-               "WHERE id = :id AND canvas_host IS NULL", host=host, id=sheet["owner_id"])
+    if host and not db.scalar("SELECT canvas_host FROM instructors WHERE id = :id", id=sheet["owner_id"]):
+        # (The school's name, if the directory knows it: not the address twice.)
+        db.run("UPDATE instructors SET canvas_host = :host, canvas_school = COALESCE(canvas_school, :name) "
+               "WHERE id = :id AND canvas_host IS NULL", host=host, name=canvasdir.name_of(host) or None,
+               id=sheet["owner_id"])
         db.commit()
     return _take_list(sheet, None, f"Canvas: {course}", f"sent from Canvas ({course})", setup=setup,
                       parsed=parse_people(canvas_import.people(data)), canvas=canvas, look_first=look_first)
