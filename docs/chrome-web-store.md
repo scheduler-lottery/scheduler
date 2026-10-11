@@ -14,8 +14,13 @@ days and can take a couple of weeks for a new developer.
 .venv/bin/python tools/build_extension.py store
 ```
 
-The upload is `dist/scheduler-helper.zip`. The screenshots are in `dist/store/`; the
-browser test makes them:
+The upload is `dist/scheduler-helper.zip`. It is version **1.0.1**, the one to upload
+now. What changed since 1.0.0: when Canvas is left open in a tab and has signed the
+professor out, the helper opens a new Canvas tab to sign in (1.0.0 brought up the old
+tab, which had nowhere to sign in), and Scheduler's page can ask it to bring that page
+back to the front.
+
+The screenshots are in `dist/store/`; the browser test makes them:
 
 ```bash
 SHOTS=dist/store node tools/e2e_canvas_helper.mjs
@@ -111,8 +116,11 @@ extensions from other stores" click, and the page says so):
 
 ## Updates
 
-Run `tools/build_extension.py store` again, bump `version` in
-`extension/manifest.json`, upload the new zip under **Package**, and submit.
+Bump `version` in `extension/manifest.json`, run `tools/build_extension.py store`
+again, upload the new zip under **Package**, and submit. If 1.0.0 is in the store,
+upload 1.0.1 now: it is already the version in `extension/manifest.json`, so skip
+the bump this once. It asks for no new permissions, so Chrome updates professors
+who have the helper without asking them anything.
 
 Keep the permissions exactly as they are. An update that adds a permission Chrome
 warns about turns the helper off until each professor approves it again.

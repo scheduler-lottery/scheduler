@@ -1,7 +1,11 @@
 // End to end, in a real (headless) Chrome with Scheduler Helper installed:
 // one click on the class-list step brings the class list from the stand-in
-// Canvas, signing in to Canvas on the way. Run the stand-in Canvas and this
-// site, the site told the dev helper's id, then build the helper and run:
+// Canvas, signing in to Canvas on the way, even when a Canvas tab left open
+// has been signed out; the page can ask the helper to bring it back to the
+// front; and when the helper has to read inside a Canvas tab, a tab that's
+// stuck or slow can't stop it, nor keep it from saying it's still there.
+// Run the stand-in Canvas and this site, the site told the dev helper's id,
+// then build the helper and run:
 //
 //     .venv/bin/python tools/fake_canvas.py
 //     CANVAS_DEV_HOST=127.0.0.1:5077 CANVAS_HELPER_IDS=lgfmbiibmekimpipoeodjmkeimdffnmm \
@@ -36,6 +40,11 @@ const chrome = spawn(CHROME, ["--headless=new", "--remote-debugging-pipe", "--en
 let nextId = 1;
 const waiting = new Map();
 const created = [];
+const requests = []; // what pages with Network on asked for
+let helperSession = null; // the helper itself, once the test is attached to it
+let refusedHere = 0; // the helper's own reads of Canvas, refused (to make it read in a tab)
+let slowMs = 4000; // how slow Canvas is to say who's signed in, near the end (null: until let go)
+const held = []; // those answers, held while slowMs is null
 let buffer = "";
 chrome.stdio[4].on("data", (chunk) => {
   buffer += chunk.toString("utf8");
@@ -49,6 +58,18 @@ chrome.stdio[4].on("data", (chunk) => {
       msg.error ? no(new Error(JSON.stringify(msg.error))) : ok(msg.result);
     } else if (msg.method === "Target.targetCreated") {
       created.push(msg.params.targetInfo);
+    } else if (msg.method === "Network.requestWillBeSent") {
+      requests.push({ session: msg.sessionId, url: msg.params.request.url });
+    } else if (msg.method === "Network.loadingFailed" && msg.sessionId === helperSession && msg.params.blockedReason) {
+      refusedHere++;
+    } else if (msg.method === "Target.attachedToTarget" && msg.params.waitingForDebugger) {
+      // A tab opened while Canvas is slow (near the end): slow there too.
+      const session = msg.params.sessionId;
+      (msg.params.targetInfo.type === "page" ? send("Fetch.enable", { patterns: [{ urlPattern: "*/api/v1/users/self*" }] }, session) : Promise.resolve())
+        .then(() => send("Runtime.runIfWaitingForDebugger", {}, session)).catch(() => {});
+    } else if (msg.method === "Fetch.requestPaused") {
+      const go = () => send("Fetch.continueRequest", { requestId: msg.params.requestId }, msg.sessionId).catch(() => {});
+      if (slowMs === null) held.push(go); else setTimeout(go, slowMs);
     }
   }
 });
@@ -110,6 +131,35 @@ async function shot(session, name, selector) {
 const press = (session, label) => evaluate(session, `(() => {
   const b = [...document.querySelectorAll("button, a")].find((x) => x.textContent.includes(${JSON.stringify(label)}) && x.offsetParent !== null);
   if (!b) return false; b.click(); return true; })()`);
+const pages = async () => (await send("Target.getTargets")).targetInfos.filter((t) => t.type === "page");
+// A Canvas tab created since `before` (Target.targetCreated), once it has an address.
+async function newCanvasTab(before, ms = 5000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    const ids = new Set(created.slice(before).filter((t) => t.type === "page").map((t) => t.targetId));
+    const tab = (await pages()).find((t) => ids.has(t.targetId) && t.url.startsWith(CANVAS));
+    if (tab) return tab;
+    await sleep(100);
+  }
+  return null;
+}
+// A new sheet, opened at its class-list step with "my class is in Canvas" chosen.
+async function canvasStep(session, title) {
+  const sid = await evaluate(session, `(async () => {
+    const csrf = document.querySelector('meta[name=csrf-token]').content;
+    const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+    const body = new URLSearchParams([["csrf_token", csrf], ["title", ${JSON.stringify(title)}], ["capacity", "30"],
+      ["day_date", day(30)], ["day_key", ""], ["day_date", day(31)], ["day_key", ""]]);
+    const r = await fetch("/teach/new", { method: "POST", body, redirect: "follow" });
+    return (r.url.match(/\\/teach\\/s\\/([^/?#]+)/) || [])[1];
+  })()`);
+  if (!sid) return null;
+  await go(session, `${SITE}/teach/s/${sid}/setup?step=students`);
+  await evaluate(session, `sessionStorage.setItem("quiz-step-${sid}", "canvas")`);
+  await go(session, `${SITE}/teach/s/${sid}/setup?step=students&again=1`);
+  await until(session, `!!document.querySelector("[data-quiz]") && !!document.querySelector("[data-helper-go]")`);
+  return sid;
+}
 
 try {
   await sleep(500);
@@ -125,21 +175,9 @@ try {
   const code = await evaluate(me.session, `(document.body.innerText.match(/The code is\\s+(\\d{6})/) || [])[1]`);
   await evaluate(me.session, `document.querySelector('input[name=code]').value = "${code}"; document.querySelector('input[name=code]').form.submit()`);
   await until(me.session, `location.pathname.startsWith("/teach") && location.pathname !== "/teach/verify" && document.readyState === "complete"`);
-  const sid = await evaluate(me.session, `(async () => {
-    const csrf = document.querySelector('meta[name=csrf-token]').content;
-    const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
-    const body = new URLSearchParams([["csrf_token", csrf], ["title", "Helper Seminar"], ["capacity", "30"],
-      ["day_date", day(30)], ["day_key", ""], ["day_date", day(31)], ["day_key", ""]]);
-    const r = await fetch("/teach/new", { method: "POST", body, redirect: "follow" });
-    return (r.url.match(/\\/teach\\/s\\/([^/?#]+)/) || [])[1];
-  })()`);
-  check(!!sid, "made a sheet");
-
   // The class-list step, on Canvas (this school's Canvas is the stand-in).
-  await go(me.session, `${SITE}/teach/s/${sid}/setup?step=students`);
-  await evaluate(me.session, `sessionStorage.setItem("quiz-step-${sid}", "canvas")`);
-  await go(me.session, `${SITE}/teach/s/${sid}/setup?step=students&again=1`);
-  await until(me.session, `!!document.querySelector("[data-quiz]") && !!document.querySelector("[data-helper-go]")`);
+  const sid = await canvasStep(me.session, "Helper Seminar");
+  check(!!sid, "made a sheet");
   check(await until(me.session, `document.querySelector("[data-helper-go]").offsetParent !== null`),
     "with the helper installed, the step offers one button: Get my class list from Canvas");
   check(await evaluate(me.session, `!document.querySelector("[data-canvas-download]").open && document.querySelectorAll(".canvas-guide details").length === 1`),
@@ -208,6 +246,131 @@ try {
   const stranger = await newPage(`${CANVAS}/login`);
   const refused = await evaluate(stranger.session, `typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.sendMessage`);
   check(refused, "a page on any other site can't even reach the helper");
+  await send("Target.closeTarget", { targetId: stranger.targetId });
+
+  // Canvas left open on a course page all day, and its sign-in ran out: the
+  // helper leaves that tab alone and opens a new one to sign in.
+  const old = await newPage(`${CANVAS}/courses/101`);
+  check(await evaluate(old.session, `location.pathname === "/courses/101"`), "Canvas is open on a course page, signed in");
+  await evaluate(old.session, `window.untouched = true`); // gone if the tab were reloaded or sent elsewhere
+  await send("Network.enable", {}, old.session);
+  await send("Network.deleteCookies", { name: "canvas_session", url: CANVAS + "/" }, old.session);
+  const left = await send("Network.getCookies", { urls: [CANVAS + "/"] }, old.session);
+  check(!left.cookies.some((c) => c.name === "canvas_session"), "then Canvas's sign-in runs out (its cookie is gone)");
+  check(!!(await canvasStep(me.session, "Stale Tab Seminar"))
+    && await until(me.session, `document.querySelector("[data-helper-go]").offsetParent !== null`),
+    "on a second sheet's class-list step, the same one button");
+  await send("Target.activateTarget", { targetId: me.targetId });
+  const before2 = created.length;
+  await evaluate(me.session, `document.querySelector("[data-helper-go]").click()`);
+  check(await until(me.session, `document.querySelector("[data-helper-said]").textContent.includes("Sign in to Canvas")`, 10000),
+    "the page says to sign in to Canvas, in the tab that opened");
+  const fresh = await newCanvasTab(before2);
+  check(!!fresh && fresh.targetId !== old.targetId, "a new Canvas tab opened for signing in, not the old one");
+  if (fresh) {
+    const signIn = await attach(fresh.targetId);
+    check(await until(signIn, `location.pathname === "/login" && !!document.querySelector("form")`, 10000),
+      "the new tab shows Canvas's sign-in form");
+    check(await until(signIn, `document.visibilityState === "visible"`, 5000), "and it is in front");
+    await evaluate(signIn, `document.querySelector("form").submit()`);
+    check(await until(me.session, `!document.querySelector("[data-helper-courses]").hidden`, 15000),
+      "after signing in, the professor's courses are on the Scheduler page");
+    await sleep(500);
+    check(!(await pages()).some((t) => t.targetId === fresh.targetId), "the new Canvas tab closed itself");
+  }
+  check(await evaluate(old.session, `location.pathname === "/courses/101" && window.untouched === true`),
+    "the professor's own Canvas tab is still on its course page, never reloaded");
+
+  // The page asks the helper to bring it to the front, from behind another tab.
+  await send("Target.activateTarget", { targetId: old.targetId });
+  check(await until(me.session, `document.visibilityState === "hidden"`, 5000), "with another tab in front, the Scheduler page is hidden");
+  const fronted = await evaluate(me.session, `new Promise((done) => chrome.runtime.sendMessage(${JSON.stringify(DEV_ID)},
+    { type: "front" }, (answer) => done(answer || String(chrome.runtime.lastError && chrome.runtime.lastError.message))))`);
+  check(fronted && fronted.ok === true, "asked to, the helper answers { ok: true }");
+  check(await until(me.session, `document.visibilityState === "visible"`, 5000)
+    && await until(old.session, `document.visibilityState === "hidden"`, 5000), "and the Scheduler page is in front again");
+
+  // Signed in to Canvas, but the helper can't read it from where it is (as
+  // when the browser blocks that): it reads inside the professor's open
+  // Canvas tab, opening nothing, and leaves that tab where it was.
+  await evaluate(me.session, `new Promise((done) => chrome.runtime.sendMessage(${JSON.stringify(DEV_ID)}, { type: "hello" }, done))`);
+  const worker = (await send("Target.getTargets")).targetInfos
+    .find((t) => t.type === "service_worker" && t.url.startsWith(`chrome-extension://${DEV_ID}/`));
+  helperSession = (await send("Target.attachToTarget", { targetId: worker.targetId, flatten: true })).sessionId;
+  await send("Network.enable", {}, helperSession);
+  await send("Network.setBlockedURLs", { urls: [CANVAS + "/api/*"] }, helperSession);
+  const courses = (ms) => evaluate(me.session, `Promise.race([
+    new Promise((done) => chrome.runtime.sendMessage(${JSON.stringify(DEV_ID)}, { type: "courses", host: "127.0.0.1:5077" }, done)),
+    new Promise((done) => setTimeout(() => done({ type: "no answer" }), ${ms}))])`);
+  const opened = (since) => created.slice(since).filter((t) => t.type === "page");
+  let since = created.length, turnedAway = refusedHere, asked = requests.length;
+  let answer = await courses(10000);
+  check(refusedHere > turnedAway && answer.type === "courses" && answer.courses.length > 0
+    && requests.slice(asked).some((r) => r.session === old.session && r.url.includes("/api/v1/courses")),
+    "the helper can't read Canvas itself: it reads in the professor's signed-in Canvas tab");
+  check(opened(since).length === 0 && await evaluate(old.session, `location.pathname === "/courses/101" && window.untouched === true`),
+    "with no new tab, and the professor's tab left as it was");
+
+  // That tab stuck behind a question (“Leave site?”, say): the helper doesn't
+  // wait on it, and reads in a tab of its own for a moment instead.
+  await evaluate(old.session, `setTimeout(() => alert("Changes you made may not be saved."), 0); true`);
+  await sleep(300);
+  since = created.length; turnedAway = refusedHere;
+  let start = Date.now();
+  answer = await courses(20000);
+  check(refusedHere > turnedAway && answer.type === "courses" && answer.courses.length > 0 && Date.now() - start < 10000,
+    "with that Canvas tab stuck behind a question, the courses still come, in seconds");
+  await sleep(500);
+  check(opened(since).length === 1 && !(await pages()).some((t) => t.targetId === opened(since)[0].targetId),
+    "through a Canvas tab the helper opened and closed again");
+  await send("Page.handleJavaScriptDialog", { accept: true }, old.session);
+  check(await evaluate(old.session, `location.pathname === "/courses/101" && window.untouched === true`),
+    "and the professor's tab, once the question is answered, is just as it was");
+
+  // Canvas slow (slowMs) to say who's signed in, in every tab: slow isn't
+  // signed out, so no sign-in comes up, and the courses still come. (Last:
+  // from here on, every new tab waits for the test.)
+  await send("Fetch.enable", { patterns: [{ urlPattern: "*/api/v1/users/self*" }] }, old.session);
+  await send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: true, flatten: true });
+  since = created.length; turnedAway = refusedHere;
+  const heard = await evaluate(me.session, `new Promise((done) => {
+    const heard = [];
+    const port = chrome.runtime.connect(${JSON.stringify(DEV_ID)});
+    port.onMessage.addListener((m) => { heard.push(m.type); if (m.type !== "signin" && m.type !== "wait") done(heard); });
+    port.postMessage({ type: "courses", host: "127.0.0.1:5077" });
+    setTimeout(() => done(heard.concat("no answer")), 25000);
+  })`);
+  check(refusedHere > turnedAway && heard.join(" ") === "courses",
+    "Canvas slow to say who's signed in: no sign-in is asked for, and the courses come (heard: " + heard.join(" ") + ")");
+  await sleep(500);
+  check(opened(since).length === 1 && !(await pages()).some((t) => t.targetId === opened(since)[0].targetId),
+    "and the tab the helper opened for it closed again");
+
+  // Canvas so slow to say who's signed in that each look gives up (after 20
+  // seconds) and a sign-in is asked for: the helper still sends the page a
+  // word every 25 seconds (Safari stops a quiet helper after about 30), and
+  // carries on once Canvas answers.
+  slowMs = null;
+  since = created.length;
+  const posting = evaluate(me.session, `new Promise((done) => {
+    const start = Date.now();
+    window.posted = [];
+    const port = chrome.runtime.connect(${JSON.stringify(DEV_ID)});
+    port.onMessage.addListener((m) => { posted.push([m.type, Date.now() - start]); if (m.type !== "signin" && m.type !== "wait") done(posted); });
+    port.postMessage({ type: "courses", host: "127.0.0.1:5077" });
+    setTimeout(() => done(posted.concat([["no answer", Date.now() - start]])), 70000);
+  })`);
+  await until(me.session, `window.posted.some((p) => p[0] === "wait")`, 40000);
+  slowMs = 0;
+  held.splice(0).forEach((go) => go());
+  const posted = await posting;
+  const at = (type) => (posted.find((p) => p[0] === type) || [])[1];
+  check(at("signin") >= 20000 && at("wait") < 35000 && posted[posted.length - 1][0] === "courses",
+    "Canvas very slow: the page still hears from the helper within 35 seconds, then gets the courses (heard: "
+    + posted.map((p) => p[0] + " at " + Math.round(p[1] / 1000) + "s").join(", ") + ")");
+  await sleep(500);
+  check(opened(since).length === 1 && !(await pages()).some((t) => t.targetId === opened(since)[0].targetId),
+    "and that tab closed again too");
 } catch (err) {
   console.log("FAIL " + err.message);
   failures++;
