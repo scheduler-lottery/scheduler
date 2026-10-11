@@ -1519,7 +1519,7 @@ def _take_list(sheet, data, source, source_label, pasted=False, setup=False, par
     return redirect(url_for("teach.review_roster", sid=sheet["id"], pid=pid))
 
 
-def _take_canvas_list(sheet, data, setup=False):
+def _take_canvas_list(sheet, data, setup=False, forget=None):
     """A class list from Canvas, read for this site's own page (by Scheduler
     Helper, or Connect Canvas). One from a different Canvas course than the
     sheet's last is shown for a second look before it goes in. Once in, the
@@ -1579,25 +1579,46 @@ def canvas_list_here(sid):
 # the class list read server to server, and the key given back.
 # ---------------------------------------------------------------------------
 CONNECT_TROUBLE = {
-    "denied": "Canvas wasn't connected (you pressed Cancel there). Nothing was read.",
+    "denied": "Canvas wasn't connected (you pressed Cancel there). Nothing was read. Scheduler only reads names and "
+              "email addresses and can't change anything in Canvas, so it's safe to press Authorize when you're ready.",
     "signin": "Canvas didn't let Scheduler in. Press Connect Canvas to try again.",
     "forbidden": "Canvas won't share that course's class list with you. Is it a course you teach?",
-    "missing": "Canvas couldn't find that course. Press Connect Canvas and pick it again.",
+    "missing": "Canvas couldn't find that course, so nothing was read. Press Connect Canvas to try again.",
     "expired": "That took a while, so Canvas's permission ran out. Press Connect Canvas again.",
+    "stale": "That Canvas page had already been used, so nothing happened. Press Connect Canvas again; it only takes "
+             "a moment.",
+    "back": "Nothing was read from Canvas, and the permission you gave it was handed back.",
     "canvas": "Canvas didn't answer just now. Wait a minute, then press Connect Canvas again.",
 }
+CONNECT_CALM = ("denied", "stale", "back")  # nothing went wrong: said calmly, not in red
+
+
+def _give_back(pending):
+    """Give Canvas back a key left waiting, sealed, in the session, however
+    long it waited."""
+    sealed = (pending or {}).get("token")
+    token = canvas_oauth.unseal(sealed, expired_too=True) if sealed else None
+    if token:
+        canvas_oauth.revoke(token, pending.get("host"))
+
+
+def _connect_over(pending):
+    """Connect is over, the key given back. What stays is which sheet it was
+    for, so an old Connect page (a reload, Back, a second click) leads back
+    there."""
+    session["canvas_connect"] = {"sid": pending.get("sid"), "setup": pending.get("setup")}
 
 
 def _connect_back(why):
-    """Back to the sheet the professor connected Canvas from, saying what went wrong."""
+    """Back to the sheet the professor connected Canvas from, saying what went
+    wrong (or, calmly, that nothing happened), with any key given back."""
     pending = session.pop("canvas_connect", None) or {}
-    sealed = pending.get("token")
-    token = canvas_oauth.unseal(sealed) if sealed else None
-    if token:
-        canvas_oauth.revoke(token, pending.get("host"))
-    flash(CONNECT_TROUBLE.get(why, CONNECT_TROUBLE["canvas"]), "error" if why != "denied" else "info")
+    _give_back(pending)
+    if why:
+        flash(CONNECT_TROUBLE.get(why, CONNECT_TROUBLE["canvas"]), "info" if why in CONNECT_CALM else "error")
     sheet = sheets.get_sheet(pending.get("sid")) if pending.get("sid") else None
     if sheet and sheet["owner_id"] == current_instructor()["id"]:
+        _connect_over(pending)
         return _list_back(sheet, pending.get("setup"))
     return redirect(url_for("teach.dashboard"))
 
@@ -1605,25 +1626,39 @@ def _connect_back(why):
 @bp.route("/s/<sid>/canvas/connect")
 @instructor_required
 def canvas_connect(sid):
+    """Off to Canvas's own sign-in and Authorize page. `pick`: the professor
+    wants to choose the course again (the one the sheet remembers was the
+    wrong one), so the course list shows either way."""
     sheet = owned_sheet(sid)
     if not canvas_oauth.ready():
         abort(404)
+    _give_back(session.get("canvas_connect"))  # a key still waiting from a Connect left part way
     state = secrets.token_urlsafe(24)
-    session["canvas_connect"] = {"state": state, "sid": sheet["id"], "setup": bool(request.args.get("setup"))}
+    session["canvas_connect"] = {"state": state, "sid": sheet["id"], "setup": bool(request.args.get("setup")),
+                                 "pick": bool(request.args.get("pick"))}
     return redirect(canvas_oauth.authorize_url(state, url_for("teach.canvas_connected", _external=True)))
 
 
-def _from_connected_canvas(token, course_id, course_name):
-    """Read the class list with the key, give the key back, and take the list."""
-    pending = session.pop("canvas_connect", None) or {}
+def _from_connected_canvas(token, course_id, course_name, saved=False):
+    """Read the class list with the key, give the key back, and take the list.
+    `saved`: the sheet's course from last time. If Canvas no longer has that
+    one for this professor (deleted or merged, or they're off it), None comes
+    back and the key is kept, for them to pick the course it is now."""
+    pending = session.get("canvas_connect") or {}
     host = pending.get("host")
+    keep = False
     try:
         people = canvas_oauth.students(token, course_id, host)
     except canvas_oauth.CanvasError as err:
-        session["canvas_connect"] = pending
+        keep = saved and err.why in ("missing", "forbidden")
+        if keep:
+            return None
+        pending.pop("token", None)  # given back just below
         return _connect_back(err.why)
     finally:
-        canvas_oauth.revoke(token, host)
+        if not keep:
+            canvas_oauth.revoke(token, host)
+    _connect_over(pending)
     sheet = owned_sheet(pending.get("sid"))
     if not people:
         flash(f"{course_name} has no students in Canvas yet. If it isn't published, or students just enrolled, Canvas "
@@ -1631,8 +1666,8 @@ def _from_connected_canvas(token, course_id, course_name):
         return _list_back(sheet, pending.get("setup"))
     data = {"course": course_name, "course_id": course_id, "host": host or settings.CANVAS_OAUTH_HOST,
             "students": [{"name": p["name"][:120], "email": p["email"][:254] if "@" in p["email"] else ""} for p in people],
-            "key": "", "v": 2}
-    return _take_canvas_list(sheet, data, setup=pending.get("setup"))
+            "key": "", "v": 2, "via": "connect"}
+    return _take_canvas_list(sheet, data, setup=pending.get("setup"), forget=pending.get("forget"))
 
 
 @bp.route("/canvas/oauth/callback")
@@ -1641,8 +1676,11 @@ def canvas_connected():
     """Canvas, sending the professor back: a one-time code (or a Cancel)."""
     pending = session.get("canvas_connect") or {}
     if not pending.get("state") or not hmac.compare_digest(request.args.get("state", ""), pending["state"]):
-        flash("That Canvas connection didn't come from here. Press Connect Canvas to start again.", "error")
-        session.pop("canvas_connect", None)
+        # Not the Connect this browser is waiting for: an old Canvas page (Back, then Authorize again), or one
+        # from elsewhere. Nothing is read. Back to the sheet, with any key waiting given back.
+        if pending.get("sid"):
+            return _connect_back("stale")
+        flash(CONNECT_TROUBLE["stale"], "info")
         return redirect(url_for("teach.dashboard"))
     if request.args.get("error"):
         return _connect_back("denied" if request.args["error"] == "access_denied" else "canvas")
@@ -1651,44 +1689,71 @@ def canvas_connected():
         token = canvas_oauth.exchange(request.args.get("code", ""), url_for("teach.canvas_connected", _external=True))
     except canvas_oauth.CanvasError as err:
         return _connect_back(err.why)
-    return _courses_or_list(sheet, token, settings.CANVAS_OAUTH_HOST, pending.get("setup"))
+    return _courses_or_list(sheet, token, settings.CANVAS_OAUTH_HOST, pending.get("setup"), pending.get("pick"))
 
 
-def _courses_or_list(sheet, token, host, setup):
+def _courses_or_list(sheet, token, host, setup, pick=False):
     """With a key for Canvas: the sheet's course's list straight away, or the
-    professor's courses to pick from (the key waiting, sealed, in the
-    session)."""
+    professor's courses to pick from, on a page of their own (the key
+    waiting, sealed, in the session). `pick`: they asked to choose again."""
     session["canvas_connect"] = {"sid": sheet["id"], "setup": setup, "host": host}
-    if sheet.get("canvas_course_id"):  # its course from last time: straight to the list
-        return _from_connected_canvas(token, sheet["canvas_course_id"], sheet.get("canvas_course") or "your course")
+    if sheet.get("canvas_course_id") and not pick:  # its course from last time: straight to the list
+        taken = _from_connected_canvas(token, sheet["canvas_course_id"], sheet.get("canvas_course") or "your course",
+                                       saved=True)
+        if taken is not None:
+            return taken
+        # Canvas no longer has it for them: which course is the sheet's now? The pick replaces the old one.
+        session["canvas_connect"]["forget"] = sheet["canvas_course_id"]
+        pick = True
     try:
         found = canvas_oauth.courses(token, host)
     except canvas_oauth.CanvasError as err:
         canvas_oauth.revoke(token, host)
         return _connect_back(err.why)
-    if len(found) == 1:
+    if len(found) == 1 and not pick:
         c = found[0]
         return _from_connected_canvas(token, c["id"], c["name"] + (f" ({c['term']})" if c["term"] else ""))
     if not found:
         canvas_oauth.revoke(token, host)
         return _connect_back("forbidden")
     session["canvas_connect"]["token"] = canvas_oauth.seal(token)
-    return render_template("canvas_connect.html", sheet=sheet, courses=found)
+    return redirect(url_for("teach.canvas_connected_pick"))
 
 
-@bp.route("/canvas/oauth/pick", methods=["POST"])
+@bp.route("/canvas/oauth/pick", methods=["GET", "POST"])
 @instructor_required
 def canvas_connected_pick():
+    """The professor's courses, to pick the sheet's from (read again each
+    time, so a reload just shows them again), and the pick: that course's
+    class list read, and the key given back."""
     pending = session.get("canvas_connect") or {}
-    token = canvas_oauth.unseal(pending.get("token")) if pending.get("token") else None
+    if not pending.get("token"):  # nothing waiting: this page was used already
+        return _connect_back("stale")
+    token = canvas_oauth.unseal(pending["token"])
     if not token:
         return _connect_back("expired")
-    owned_sheet(pending.get("sid"))
+    sheet = owned_sheet(pending.get("sid"))
+    if request.method == "GET":
+        try:
+            found = canvas_oauth.courses(token, pending.get("host"))
+        except canvas_oauth.CanvasError as err:
+            return _connect_back(err.why)
+        if not found:
+            return _connect_back("forbidden")
+        return render_template("canvas_connect.html", sheet=sheet, courses=found, gone=bool(pending.get("forget")))
     course_id = request.form.get("course_id", "")
     if not re.fullmatch(r"\d{1,15}", course_id):
-        canvas_oauth.revoke(token, pending.get("host"))
         return _connect_back("missing")
     return _from_connected_canvas(token, course_id, " ".join((request.form.get("course_name") or "your course").split())[:200])
+
+
+@bp.route("/canvas/oauth/cancel", methods=["POST"])
+@instructor_required
+def canvas_connect_cancel():
+    """The course list's way back: nothing read, the key given back, and back
+    to where the class list was being added."""
+    waiting = (session.get("canvas_connect") or {}).get("token")
+    return _connect_back("back" if waiting else None)
 
 
 @bp.route("/s/<sid>/roster/quick-add", methods=["POST"])
