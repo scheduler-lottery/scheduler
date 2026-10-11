@@ -1,0 +1,6 @@
+{# Who a new class list took off, in the report about it (teach._apply_roster:
+   report.dropped, the first 12 names, and report.dropped_count). On a sheet
+   anyone with the link can sign up for, they still can, as anyone can. #}
+{% if report.dropped %}{% set more = report.dropped_count - report.dropped | length %}
+<p class="report-dropped">Taken off ({{ report.dropped_count }}): {% for name in report.dropped %}<bdi>{{ name }}</bdi>{% if not loop.last %}, {% endif %}{% endfor %}{% if more > 0 %} and {{ more }} more{% endif %}. {% if sheet.allow_unlisted %}Anyone with your link can sign up, so they still can, with their name and a PIN{% else %}They can't sign in to this sheet any more{% endif %}; anything they already ranked stays, marked “not on your list”.</p>
+{% endif %}

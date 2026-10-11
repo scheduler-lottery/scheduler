@@ -15,6 +15,7 @@ from datetime import timedelta
 from sqlalchemy import text
 
 import db
+import settings
 from util import iso, now, parse_iso
 
 SEARCH_URL = "https://canvas.instructure.com/api/v1/accounts/search"
@@ -89,8 +90,12 @@ def name_of(host):
     The directory also answers with addresses that only contain this one
     (iu.instructure.com: 13 others first), so ask for plenty. Several schools
     can share one Canvas (umsystem.instructure.com: Mizzou, UMKC, Missouri
-    S&T...); no one name is right then, so "". One quick question to the
-    directory; never raises."""
+    S&T...); no one name is right then, so "". A school Scheduler Helper
+    reads is known without asking; anything else is one quick question to
+    the directory. Never raises."""
+    for name, canvas in settings.CANVAS_HELPER_SCHOOLS.values():
+        if canvas == host:
+            return name
     ours = [s["name"] for s in _ask(domain=host, per_page=50) or [] if s["domain"] == host]
     ours = sorted([n for n in ours if not SIDE_DOORS.search(n)] or ours, key=len)
     if not ours or not all(n == ours[0] or n.startswith(ours[0] + " ") for n in ours):

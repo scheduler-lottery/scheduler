@@ -38,9 +38,7 @@
   <div class="report{{ ' report-warn' if report.warn }}" tabindex="-1" data-focus-on-load>
     <p class="report-main">{{ report.message }}</p>
     {% with people=report_added, heading='Who was added', fix_href=None %}{% include "_roster_people.html" %}{% endwith %}
-    {% if report.dropped %}{% set more = report.dropped_count - report.dropped | length %}
-    <p class="report-dropped">Taken off ({{ report.dropped_count }}): {% for name in report.dropped %}<bdi>{{ name }}</bdi>{% if not loop.last %}, {% endif %}{% endfor %}{% if more > 0 %} and {{ more }} more{% endif %}. They can't sign in to this sheet any more; anything they already ranked stays, marked “not on your list”.</p>
-    {% endif %}
+    {% include "_report_dropped.html" %}
     {% if report.tips %}
     <ul class="tips">{% for tip in report.tips %}<li>{{ tip }}</li>{% endfor %}</ul>
     {% endif %}

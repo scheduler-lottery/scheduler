@@ -183,6 +183,38 @@ def test_a_long_list_taken_off_names_twelve_and_counts_the_rest(prof):
     assert "Taken off (20): Old 00 , Old 01" in page and "Old 11 and 8 more." in page and "Old 12" not in page
 
 
+def test_on_a_sheet_anyone_can_sign_up_for_taken_off_doesnt_say_they_cant_sign_in(prof):
+    sid = prof.create_sheet(allow_unlisted=True)
+    prof.upload(sid, _csv(*STUDENTS, "Pat Dropped"))
+    r = prof.upload(sid, _csv(*STUDENTS), "second.csv")
+    page = follow(prof, prof.post(r.headers["Location"], {"action": "replace"}))
+    assert ("Taken off (1): <bdi>Pat Dropped</bdi>. Anyone with your link can sign up, so they still can, with their "
+            "name and a PIN; anything they already ranked stays, marked “not on your list”.") in page
+    assert "can't sign in to this sheet" not in page
+
+
+def test_a_whole_new_class_isnt_offered_the_link_student_by_student(prof, listed):
+    prof.post(f"/teach/s/{listed}/shared")
+    many = [f"Newcomer {i:02}" for i in range(teach.SEND_NEW_MAX + 1)]
+    review = _review(prof, listed, _csv(*STUDENTS, "Pat Dropped", *many))
+    page = follow(prof, prof.post(review, {"action": "replace"}))
+    # The report, as ever (the names would have overflowed the session cookie, losing it); no box to send it.
+    assert f"Added {teach.SEND_NEW_MAX + 1} new students to your list" in page and 'id="send-new"' not in page
+    review = _review(prof, listed, _csv(*STUDENTS, "Pat Dropped", *many, "One More"))
+    assert 'id="send-new"' in follow(prof, prof.post(review, {"action": "replace"}))
+
+
+def test_signing_out_forgets_the_new_students_waiting_to_be_sent_the_link(prof, listed):
+    prof.post(f"/teach/s/{listed}/shared")
+    review = _review(prof, listed, _csv(*STUDENTS, "Pat Dropped", "Student 6"))
+    prof.post(review, {"action": "replace"})  # (not followed: the box hasn't been shown yet)
+    with prof.client.session_transaction() as s:
+        assert s["just_added"]["keys"] == ["student 6"]
+    prof.post("/teach/logout")
+    with prof.client.session_transaction() as s:
+        assert "just_added" not in s
+
+
 def test_the_setup_page_report_says_who_was_taken_off(prof):
     sid = prof.create_sheet(allow_unlisted=False)
     prof.post(f"/teach/s/{sid}/roster", {"roster": (io.BytesIO(_csv("Ana Lima", "Bo Chen").encode()), "a.csv"),
@@ -271,6 +303,7 @@ def _zipped(files):
 
 GRADES = "Assignment Name,Due Date,Average Score,Points Possible\nEssay 1,2026-10-01,88,100\n"
 TIP = "Canvas's file is still in your Downloads folder, and it has grades in it. You can delete it now."
+FOLDER = " If it became a folder (Safari does that), delete the whole folder."
 
 
 def _send(prof, sid, files, box, **form):
@@ -285,7 +318,7 @@ def test_after_canvas_s_file_goes_in_the_report_says_to_delete_it(prof):
     # The CSV from the folder Safari made, in the Canvas guide's box: and the folder too.
     b = prof.create_sheet(title="B", allow_unlisted=False)
     page = follow(prof, _send(prof, b, (io.BytesIO(CANVAS_ROSTER.encode()), "students.csv"), f"canvas-file-{b}"))
-    assert TIP + " If Safari turned it into a folder, delete that whole folder." in page
+    assert TIP + FOLDER in page
     # Both files of that folder at once.
     c = prof.create_sheet(title="C", allow_unlisted=False)
     page = follow(prof, _send(prof, c, [(io.BytesIO(GRADES.encode()), "course_grade.csv"),
@@ -315,7 +348,7 @@ def test_the_word_about_canvas_s_file_comes_through_the_review_and_the_already_m
 def test_the_word_about_canvas_s_file_survives_a_long_report(prof):
     sid = prof.create_sheet(allow_unlisted=False)
     students = [{"name_key": "ana lima", "display_name": "Ana Lima", "email": "ana@school.edu", "name_pending": 0}]
-    tips = [f"Note {i}." for i in range(12)] + [TIP + " If Safari turned it into a folder, delete that whole folder."]
+    tips = [f"Note {i}." for i in range(12)] + [TIP + FOLDER]
     with prof.app.test_request_context():
         teach._apply_roster(sheets.get_sheet(sid), students, "replace", "Added 1 student.", tips, False, "a file")
         shown = session["roster_report"]["tips"]
@@ -364,6 +397,19 @@ def test_a_professor_at_a_school_the_helper_reads_is_not_asked_which_school(brow
     # A look-alike domain isn't the school.
     third = browser().sign_in_instructor("prof@notnorthwestern.edu")
     assert 'data-go="school"' in raw(third.get(f"/teach/s/{third.create_sheet(allow_unlisted=False)}"))
+
+
+def test_the_helper_s_school_is_named_without_the_directory(prof, monkeypatch):
+    asked = []
+    monkeypatch.setattr(canvasdir, "_ask", lambda **p: asked.append(p))  # (the directory is down)
+    assert canvasdir.name_of("canvas.northwestern.edu") == "Northwestern University" and not asked
+    # So the first list Scheduler Helper brings saves the school by its name, not its address.
+    sid = prof.create_sheet(allow_unlisted=False)
+    prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=2, host="canvas.northwestern.edu")})
+    assert q(prof.app, "SELECT canvas_school FROM instructors WHERE email = :e", e="prof@school.edu") == (
+        "Northwestern University")
+    assert not asked
+    assert canvasdir.name_of("canvas.other.edu") == "" and asked  # anywhere else, the directory, as before
 
 
 def test_the_helper_s_schools_and_its_canvas_sites_are_one_list():

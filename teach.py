@@ -302,7 +302,8 @@ def restart():
 def logout():
     # A Canvas permission still waiting on a course list: given back, not just forgotten, however long it waited.
     _give_back(session.get("canvas_connect"))
-    for key in ("instructor_id", "pending_teach", "dev_code", "teach_next", "roster_report", "undo", "canvas_connect"):
+    for key in ("instructor_id", "pending_teach", "dev_code", "teach_next", "roster_report", "undo", "canvas_connect",
+                "just_added"):
         session.pop(key, None)
     auth.sign_out_all_students()  # including "see it as a student" sign-ins
     if request.form.get("next") == "login":
@@ -1070,7 +1071,7 @@ def _used_courses(instructor, sid):
     a Canvas course (the most recently changed one, if two share it), so
     the list of courses can say which course already has its sheet."""
     rows = db.rows("SELECT canvas_course_id, title FROM sheets WHERE owner_id = :me AND id != :sid "
-                   "AND canvas_course_id IS NOT NULL ORDER BY updated_at", me=instructor["id"], sid=sid)
+                   "AND canvas_course_id IS NOT NULL ORDER BY updated_at, created_at", me=instructor["id"], sid=sid)
     return {r["canvas_course_id"]: r["title"] for r in rows}
 
 
@@ -1387,6 +1388,9 @@ def undo(sid, snap_id):
 # The last word on a report about Canvas's own download, which has grades in it.
 CANVAS_FILE_TIP = "Canvas's file is still in your Downloads folder, and it has grades in it. You can delete it now."
 REPORT_TIPS = 8  # notes a report shows, at most
+# New students offered the link after an update, at most: past that it's a new class, shared the usual way (and
+# their names ride in the session cookie, which a few hundred would overflow, losing the report with them).
+SEND_NEW_MAX = 40
 
 
 def _store_pending(sheet, kind, payload):
@@ -1495,7 +1499,7 @@ def _apply_roster(sheet, students, mode, message, tips, warn, source_label, sect
         "dropped": dropped[:12], "dropped_count": len(dropped),
     }
     emailed = [r["name_key"] for r in came if r["email"]]
-    if had_list and emailed and sheet["shared_at"] and not setup:
+    if had_list and emailed and len(emailed) <= SEND_NEW_MAX and sheet["shared_at"] and not setup:
         session["just_added"] = {"sid": sheet["id"], "keys": emailed}
 
 
@@ -1590,7 +1594,7 @@ def _take_list(sheet, data, source, source_label, pasted=False, setup=False, par
         tips = [t for t in tips if t not in describe(RosterResult())[1]]
     elif canvas_file:
         tips.append(CANVAS_FILE_TIP + ("" if source.lower().endswith(".zip") else
-                                       " If Safari turned it into a folder, delete that whole folder."))
+                                       " If it became a folder (Safari does that), delete the whole folder."))
     # Someone on the new list by email alone, already here: the name they have stays.
     result.students = sheets.adopt_known_names(sheet["id"], result.students)
     if not source:
