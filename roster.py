@@ -8,7 +8,8 @@ column (English, French, Spanish, or German headings), and plain pasted
 lists — one student per line, a name and maybe an email, in any order.
 
 Only names and emails are kept. Every other column (grades, activity, IDs)
-is dropped right here, in memory, and never stored.
+is dropped right here, in memory, and never stored. An ID column only tells
+apart two students who share a name, while the list is read.
 """
 
 import codecs
@@ -31,6 +32,7 @@ MAX_ZIPPED_BYTES = 5 * 1024 * 1024  # each file inside a ZIP, unpacked
 FULL_NAME_HEADERS = (
     "full name", "name", "student name", "display name", "preferred name", "user name",
     "nom complet", "nombre completo", "vollstandiger name", "nome completo", "student",
+    "names", "students", "student names", "full names", "name last first", "participant", "participants",
 )
 LAST_FIRST_HEADERS = ("sortable name",)  # Canvas writes these "Last, First"
 FIRST_HEADERS = ("first name", "given name", "firstname", "first", "prenom", "nombre", "vorname", "nome")
@@ -43,6 +45,9 @@ EMAIL_HEADERS = (
     "primary email", "courriel", "adresse electronique", "adresse e mail", "correo",
     "correo electronico", "mail", "e mail adresse",
 )
+# Canvas's own ID for each student (or the school's): read only to tell apart
+# two students with one name, never kept.
+ID_HEADERS = ("student id", "canvas user id", "user id", "id", "sis user id", "student sis id", "sis id")
 # Some schools' Canvas "login ID" is the student's email address.
 LOGIN_HEADERS = ("sis login id", "login id", "login", "username", "netid", "net id")
 # A People-page copy lists teachers and TAs too.
@@ -61,6 +66,11 @@ NO_NAME_COLUMN = (
     "“Name” (or “First name” and “Last name”), plus “Email” if you have it. Or paste the names "
     "instead — one student per line."
 )
+# Canvas's Course Analytics download holds this file next to the class list.
+CANVAS_GRADES_FILE = (
+    "That's Canvas's grades file, not your class list, so nothing was added. It came in the same download as the "
+    "class list: choose the other file, the one with “student” in its name."
+)
 
 
 @dataclass
@@ -75,9 +85,11 @@ class RosterResult:
     email_only: list = field(default_factory=list)  # added by email alone: each types their name later
     non_students: int = 0  # teachers/TAs dropped by a role column
     duplicates: list = field(default_factory=list)  # [(display name, dropped email)]: one name, can't tell apart
-    numbered: list = field(default_factory=list)  # ["Alex Kim (2)"]: two people, one name, told apart by email
+    numbered: list = field(default_factory=list)  # ["Alex Kim (2)"]: two people, one name, told apart by email or ID
+    pin_twins: list = field(default_factory=list)  # those of `numbered` with no email: they sign in with a PIN
     same_name: list = field(default_factory=list)  # (while reading) the second of two people with one name
-    repeated: list = field(default_factory=list)  # one person listed twice
+    repeated: list = field(default_factory=list)  # one person listed twice (the same ID or email both times)
+    merged: list = field(default_factory=list)  # one name twice, nothing to tell them apart: kept as one
     bad_emails: list = field(default_factory=list)  # [(display name, the incomplete address)]
     flipped: bool = False  # names arrived "Last, First" and were turned around
     garbled: list = field(default_factory=list)  # names with letters lost to an encoding
@@ -301,6 +313,29 @@ def _people_page_columns(rows):
     return names, emails, roles
 
 
+def _is_heading_row(cells):
+    """A first row of headings we can't use for names ("ID, Learner, Year",
+    "Attendee, Email"): never a student. "Student" alone isn't one, since
+    it's the role on each row of a People-page copy."""
+    folded = [_norm_header(c) for c in cells if str(c).strip()]
+    if not folded or any("@" in str(c) for c in cells):
+        return False
+    known = (set(FULL_NAME_HEADERS) | set(FIRST_HEADERS) | set(LAST_HEADERS) | set(LAST_FIRST_HEADERS)
+             | set(EMAIL_HEADERS) | set(LOGIN_HEADERS) | set(SECTION_HEADERS)) - {"student"}
+    return any(h in known or h.split()[-1] in ("name", "names", "email", "id") or "email" in h.split()
+               or " e mail " in f" {h} " for h in folded)
+
+
+def _is_canvas_grades(cells):
+    """The headings of Canvas's grades file ("Assignment Name, Points
+    Possible, Average"), which lists assignments, not people."""
+    folded = {_norm_header(c) for c in cells}
+    if any("@" in str(c) for c in cells):
+        return False
+    return bool(folded & {"assignment name", "points possible"}
+                or ("assignment" in folded and folded & {"average", "average score", "score"}))
+
+
 # ---------------------------------------------------------------------------
 # Parsing
 # ---------------------------------------------------------------------------
@@ -466,8 +501,12 @@ def _canvas_api_people(text):
     elif not (any(k in p for p in found for k in PERSON_KEYS)
               or all(set(p) <= {"id", "name", "email"} for p in found)):
         return CANVAS_NOT_A_LIST
-    out = []
+    out, seen = [], set()
     for person in found:
+        ident = str(person.get("id") or "")
+        if ident and ident in seen:
+            continue  # one student in two sections, in a list of enrollments
+        seen.add(ident)
         name = " ".join(str(person.get("name") or person.get("sortable_name") or "").split())
         login = str(person.get("login_id") or "")
         email = str(person.get("email") or person.get("primary_email") or (login if "@" in login else "")).strip()
@@ -479,14 +518,18 @@ def _canvas_api_people(text):
 def parse_people(pairs):
     """Students whose names and emails came already apart (a list from
     Canvas): read as a table headed Name and Email, so a name written
-    "Kim, Alex" is turned round, never split at its comma."""
+    "Kim, Alex" is turned round, never split at its comma. Canvas sends each
+    student once, so two rows with one name are two students (numbered),
+    unless they have the same email: each row's place is its ID."""
     result = RosterResult()
-    rows = [[" ".join(str(name or "").split()), str(email or "").strip()] for name, email in pairs]
+    rows = [[" ".join(str(name or "").split()), str(email or "").strip(), str(i)]
+            for i, (name, email) in enumerate(pairs, start=1)]
     if not rows:
         result.error = "That list is empty."
         return result
-    _parse_table(["Name", "Email"], rows, ("full", (0,)), result)
+    _parse_table(["Name", "Email", "ID"], rows, ("full", (0,)), result)
     result.name_column = result.email_column = ""
+    result.ignored_columns = []
     if result.error:
         return result
     _number_same_names(result)
@@ -514,6 +557,19 @@ def _parse_rows(rows, lines):
         if found and (len(rows) == 1 or (below and _mostly(below, found[1][0], _looks_like_name))):
             header, data_rows, name_cols = candidate, below, found
             break
+
+    if header is None and _is_canvas_grades(rows[0]):
+        # Not the Canvas gradebook export: that one has a Student heading,
+        # and "Points Possible" is a row under it.
+        result.error = CANVAS_GRADES_FILE
+        return result
+    if header is None and _is_heading_row(rows[0]):
+        # Headings, but none we can read names under: the row isn't a student.
+        rows = rows[1:]
+        lines = lines[1:] if lines is not None else None
+        if not rows:
+            result.error = "That file has headings but no students under them."
+            return result
 
     if header is None:
         # Pasted or plain-text lines are read one at a time ("Lee, Sam;
@@ -548,7 +604,9 @@ def name_from_email(email):
     return clean_name(" ".join(w[:1].upper() + w[1:].lower() for w in words)) or clean_name(local)
 
 
-def _add(result, raw_name, email, seen, pending=False):
+def _add(result, raw_name, email, seen, pending=False, uid=""):
+    """One row onto the list. `uid`, the row's ID if the list has them, tells
+    apart two students with one name; it's dropped once the list is read."""
     display_name = clean_name(raw_name)
     email = (email or "").strip()
     if not display_name:
@@ -557,7 +615,7 @@ def _add(result, raw_name, email, seen, pending=False):
             # An email and no name: they're on the list, and they type
             # their own name the first time they sign in.
             result.email_only.append(found.lower())
-            return _add(result, name_from_email(found), found, seen, pending=True)
+            return _add(result, name_from_email(found), found, seen, pending=True, uid=uid)
         if email:
             result.bad_emails.append(("A line", email))
         else:
@@ -571,35 +629,45 @@ def _add(result, raw_name, email, seen, pending=False):
         display_name = clean_name(display_name.replace(found, " ")) if found else display_name
         email = email or found
         if not display_name or "@" in display_name:
-            return _add(result, "", email or display_name, seen)
+            return _add(result, "", email or display_name, seen, uid=uid)
     email = email.lower()
     if email.startswith("mailto:"):
         email = email[7:]
+    bad = ""
     if email and not valid_email(email):
         result.bad_emails.append((display_name, email))
-        email = ""
+        bad, email = email, ""
     if any(0x80 <= ord(ch) <= 0x9F or ch == "�" for ch in display_name):
         result.garbled.append(display_name)
     key = normalize_name(display_name)
     if not key:
         result.skipped += 1
         return
+    row = {"name_key": key, "display_name": display_name, "email": email, "name_pending": 1 if pending else 0,
+           "uid": uid, "bad": bad}
     if key in seen:
-        first = next(st for st in result.students if st["name_key"] == key)
-        if not email or email == first["email"] or any(e["email"] == email for e in result.same_name
-                                                         if e["name_key"] == key):
-            result.repeated.append(display_name)  # the same person listed twice (two sections, say)
-        elif not first["email"]:
-            first["email"] = email
+        earlier = [st for st in result.students + result.same_name if st["name_key"] == key]
+        first = earlier[0]
+        same = next((e for e in earlier if (email and e["email"] == email)
+                     or (uid and e["uid"] == uid and not (email and e["email"]))), None)
+        if same:
+            # The same person listed twice (two sections, say).
+            same["email"] = same["email"] or email
             result.repeated.append(display_name)
-        else:
+        elif uid and all(e["uid"] for e in earlier):
+            # Two students with one name, told apart by the list's IDs: both stay.
+            result.same_name.append(row)
+        elif email and first["email"]:
             # Two students with one name: both stay, told apart by their emails.
-            result.same_name.append({"name_key": key, "display_name": display_name, "email": email,
-                                     "name_pending": 1 if pending else 0})
+            result.same_name.append(row)
+        else:
+            # Nothing tells them apart (a typed list, with an email for one
+            # at most): taken as one.
+            first["email"] = first["email"] or email
+            result.merged.append(display_name)
         return
     seen.add(key)
-    result.students.append({"name_key": key, "display_name": display_name, "email": email,
-                            "name_pending": 1 if pending else 0})
+    result.students.append(row)
 
 
 SAME_NAME_SUFFIX = re.compile(r" \((\d+)\)$")
@@ -616,27 +684,34 @@ def numbered(display_name, n):
 
 def _number_same_names(result):
     """Two students with one name both stay on the list: "Alex Kim" and
-    "Alex Kim (2)", numbered in email order so the same file always numbers
-    them the same way. Each signs in with a code sent to their own email."""
-    if not result.same_name:
-        return
+    "Alex Kim (2)". Those with an email come first, in email order, then
+    those without, in ID order, so the same file always numbers them the
+    same way, and the plain name, which is what a student types, is never a
+    PIN-only one while a twin has an email. Each with an email signs in with
+    a code sent to it. The IDs go here: they're never kept."""
     final = []
     for s in result.students:
         group = [s] + [e for e in result.same_name if e["name_key"] == s["name_key"]]
         if len(group) == 1:
-            final.append(s)
+            final.append({k: s[k] for k in ("name_key", "display_name", "email", "name_pending")})
             continue
-        group.sort(key=lambda e: e["email"])
+        group.sort(key=lambda e: (not e["email"], e["email"], len(e.get("uid", "")), e.get("uid", "")))
         # One spelling for all of them, preferring one that isn't all lower
         # or upper case.
         spelling = max((e["display_name"] for e in group),
                        key=lambda name: name not in (name.lower(), name.upper()))
         for n, e in enumerate(group, start=1):
             name = numbered(spelling, n)
+            if e["bad"] and name != e["display_name"]:
+                # The note about an incomplete address names the twin it was on.
+                at = result.bad_emails.index((e["display_name"], e["bad"]))
+                result.bad_emails[at] = (name, e["bad"])
             final.append({"name_key": normalize_name(name), "display_name": name, "email": e["email"],
                           "name_pending": e.get("name_pending", 0)})
             if n > 1:
                 result.numbered.append(name)
+                if not e["email"]:
+                    result.pin_twins.append(name)
     result.students = final
     result.same_name = []
 
@@ -647,6 +722,10 @@ def _parse_table(header, data_rows, name_cols, result):
     email_index = _email_column(headers, data_rows)
     role_index = _role_column(headers, data_rows)
     section_index = _find(headers, SECTION_HEADERS)
+    id_index = _find(headers, ID_HEADERS)  # still among the ignored columns: never kept
+    if (id_index in indexes or id_index == email_index
+            or sum(1 for r in data_rows if _cell(r, id_index)) < len(data_rows) / 2):
+        id_index = None  # only a column that gives most students an ID
     used = set(indexes) | {i for i in (email_index, role_index) if i is not None}
     result.name_column = " + ".join(str(header[i]).strip() for i in indexes)
     result.email_column = str(header[email_index]).strip() if email_index is not None else ""
@@ -669,9 +748,10 @@ def _parse_table(header, data_rows, name_cols, result):
             raw = flip_last_first(value) if _is_last_first(value) else value
         else:
             raw = _cell(r, indexes[0])
-        before = len(result.students)
-        _add(result, raw, _cell(r, email_index), seen)
-        if section_index is not None and len(result.students) > before and _cell(r, section_index):
+        before = len(result.students) + len(result.same_name)
+        _add(result, raw, _cell(r, email_index), seen, uid=_cell(r, id_index))
+        if (section_index is not None and len(result.students) + len(result.same_name) > before
+                and _cell(r, section_index)):
             result.sections[_cell(r, section_index)] += 1
 
 
@@ -768,8 +848,45 @@ def _close(a, b):
     return previous[-1] <= 2
 
 
+def _listed(names):
+    """“A”, “A and B”, “A, B and C”."""
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def _same_name_tips(result):
+    """What to tell each group of students who share a name: those with an
+    email sign in with a code; one with none signs in with a PIN, so they
+    need to know which name is theirs."""
+    tips = []
+    emails = {s["display_name"]: s["email"] for s in result.students}
+    groups = {}
+    for name in result.numbered:
+        groups.setdefault(SAME_NAME_SUFFIX.sub("", name), []).append(name)
+    for first, others in list(groups.items())[:5]:
+        count = {2: "Two", 3: "Three", 4: "Four"}.get(len(others) + 1, str(len(others) + 1))
+        listed = _listed([f"“{name}”" for name in [first] + others])
+        no_email = [name for name in others if name in result.pin_twins]
+        if not no_email:
+            tips.append(f"{count} students are named {first}, so they're listed as {listed}. Each one signs in "
+                        "with a code sent to their own email, so they can't mix them up.")
+        elif not emails.get(first):
+            tips.append(f"{count} students are named {first} and the list has no email for them, so they're listed "
+                        f"as {listed} and sign in with a PIN. Tell each one which name is theirs, or add their "
+                        "emails under “See or change the list”.")
+        elif len(no_email) == 1:
+            tips.append(f"{count} students are named {first}; the one with no email is “{no_email[0]}”. Tell them to "
+                        "sign in with that name, or add their email under “See or change the list”.")
+        else:
+            tips.append(f"{count} students are named {first}; the ones with no email are "
+                        f"{_listed([f'“{name}”' for name in no_email])}. Tell them to sign in with those names, or "
+                        "add their emails under “See or change the list”.")
+    return tips
+
+
 def describe(result, source=""):
     """A plain-English summary for the instructor: (message, [tips])."""
+    from signin import PIN_MAX_DIGITS, PIN_MIN_DIGITS
+
     n = len(result.students)
     origin = f" from “{source}”" if source else ""
     message = f"Added {n} student{'s' if n != 1 else ''}{origin}"
@@ -789,17 +906,27 @@ def describe(result, source=""):
     tips = []
     if not result.with_email:
         tips.append(
-            "No email addresses were found. Students will sign in by typing their name and "
-            "choosing a PIN — but whoever types a name first gets it. To have students confirm "
-            "by email instead, get the list from Canvas (Get my class list from Canvas, or Canvas's student file), "
-            "which has their emails."
+            "No email addresses were found, so students will sign in by typing their name and choosing a PIN "
+            "(whoever types a name first gets it). To have them confirm with an emailed code instead, add their "
+            "emails. If your class is in Canvas, its class list usually has them: on the class page, open "
+            "“Class changed in Canvas? Update from Canvas”, and the emails are filled in for the names already "
+            "on your list."
         )
     elif result.with_email < n:
-        missing = n - result.with_email
-        tips.append(
-            f"{missing} student{'s' if missing != 1 else ''} had no email address and will sign in "
-            "with a name and a PIN instead of an emailed code."
-        )
+        # Those with an incomplete address have a note of their own.
+        incomplete = {name for name, _ in result.bad_emails}
+        missing = [s["display_name"] for s in result.students
+                   if not s["email"] and s["display_name"] not in incomplete]
+        if missing:
+            one = len(missing) == 1
+            shown = _listed(missing) if len(missing) <= 3 else f"{', '.join(missing[:3])} and {len(missing) - 3} more"
+            tips.append(
+                (f"{shown} had no email address, so they'll make up their own PIN" if one else
+                 f"{len(missing)} students had no email address: {shown}. Each will make up their own PIN")
+                + f" ({PIN_MIN_DIGITS} to {PIN_MAX_DIGITS} digits) the first time they open your link. You don't "
+                "hand out PINs. If you have " + ("the email, add it" if one else "their emails, add them")
+                + " under “See or change the list”, and they'll get an emailed code instead."
+            )
     for name, email, common in result.suspicious[:5]:
         tips.append(f"{name}'s email ends in “{email.split('@')[1]}” — did you mean “{common}”? "
                     "If it's a typo, fix it under “See or change the list”.")
@@ -824,12 +951,24 @@ def describe(result, source=""):
     if result.tab > 1:
         tips.append(f"The class list was on tab {result.tab} of your Excel file, so that's the one we used.")
     if result.repeated:
-        shown = ", ".join(result.repeated[:5])
-        tips.append(f"{shown} {'was' if len(result.repeated) == 1 else 'were'} listed twice; we kept one of each.")
-    for name in result.numbered[:5]:
-        first = SAME_NAME_SUFFIX.sub("", name)
-        tips.append(f"Two students are named {first}, so they're listed as “{first}” and “{name}”. Each one signs "
-                    "in with a code sent to their own email, so they can't mix them up.")
+        shown = list(dict.fromkeys(result.repeated))  # each name once, though one was listed three times
+        one, twice = len(shown) == 1, len(shown) == len(result.repeated)
+        tips.append(f"{_listed(shown[:5])} {'was' if one else 'were each'} listed "
+                    f"{'twice' if twice else 'more than once'}, with the same email or ID "
+                    f"{'both times' if twice else 'each time'}; we kept one{'' if one else ' of each'}.")
+    if result.merged:
+        shown = list(dict.fromkeys(result.merged))
+        one, twice = len(shown) == 1, len(shown) == len(result.merged)
+        first = shown[0].split()
+        example = f"{first[0]} X. {' '.join(first[1:])}" if len(first) > 1 else f"{first[0]} X."
+        tips.append(
+            f"{_listed(shown[:5])} {'is' if one else 'are each'} on the list {'twice' if twice else 'more than once'} "
+            f"without separate emails, so we can't tell if that's one student or {'two' if twice else 'more'}. "
+            f"We kept one{'' if one else ' of each'}. If there really are {'two' if twice else 'more'}, add the "
+            f"{'second' if twice else 'others'} with a middle initial (like “{example}”) using “Add a student who "
+            "joined late”."
+        )
+    tips += _same_name_tips(result)
     if result.duplicates:
         shown = ", ".join(f"{name}{f' ({email})' if email else ''}" for name, email in result.duplicates[:5])
         first = result.duplicates[0][0].split()

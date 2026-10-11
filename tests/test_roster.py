@@ -273,3 +273,200 @@ def test_canvas_api_text_pasted_from_the_browser_keeps_only_names_and_emails():
         ("Alex Johnson", "alex@u.school.edu"), ("Sam Lee", "sam@u.school.edu"), ("Riya Patel", "")]
     assert all(set(s) == {"name_key", "display_name", "email", "name_pending"} for s in result.students)
     assert "no students in it" in parse_roster(b"[]").error
+
+
+def _zipped(files):
+    import io
+    import zipfile
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w") as z:
+        for name, text in files.items():
+            z.writestr(name, text)
+    return out.getvalue()
+
+
+CANVAS_GRADES = (
+    "Assignment Name,Points Possible,Average\nReaction Paper 1,10,8.7\nMidterm Memo,50,41.2\nPresentation,20,\n"
+)
+# Canvas's Course Analytics student file: nine students, each with their own Student ID. Two Sam Riveras and two
+# Chen Wus, one of each with no email; two Alex Kims, told apart by their emails.
+SAME_NAMES = (
+    "Student Name,Student ID,Student SIS ID,Email,Section Name\n"
+    "Alex Kim,1001,S1001,akim1@u.school.edu,LAW 540 SEC 20\n"
+    "Alex Kim,1002,S1002,akim2@u.school.edu,LAW 540 SEC 20\n"
+    "Jordan Lee,1003,S1003,,LAW 540 SEC 20\n"
+    "Maya Patel,1004,S1004,mpatel@u.school.edu,LAW 540 SEC 20\n"
+    "Sam Rivera,1005,S1005,,LAW 540 SEC 20\n"
+    "Sam Rivera,1006,S1006,srivera2@u.school.edu,LAW 540 SEC 20\n"
+    "Chen Wu,1007,S1007,cwu@u.school.edu,LAW 540 SEC 20\n"
+    "Chen Wu,1008,S1008,,LAW 540 SEC 20\n"
+    "Priya Nguyen,1009,S1009,pnguyen@u.school.edu,LAW 540 SEC 20\n"
+)
+
+
+def test_students_who_share_a_name_are_all_kept_when_their_ids_differ():
+    result = parse_roster(_zipped({"course_grade.csv": CANVAS_GRADES, "students.csv": SAME_NAMES}))
+    assert not result.error
+    assert [(s["display_name"], s["email"]) for s in result.students] == [
+        ("Alex Kim", "akim1@u.school.edu"), ("Alex Kim (2)", "akim2@u.school.edu"), ("Jordan Lee", ""),
+        ("Maya Patel", "mpatel@u.school.edu"),
+        ("Sam Rivera", "srivera2@u.school.edu"), ("Sam Rivera (2)", ""),  # the plain name goes to the one with an email
+        ("Chen Wu", "cwu@u.school.edu"), ("Chen Wu (2)", ""),
+        ("Priya Nguyen", "pnguyen@u.school.edu")]
+    assert result.pin_twins == ["Sam Rivera (2)", "Chen Wu (2)"] and result.repeated == [] and result.merged == []
+    # The IDs only told them apart: none is kept.
+    assert all(set(s) == {"name_key", "display_name", "email", "name_pending"} for s in result.students)
+    assert "Student ID" in result.ignored_columns and result.sections == {"LAW 540 SEC 20": 9}
+    message, tips = describe(result, "students.csv")
+    assert "Added 9 students" in message and "6 with email addresses" in message
+    assert not any("listed twice" in t for t in tips)
+    assert any("the one with no email is “Sam Rivera (2)”" in t and "sign in with that name" in t for t in tips)
+    assert any("Two students are named Alex Kim, so they're listed as “Alex Kim” and “Alex Kim (2)”" in t for t in tips)
+    no_email = next(t for t in tips if "had no email address" in t)
+    assert "3 students had no email address: Jordan Lee, Sam Rivera (2) and Chen Wu (2)." in no_email
+    assert "make up their own PIN (4 to 8 digits) the first time they open your link" in no_email
+    assert "You don't hand out PINs" in no_email
+
+
+def test_two_students_with_one_name_and_no_emails_both_stay():
+    data = ("Student Name,Student ID,Email\nAna Lopez,9900,\nPat Morgan,9902,\nCara Diaz,9903,\nPat Morgan,9904,\n"
+            + "".join(f"Student {i},{i},\n" for i in range(228))).encode()  # 232 rows
+    result = parse_roster(data)
+    assert len(result.students) == 232
+    pats = [s for s in result.students if s["name_key"].startswith("pat morgan")]
+    assert [(s["display_name"], s["email"]) for s in pats] == [("Pat Morgan", ""), ("Pat Morgan (2)", "")]
+    assert result.pin_twins == ["Pat Morgan (2)"]
+    tips = " ".join(describe(result)[1])
+    assert ("Two students are named Pat Morgan and the list has no email for them, so they're listed as "
+            "“Pat Morgan” and “Pat Morgan (2)” and sign in with a PIN. Tell each one which name is theirs") in tips
+
+
+def test_one_student_listed_twice_with_the_same_id_or_email_is_kept_once():
+    # The gradebook export lists a student in two sections twice, with one ID.
+    data = (
+        b"Student,ID,SIS User ID,SIS Login ID,Section,Essay 1 (123)\n"
+        b"    Points Possible,,,,,10\n"
+        b"\"Diaz, Maria\",102,9002,mdiaz,Sec 1,8\n"
+        b"\"Diaz, Maria\",102,9002,mdiaz,Sec 2,8\n"
+        b"\"Kim, Alex\",103,9003,akim,Sec 1,9\n"
+    )
+    result = parse_roster(data)
+    assert names(result) == ["Maria Diaz", "Alex Kim"] and result.repeated == ["Maria Diaz"]
+    assert result.pin_twins == [] and result.numbered == []
+    assert "Maria Diaz was listed twice, with the same email or ID both times; we kept one." in describe(result)[1]
+    # The same email twice, with different IDs: still one person.
+    result = parse_roster(b"Name,ID,Email\nSam Lee,1,sam@x.edu\nSam Lee,2,sam@x.edu\n")
+    assert names(result) == ["Sam Lee"] and result.repeated == ["Sam Lee"]
+    # The same ID with the email on only one row: one person, with that email.
+    result = parse_roster(b"Name,ID,Email\nSam Lee,1,\nSam Lee,1,sam@x.edu\n")
+    assert [(s["display_name"], s["email"]) for s in result.students] == [("Sam Lee", "sam@x.edu")]
+
+
+def test_a_typed_list_with_one_name_twice_keeps_one_and_says_it_cant_tell():
+    result = parse_roster(b"Sam Lee\nSam Lee, sam@school.edu\nRiya Patel\n")
+    assert [(s["display_name"], s["email"]) for s in result.students] == [("Sam Lee", "sam@school.edu"),
+                                                                          ("Riya Patel", "")]
+    assert result.merged == ["Sam Lee"] and result.repeated == []
+    _message, tips = describe(result)
+    assert not any("listed twice" in t for t in tips)
+    assert any(t.startswith("Sam Lee is on the list twice without separate emails, so we can't tell if that's one "
+                            "student or two. We kept one.") and "“Sam X. Lee”" in t for t in tips)
+
+
+def test_a_list_from_canvas_keeps_students_who_share_a_name():
+    from roster import parse_people
+    result = parse_people([("Sam Rivera", ""), ("Sam Rivera", ""), ("Ana Lee", "ana@x.edu")])
+    assert names(result) == ["Sam Rivera", "Sam Rivera (2)", "Ana Lee"] and result.pin_twins == ["Sam Rivera (2)"]
+    assert all(set(s) == {"name_key", "display_name", "email", "name_pending"} for s in result.students)
+    assert result.ignored_columns == [] and result.name_column == ""
+    result = parse_people([("Sam Rivera", ""), ("Sam Rivera", "sam@x.edu")])
+    assert [(s["display_name"], s["email"]) for s in result.students] == [("Sam Rivera", "sam@x.edu"),
+                                                                          ("Sam Rivera (2)", "")]
+    # One person twice (the same email) is still one.
+    result = parse_people([("Sam Rivera", "sam@x.edu"), ("Sam Rivera", "sam@x.edu")])
+    assert names(result) == ["Sam Rivera"] and result.repeated == ["Sam Rivera"]
+
+
+def test_a_pasted_list_of_canvas_enrollments_counts_a_two_section_student_once():
+    import json
+    enrollments = [{"type": "StudentEnrollment", "user": {"id": uid, "name": name, "login_id": f"u{uid}"}}
+                   for uid, name in ((7, "Sam Rivera"), (7, "Sam Rivera"), (8, "Sam Rivera"), (9, "Ana Lee"))]
+    result = parse_roster(json.dumps(enrollments).encode())
+    assert names(result) == ["Sam Rivera", "Sam Rivera (2)", "Ana Lee"] and result.repeated == []
+
+
+def test_canvas_grades_file_is_refused_but_the_gradebook_export_is_read():
+    from roster import CANVAS_GRADES_FILE
+    assert parse_roster(CANVAS_GRADES.encode()).error == CANVAS_GRADES_FILE
+    assert "the one with “student” in its name" in CANVAS_GRADES_FILE and "nothing was added" in CANVAS_GRADES_FILE
+    assert parse_roster(b"Assignment,Due Date,Average Score\nEssay 1,2026-10-01,88\n").error == CANVAS_GRADES_FILE
+    # The gradebook export: a Student heading, and "Points Possible" is a row under it.
+    gradebook = parse_roster(b"Student,ID,SIS User ID,SIS Login ID,Section,Essay 1 (123)\n"
+                             b"    Points Possible,,,,,10\n\"Johnson, Alex\",101,9001,ajohnson,Sec 1,9\n")
+    assert not gradebook.error and names(gradebook) == ["Alex Johnson"] and gradebook.canvas_rows == 1
+    # Canvas's ZIP: the student file is used, the grades file passed over.
+    result = parse_roster(_zipped({"course_grade.csv": CANVAS_GRADES, "students.csv": CANVAS_ROSTER}))
+    assert not result.error and names(result) == ["Alex Johnson", "Sam Lee", "Riya Patel"]
+    assert "no class list in it" in parse_roster(_zipped({"course_grade.csv": CANVAS_GRADES})).error
+
+
+def test_a_heading_row_is_never_a_student():
+    for data, expected in (
+        (b"Students,Year,Email\nAlex Kim,2L,alex@x.edu\nSam Lee,3L,sam@x.edu\n", ["Alex Kim", "Sam Lee"]),
+        (b"Student Names,Email\nAlex Kim,alex@x.edu\nSam Lee,sam@x.edu\n", ["Alex Kim", "Sam Lee"]),
+        (b"Names\nAlex Kim\nSam Lee\n", ["Alex Kim", "Sam Lee"]),
+        (b"Participant,Email\nAlex Kim,alex@x.edu\n", ["Alex Kim"]),
+        (b"Participant,Netid,Year\nAlex Kim,ak1,2L\nSam Lee,sl2,3L\n", ["Alex Kim", "Sam Lee"]),
+        (b"ID,Learner,Year\n1,Alex Kim,2L\n2,Sam Lee,3L\n", ["Alex Kim", "Sam Lee"]),
+        (b"Attendee,E-mail Addr,Year\nAlex Kim,alex@x.edu,2L\nSam Lee,sam@x.edu,3L\n", ["Alex Kim", "Sam Lee"]),
+    ):
+        result = parse_roster(data)
+        assert names(result) == expected and result.bad_emails == [], data
+    result = parse_roster(b"Students,Year,Email\nAlex Kim,2L,alex@x.edu\n")
+    assert result.name_column == "Students" and result.ignored_columns == ["Year"]
+    assert "no students under them" in parse_roster(b"ID,Learner,Year\n").error
+
+
+def test_lists_without_headings_keep_their_first_row():
+    assert names(parse_roster(b"Riya Patel\nAlex Johnson, alex@school.edu\n")) == ["Riya Patel", "Alex Johnson"]
+    assert names(parse_roster(b"Alex Johnson\nSam Lee\n")) == ["Alex Johnson", "Sam Lee"]
+    assert names(parse_roster(b"Alex Kim,2L,Torts\nSam Lee,3L,Contracts\n")) == ["Alex Kim", "Sam Lee"]
+    people_page = b"Alex Johnson\tajohnson\t9001\tSec 1\tStudent\nSam Lee\tslee\t9002\tSec 1\tStudent\n"
+    assert names(parse_roster(people_page)) == ["Alex Johnson", "Sam Lee"]
+
+
+def test_the_no_email_notes_say_who_picks_a_pin_and_name_no_browser_button():
+    _message, tips = describe(parse_roster(b"Name\nAlex Johnson\nSam Lee\n"))
+    note = next(t for t in tips if "No email addresses" in t)
+    assert "Get my class list from Canvas" not in note
+    assert "“Class changed in Canvas? Update from Canvas”" in note and "emails are filled in" in note
+    _message, tips = describe(parse_roster(b"Name,Email\nAlex Johnson,alex@x.edu\nSam Lee,\n"))
+    assert ("Sam Lee had no email address, so they'll make up their own PIN (4 to 8 digits) the first time they "
+            "open your link. You don't hand out PINs.") in " ".join(tips)
+    many = "Name,Email\nAlex Johnson,alex@x.edu\n" + "".join(f"Student {c},\n" for c in "ABCDE")
+    _message, tips = describe(parse_roster(many.encode()))
+    assert any(t.startswith("5 students had no email address: Student A, Student B, Student C and 2 more.")
+               for t in tips)
+    # An incomplete address has a note of its own.
+    _message, tips = describe(parse_roster(b"Name,Email\nAlex Johnson,alex@x.edu\nSam Lee,sam@x\n"))
+    assert not any("had no email address" in t for t in tips) and any("“sam@x” looks incomplete" in t for t in tips)
+
+
+def test_an_incomplete_email_is_reported_on_the_same_name_student_it_was_on():
+    # The one with the good email gets the plain name, so the note follows the other to “Sam Lee (2)”.
+    result = parse_roster(b"Name,ID,Email\nSam Lee,1,sam@x\nSam Lee,2,sl@x.edu\n")
+    assert [(s["display_name"], s["email"]) for s in result.students] == [("Sam Lee", "sl@x.edu"), ("Sam Lee (2)", "")]
+    assert result.bad_emails == [("Sam Lee (2)", "sam@x")]
+    tips = describe(result)[1]
+    assert any(t.startswith("Sam Lee (2)'s email “sam@x” looks incomplete") for t in tips)
+    assert not any("had no email address" in t for t in tips)  # the note above says it already
+
+
+def test_a_student_listed_three_times_is_named_once():
+    result = parse_roster(b"Name,ID\nMaria Diaz,1\nMaria Diaz,1\nMaria Diaz,1\nAl Bo,2\n")
+    assert names(result) == ["Maria Diaz", "Al Bo"]
+    assert ("Maria Diaz was listed more than once, with the same email or ID each time; we kept one."
+            in describe(result)[1])
+    _message, tips = describe(parse_roster(b"Sam Lee\nSam Lee\nSam Lee\nAl Bo\n"))
+    assert any(t.startswith("Sam Lee is on the list more than once without separate emails, so we can't tell if "
+                            "that's one student or more.") for t in tips)
