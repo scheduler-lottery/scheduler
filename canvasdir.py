@@ -20,6 +20,10 @@ from util import iso, now, parse_iso
 SEARCH_URL = "https://canvas.instructure.com/api/v1/accounts/search"
 HOST = re.compile(r"^(?=.{4,120}$)([a-z0-9-]+\.)+[a-z]{2,}$")
 REMEMBER_DAYS = 30
+SHOWN = 10  # schools listed for a typed name
+# A school's other ways into its Canvas, not the one its professors use.
+SIDE_DOORS = re.compile(r"parent|observer|catalog|pre-?college|professional development|executive education"
+                        r"|development instance|sandbox", re.I)
 
 
 def clean_host(value):
@@ -31,9 +35,9 @@ def clean_host(value):
 
 
 def _ask(**params):
-    """Schools matching a name or domain: [{name, domain}], or None if the
-    directory couldn't be asked."""
-    query = urllib.parse.urlencode({**params, "per_page": 8})
+    """Schools matching a name or domain (8, unless per_page says): [{name,
+    domain}], or None if the directory couldn't be asked."""
+    query = urllib.parse.urlencode({"per_page": 8, **params})
     try:
         ask = urllib.request.Request(f"{SEARCH_URL}?{query}", headers={"Accept": "application/json"})
         with urllib.request.urlopen(ask, timeout=5) as answer:
@@ -50,9 +54,34 @@ def _ask(**params):
 
 
 def search(query):
-    """Schools whose name matches what the professor typed."""
+    """Schools whose name matches what the professor typed, likeliest first,
+    and whether more matched than are shown. The directory answers in
+    alphabetical order, so "Chicago" would list Chicago Jesuit Academy and
+    leave out University of Chicago; ask for plenty, then rank."""
     query = " ".join((query or "").split())[:80]
-    return (_ask(name=query) or []) if len(query) >= 2 else []
+    if len(query) < 2:
+        return [], False
+    found = _ask(name=query, per_page=50) or []
+    typed = query.lower()
+    word = re.compile(r"\b" + re.escape(typed))
+    found.sort(key=lambda s: (
+        s["name"].lower() != typed,                       # exactly what was typed
+        not word.search(s["name"].lower()),               # a word starts with it ("Penn": Pennsylvania)
+        bool(SIDE_DOORS.search(s["name"])),               # parents', catalog, pre-college portals last
+        not re.search(r"universit|college|\blaw\b", s["name"], re.I),
+        not s["domain"].startswith("canvas."),            # a school's own Canvas address
+        len(s["name"]),
+    ))
+    return found[:SHOWN], len(found) > SHOWN
+
+
+def name_of(host):
+    """The school whose Canvas is at exactly this address, by name, or ""
+    (for a professor who typed the address instead of picking the school).
+    One quick question to the directory; never raises."""
+    ours = [s for s in _ask(domain=host) or [] if s["domain"] == host]
+    ours.sort(key=lambda s: (bool(SIDE_DOORS.search(s["name"])), len(s["name"])))
+    return ours[0]["name"] if ours else ""
 
 
 def _best(schools, domain):
