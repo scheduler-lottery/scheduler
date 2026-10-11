@@ -427,6 +427,23 @@ def test_a_heading_row_is_never_a_student():
     assert "no students under them" in parse_roster(b"ID,Learner,Year\n").error
 
 
+def test_a_first_line_of_only_punctuation_is_no_trouble():
+    for divider in ("-----", "—", "*", "=========="):
+        result = parse_roster(f"{divider}\nAlex Kim\nSam Lee\n".encode())
+        assert not result.error and names(result) == ["Alex Kim", "Sam Lee"], divider
+    # "#" heads a column of numbers: the row is headings, not a student named “Learner”.
+    result = parse_roster(b"#,Learner,Year\n1,Alex Kim,2L\n2,Sam Lee,3L\n")
+    assert not result.error and names(result) == ["Alex Kim", "Sam Lee"]
+
+
+def test_a_divider_line_pasted_on_the_class_page_is_read(prof):
+    sid = prof.create_sheet()
+    r = prof.post(f"/teach/s/{sid}/roster", {"pasted": "-----\nAlex Kim\nSam Lee\n"})
+    assert r.status_code == 302
+    r = prof.upload(sid, "#,Learner,Year\n1,Alex Kim,2L\n2,Sam Lee,3L\n3,Riya Patel,2L\n", "my class.csv")
+    assert r.status_code == 302 and "Riya Patel" in prof.get(r.headers["Location"]).get_data(as_text=True)
+
+
 def test_lists_without_headings_keep_their_first_row():
     assert names(parse_roster(b"Riya Patel\nAlex Johnson, alex@school.edu\n")) == ["Riya Patel", "Alex Johnson"]
     assert names(parse_roster(b"Alex Johnson\nSam Lee\n")) == ["Alex Johnson", "Sam Lee"]
