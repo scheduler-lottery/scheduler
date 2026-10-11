@@ -33,7 +33,8 @@ const COURSES = "/api/v1/courses?per_page=100&include[]=term&include[]=total_stu
 const IN_SAFARI = chrome.runtime.getURL("").indexOf("safari-web-extension:") === 0;
 const KEEP_AWAKE_MS = 25 * 1000; // Safari stops a quiet helper after about 30 seconds
 const SIGN_IN_WAIT_MS = 10 * 60 * 1000;
-const LOOK_MS = 3 * 1000; // a Canvas tab stuck (behind a "Leave site?" question, say) can't hold things up
+const LOOK_MS = 3 * 1000; // an open Canvas tab stuck (behind a "Leave site?" question, say) can't hold things up
+const SLOW_MS = 20 * 1000; // but a Canvas that's only slow to answer isn't signed out
 
 function fromScheduler(sender) {
   let origin = sender && sender.origin;
@@ -198,16 +199,19 @@ async function inTab(origin, paths, say, schedulerTab) {
 // (all looked at together, so a few seconds at most).
 async function openSignedIn(origin) {
   const tabs = (await chrome.tabs.query({ url: origin + "/*" })).filter((t) => t.status === "complete");
-  const said = await Promise.all(tabs.map((t) => whoIn(t.id)));
+  const said = await Promise.all(tabs.map((t) => whoIn(t.id, LOOK_MS)));
   return tabs[said.indexOf(200)] || null;
 }
 
-// What Canvas says, inside this tab, to "who am I?": 200 when signed in.
-async function whoIn(tabId) {
+// What Canvas says, inside this tab, to "who am I?": 200 when signed in, or
+// 0 if the tab can't be asked or doesn't answer within `ms`.
+async function whoIn(tabId, ms) {
+  let timer;
   const results = await Promise.race([
     chrome.scripting.executeScript({ target: { tabId }, func: whoAmI }).catch(() => null),
-    sleep(LOOK_MS).then(() => null),
+    new Promise((done) => { timer = setTimeout(done, ms, null); }),
   ]);
+  clearTimeout(timer);
   return (results && results[0] && results[0].result) || 0;
 }
 
@@ -225,26 +229,28 @@ function toFront(tab) {
 async function signedIn(tab, origin, say) {
   const until = Date.now() + SIGN_IN_WAIT_MS;
   let asked = false;
-  let awake = Date.now();
-  while (Date.now() < until) {
-    if (Date.now() - awake > KEEP_AWAKE_MS) { // (a word to the page keeps Safari from stopping the helper)
-      awake = Date.now();
-      say({ type: "wait" });
+  // A word to the page keeps Safari from stopping the helper, on a timer of
+  // its own, so a slow look at Canvas (up to SLOW_MS) can't delay it.
+  const awake = setInterval(() => say({ type: "wait" }), KEEP_AWAKE_MS);
+  try {
+    while (Date.now() < until) {
+      const now = await chrome.tabs.get(tab.id).catch(() => null);
+      if (!now) throw new Error("closed");
+      if (now.status === "complete" && now.url && now.url.indexOf(origin + "/") === 0 && !/\/login\b/.test(now.url)) {
+        if (await whoIn(now.id, SLOW_MS) === 200) return now;
+      }
+      if (!asked && now.status === "complete") {
+        asked = true;
+        say({ type: "signin" });
+        await chrome.tabs.update(now.id, { active: true });
+        await chrome.windows.update(now.windowId, { focused: true });
+      }
+      await sleep(800);
     }
-    const now = await chrome.tabs.get(tab.id).catch(() => null);
-    if (!now) throw new Error("closed");
-    if (now.status === "complete" && now.url && now.url.indexOf(origin + "/") === 0 && !/\/login\b/.test(now.url)) {
-      if (await whoIn(now.id) === 200) return now;
-    }
-    if (!asked && now.status === "complete") {
-      asked = true;
-      say({ type: "signin" });
-      await chrome.tabs.update(now.id, { active: true });
-      await chrome.windows.update(now.windowId, { focused: true });
-    }
-    await sleep(800);
+    throw new Error("signin");
+  } finally {
+    clearInterval(awake);
   }
-  throw new Error("signin");
 }
 
 // These two run inside the Canvas page (chrome.scripting), so they can use

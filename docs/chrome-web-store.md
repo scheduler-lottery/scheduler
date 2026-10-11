@@ -118,8 +118,9 @@ extensions from other stores" click, and the page says so):
 
 Bump `version` in `extension/manifest.json`, run `tools/build_extension.py store`
 again, upload the new zip under **Package**, and submit. If 1.0.0 is in the store,
-upload 1.0.1 this way now. It asks for no new permissions, so Chrome updates
-professors who have the helper without asking them anything.
+upload 1.0.1 now: it is already the version in `extension/manifest.json`, so skip
+the bump this once. It asks for no new permissions, so Chrome updates professors
+who have the helper without asking them anything.
 
 Keep the permissions exactly as they are. An update that adds a permission Chrome
 warns about turns the helper off until each professor approves it again.
