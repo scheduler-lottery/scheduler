@@ -22,7 +22,7 @@ from types import SimpleNamespace
 
 import db
 from matching_engine import ALGORITHMS, DEFAULT_ALGORITHM, EXCLUDED, MANUAL, OVERFLOW, UNRANKED, build_student_prefs
-from roster import base_key, numbered
+from roster import SAME_NAME_SUFFIX, base_key, numbered
 from util import in_zone, iso, iso_precise, new_id, normalize_name, now, plural, read_date, slugify
 
 MAX_DAYS = 30
@@ -256,9 +256,15 @@ def _signin_changes(before, after, pinned=()):
 
 def compare_rosters(current_rows, new_students):
     """How a new class list differs from the current one, for the review
-    page shown before anything is replaced."""
+    page shown before anything is replaced. Students are matched up by
+    carry_over, as replace_roster does, so it shows just what Replace would
+    do. `unsure`: names with fewer students on the new list, where nothing
+    says which one left; Replace keeps all of them as they are."""
     current = {r["name_key"]: r for r in current_rows if not r["is_test"]}
-    incoming = {s["name_key"]: s for s in new_students}
+    tests = {r["name_key"] for r in current_rows if r["is_test"]}
+    new_students = [s for s in new_students if s["name_key"] not in tests]
+    carried, unsure = carry_over(current_rows, new_students)
+    incoming = {s["name_key"]: s for s in carried}
     by_email = {r["email"]: r for r in current.values() if r["email"]}
     adding = [s for k, s in incoming.items() if k not in current]
     dropping = [r for k, r in current.items() if k not in incoming]
@@ -266,10 +272,18 @@ def compare_rosters(current_rows, new_students):
         (by_email[s["email"]], s) for s in adding
         if s["email"] and s["email"] in by_email and by_email[s["email"]]["name_key"] not in incoming
     ]
+    # Already on the list: as many of each name as the new list has (an
+    # unsure name keeps more of them than that).
+    room = Counter(_same_name(s["display_name"]) for s in new_students)
+    same = []
+    for k, s in incoming.items():
+        if k in current and room[_same_name(s["display_name"])] > 0:
+            room[_same_name(s["display_name"])] -= 1
+            same.append(s)
     return {
         "current": len(current),
-        "incoming": len(incoming),
-        "same": [s for k, s in incoming.items() if k in current],
+        "incoming": len(new_students),
+        "same": same,
         "adding": adding,
         "dropping": dropping,
         "renamed": same_person,
@@ -282,6 +296,7 @@ def compare_rosters(current_rows, new_students):
         "keeps_email": [
             current[k] for k, s in incoming.items() if k in current and current[k]["email"] and not s["email"]
         ],
+        "unsure": unsure,
     }
 
 
@@ -292,28 +307,97 @@ def _drop_pins(sid, keys):
         db.run("DELETE FROM name_pins WHERE sheet_id = :sid AND name_key = :key", sid=sid, key=key)
 
 
-def _keep_numbering(current_rows, incoming):
-    """Students who share a name keep the number they had ("Alex Kim (2)"
-    stays the one with that email), so a new upload never hands one
-    student's ranking to the other. Any clash left is renumbered."""
-    by_email = {r["email"]: r for r in current_rows if r["email"] and not r["is_test"]}
-    out = []
+def _same_name(display_name):
+    """What students who share a name are listed under: "Sam Rivera (2)" ->
+    "sam rivera". (Not base_key, which would put "Student 1" with "Student
+    2".)"""
+    return normalize_name(SAME_NAME_SUFFIX.sub("", display_name))
+
+
+def _number(display_name):
+    found = SAME_NAME_SUFFIX.search(display_name)
+    return int(found.group(1)) if found else 1
+
+
+def _by_elimination(rows, students):
+    """Pairs (current row, new-list student) among those of one name that no
+    email matched: first those with no email on both lists, then those with
+    one on both, then the rest, in order. (So a newcomer with an email
+    doesn't take the place of a student we know only by their PIN while
+    someone with no email is there to be them.)"""
+    pairs, rows, students = [], list(rows), list(students)
+    for has_email in (False, True):
+        found = list(zip([r for r in rows if bool(r["email"]) == has_email],
+                         [s for s in students if bool(s["email"]) == has_email]))
+        pairs += found
+        rows = [r for r in rows if all(r is not row for row, _ in found)]
+        students = [s for s in students if all(s is not new for _, new in found)]
+    return pairs + list(zip(rows, students))
+
+
+def carry_over(current_rows, incoming):
+    """Who on a new class list is who on the current one. A student only
+    ever keeps their own name, and with it their PIN, email and ranking:
+    never another student's.
+
+    Students who share a name ("Sam Rivera", "Sam Rivera (2)") are numbered
+    in each list's own order, so a number says nothing about who is who. An
+    email does; those left over pair up by elimination (_by_elimination),
+    and any more on the new list are newcomers, numbered around everyone
+    already on the list. When the new list has fewer left over and one of
+    them has no email, nothing says who left: all of them on the current
+    list stay just as they are, and the name (as shown, "Sam Rivera") is in
+    `unsure`. Returns (students, unsure)."""
+    groups = {}
+    for r in current_rows:
+        if not r["is_test"]:
+            groups.setdefault(_same_name(r["display_name"]), []).append(r)
+    new_groups = {}
     for s in incoming:
-        old = by_email.get(s["email"]) if s["email"] else None
-        if old and old["name_key"] != s["name_key"] and base_key(old["name_key"]) == base_key(s["name_key"]):
-            s = {**s, "name_key": old["name_key"], "display_name": old["display_name"]}
-        out.append(s)
-    seen = set()
-    for i, s in enumerate(out):
-        if s["name_key"] in seen:
-            later = {o["name_key"] for o in out[i + 1:]}
-            n = 2
-            while normalize_name(numbered(s["display_name"], n)) in seen | later:
-                n += 1
-            name = numbered(s["display_name"], n)
-            out[i] = s = {**s, "name_key": normalize_name(name), "display_name": name}
-        seen.add(s["name_key"])
-    return out
+        new_groups.setdefault(_same_name(s["display_name"]), []).append(s)
+    out, newcomers, unsure = [], [], []
+    for name, new in new_groups.items():
+        cur = sorted(groups.get(name, []), key=lambda r: _number(r["display_name"]))
+        by_email = {r["email"]: r for r in cur if r["email"]}
+        pairs, left = [], []
+        for s in new:
+            old = by_email.pop(s["email"], None) if s["email"] else None
+            if old:
+                pairs.append((old, s))
+            else:
+                left.append(s)
+        free = [r for r in cur if all(r is not old for old, _ in pairs)]
+        if left and len(left) < len(free) and not all(p["email"] for p in free + left):
+            unsure.append(SAME_NAME_SUFFIX.sub("", cur[0]["display_name"]))
+            out += [{k: r[k] for k in ("name_key", "display_name", "email", "name_pending")} for r in free]
+            left = []
+        else:
+            found = _by_elimination(free, left)
+            pairs += found
+            left = [s for s in left if all(s is not new for _, new in found)]
+        # The new list's spelling, unless that would change the student's name.
+        out += [s if s["name_key"] == old["name_key"] else
+                {**s, "name_key": old["name_key"], "display_name": old["display_name"]} for old, s in pairs]
+        newcomers += left
+    # Students already on the list have their names; a newcomer keeps the
+    # one the new list gave them if no one has it (now or before), or else
+    # gets the next free number.
+    taken = {s["name_key"] for s in out} | {r["name_key"] for r in current_rows}
+    clash = []
+    for s in newcomers:
+        if s["name_key"] in taken:
+            clash.append(s)
+        else:
+            out.append(s)
+            taken.add(s["name_key"])
+    for s in clash:
+        n = 2
+        while normalize_name(numbered(s["display_name"], n)) in taken:
+            n += 1
+        name = numbered(s["display_name"], n)
+        taken.add(normalize_name(name))
+        out.append({**s, "name_key": normalize_name(name), "display_name": name})
+    return out, unsure
 
 
 def adopt_known_names(sid, students):
@@ -330,18 +414,17 @@ def adopt_known_names(sid, students):
 
 
 def replace_roster(sid, students):
-    """Swap in a new class list. Test students stay put, and a student the
-    new list has no email for keeps the one already on file. Returns the
-    name keys whose way of signing in changed, so their sign-ins can be
-    ended."""
+    """Swap in a new class list. Test students stay put, each student keeps
+    their own name (carry_over), and a student the new list has no email
+    for keeps the one already on file: their own, never another's, since
+    it's looked up by the name carry_over kept for them. Returns the name
+    keys whose way of signing in changed, so their sign-ins can be ended."""
     current = get_roster(sid)
     before = {r["name_key"]: r["email"] for r in current if not r["is_test"]}
     pinned = _pinned(sid)
     taken = test_keys(sid)
-    incoming = _keep_numbering(current, [
-        {**s, "email": s["email"] or before.get(s["name_key"], "")}
-        for s in students if s["name_key"] not in taken
-    ])
+    incoming, _ = carry_over(current, [s for s in students if s["name_key"] not in taken])
+    incoming = [{**s, "email": s["email"] or before.get(s["name_key"], "")} for s in incoming]
     db.run("DELETE FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid)
     db.run_many(
         "INSERT INTO roster (sheet_id, name_key, display_name, email, is_test, name_pending) "
@@ -354,6 +437,25 @@ def replace_roster(sid, students):
     )
     _drop_pins(sid, [s["name_key"] for s in incoming if s["email"]])
     return _signin_changes(before, {s["name_key"]: s["email"] for s in incoming}, pinned)
+
+
+def _whose_new_email(current, students, s):
+    """The student `s` must be, by elimination, when `s` comes with an email
+    we don't have under a name students share: the only one of that name
+    with no email, when everyone else of that name is in `students` by
+    their email, `s` is the only one there with a new email, and none there
+    has no email (who'd more likely be them). Whatever number the list gave
+    `s`. None otherwise, as for a late joiner typed in on their own."""
+    name = _same_name(s["display_name"])
+    group = [r for r in current.values() if not r["is_test"] and _same_name(r["display_name"]) == name]
+    blanks = [r for r in group if not r["email"]]
+    known = {r["email"] for r in current.values() if r["email"]}
+    listed = [t for t in students if _same_name(t["display_name"]) == name]
+    if (len(blanks) == 1 and all(t["email"] for t in listed)
+            and [t["email"] for t in listed if t["email"] not in known] == [s["email"]]
+            and {r["email"] for r in group if r["email"]} <= {t["email"] for t in listed}):
+        return blanks[0]
+    return None
 
 
 def add_to_roster(sid, students):
@@ -369,6 +471,10 @@ def add_to_roster(sid, students):
             continue  # already on the list
         here = current.get(s["name_key"])
         email = s["email"] if s["email"] not in emails else ""
+        if email and (here is None or here["email"]):
+            blank = _whose_new_email(current, students, s)
+            if blank:
+                here, s = blank, {**s, "name_key": blank["name_key"], "display_name": blank["display_name"]}
         if here is not None and not here["is_test"] and here["email"] and email and here["email"] != email:
             # A different student with the same name: add them too, numbered.
             n = 2
@@ -390,6 +496,7 @@ def add_to_roster(sid, students):
                 "UPDATE roster SET email = :email WHERE sheet_id = :sid AND name_key = :key",
                 email=email, sid=sid, key=s["name_key"],
             )
+            current[s["name_key"]] = {**here, "email": email}
             filled += 1
         else:
             continue

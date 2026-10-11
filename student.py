@@ -289,7 +289,11 @@ def _start_unlisted(typed):
 
 def _twins(rows, row):
     """Everyone on the list who shares this student's name (with an email to
-    tell them apart), when there's more than one."""
+    tell them apart), when there's more than one. None for a numbered name
+    with no email ("Sam Rivera (2)"): the student was told to type it, and
+    signs in with a PIN, not one of the others' emails."""
+    if not row["email"] and SAME_NAME_SUFFIX.search(row["display_name"]):
+        return []
     found = [r for r in rows if base_key(r["name_key"]) == base_key(row["name_key"])
              and r["email"] and not r["is_test"]]
     return found if len(found) > 1 else []

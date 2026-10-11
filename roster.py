@@ -316,14 +316,17 @@ def _people_page_columns(rows):
 def _is_heading_row(cells):
     """A first row of headings we can't use for names ("ID, Learner, Year",
     "Attendee, Email"): never a student. "Student" alone isn't one, since
-    it's the role on each row of a People-page copy."""
-    folded = [_norm_header(c) for c in cells if str(c).strip()]
+    it's the role on each row of a People-page copy. A cell of only
+    punctuation ("-----") folds to nothing and is left out, but "#" beside
+    other headings ("#, Learner, Year") is a column of numbers."""
+    folded = [h for h in (_norm_header(c) for c in cells) if h]
     if not folded or any("@" in str(c) for c in cells):
         return False
     known = (set(FULL_NAME_HEADERS) | set(FIRST_HEADERS) | set(LAST_HEADERS) | set(LAST_FIRST_HEADERS)
              | set(EMAIL_HEADERS) | set(LOGIN_HEADERS) | set(SECTION_HEADERS)) - {"student"}
-    return any(h in known or h.split()[-1] in ("name", "names", "email", "id") or "email" in h.split()
-               or " e mail " in f" {h} " for h in folded)
+    return "#" in (str(c).strip() for c in cells) or any(
+        h in known or h.split()[-1] in ("name", "names", "email", "id") or "email" in h.split()
+        or " e mail " in f" {h} " for h in folded)
 
 
 def _is_canvas_grades(cells):
