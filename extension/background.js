@@ -23,12 +23,14 @@
 //      professor's work there.
 
 const VERSION = chrome.runtime.getManifest().version;
-const CANVAS_HOSTS = (chrome.runtime.getManifest().host_permissions || [])
-  .map((pattern) => (pattern.match(/^https?:\/\/([^/]+)\/\*$/) || [])[1])
-  .filter(Boolean);
 const SCHEDULER_ORIGINS = ((chrome.runtime.getManifest().externally_connectable || {}).matches || [])
   .map((pattern) => (pattern.match(/^(https?:\/\/[^/]+)\//) || [])[1])
   .filter(Boolean);
+// (Safari's build also names Scheduler's own site among its websites, so
+// Safari asks the professor about it too: that one isn't a Canvas.)
+const CANVAS_HOSTS = (chrome.runtime.getManifest().host_permissions || [])
+  .map((pattern) => (pattern.match(/^https?:\/\/([^/]+)\/\*$/) || [])[1])
+  .filter((host) => host && !SCHEDULER_ORIGINS.some((origin) => origin.replace(/^https?:\/\//, "") === host));
 const COURSES = "/api/v1/courses?per_page=100&include[]=term&include[]=total_students";
 const IN_SAFARI = chrome.runtime.getURL("").indexOf("safari-web-extension:") === 0;
 const KEEP_AWAKE_MS = 25 * 1000; // Safari stops a quiet helper after about 30 seconds
@@ -215,13 +217,16 @@ async function whoIn(tabId, ms) {
   return (results && results[0] && results[0].result) || 0;
 }
 
+// Give a window the focus (an iPhone or iPad has no windows to focus).
+function focusWindow(windowId) {
+  return chrome.windows && chrome.windows.update ? chrome.windows.update(windowId, { focused: true }).catch(() => {})
+    : Promise.resolve();
+}
+
 // Bring a tab to the front, in a window that has the focus.
 function toFront(tab) {
   if (!tab) return Promise.resolve();
-  return Promise.all([
-    chrome.tabs.update(tab.id, { active: true }).catch(() => {}),
-    chrome.windows.update(tab.windowId, { focused: true }).catch(() => {}),
-  ]);
+  return Promise.all([chrome.tabs.update(tab.id, { active: true }).catch(() => {}), focusWindow(tab.windowId)]);
 }
 
 // Wait until the tab is a loaded Canvas page with the professor signed in;
@@ -243,7 +248,7 @@ async function signedIn(tab, origin, say) {
         asked = true;
         say({ type: "signin" });
         await chrome.tabs.update(now.id, { active: true });
-        await chrome.windows.update(now.windowId, { focused: true });
+        await focusWindow(now.windowId);
       }
       await sleep(800);
     }

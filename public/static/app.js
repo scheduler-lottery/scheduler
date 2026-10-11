@@ -906,7 +906,10 @@
     var offerHelper = null; // (decide, below, where a helper can be offered)
     var askWhich = guide.hasAttribute("data-ask-which"); // the course list, even when one matches (after "start over")
     if (connectBox && !connectBox.hidden) showHelp();
-    else if (!canOffer()) uploadFirst();
+    // (With no helper to offer this browser, Canvas's file shows at once;
+    // a helper that's there anyway, being tried out, takes its place when it
+    // answers. Safari never answers for one that isn't.)
+    else if (!canOffer() || !storeUrl) uploadFirst();
     // The school changed on this page: what's offered may change with it.
     // Connect Canvas reads only the school whose key this site has.
     if (quizBox) quizBox.addEventListener("canvas-school", function () {

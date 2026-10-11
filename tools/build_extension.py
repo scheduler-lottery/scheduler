@@ -42,8 +42,9 @@ def extension_id(public_key_b64):
 
 
 def _png(size):
-    """The icon: a rounded brown square with a white calendar page."""
-    scale = 4
+    """The icon: a rounded brown square with a white calendar page (small
+    sizes drawn 4x and scaled down, for smooth edges)."""
+    scale = 4 if size <= 128 else 1
     big = size * scale
     brown, white, ink = (154, 85, 32), (255, 253, 248), (122, 63, 18)
 
@@ -109,11 +110,19 @@ def build(target):
         manifest["action"] = {"default_title": "Scheduler Helper", "default_popup": "allow.html",
                               "default_icon": {k: v for k, v in manifest["icons"].items() if k in ("16", "32", "48")}}
         files += ["allow.html", "allow.js"]
+        # Safari asks the professor about each website the helper touches,
+        # Scheduler's own included (its page talks to the helper), and lets
+        # the Allow page ask only for sites the helper names here.
+        manifest["host_permissions"] += [m for m in manifest["externally_connectable"]["matches"]
+                                         if m not in manifest["host_permissions"]]
+        # Apple's packager makes the Mac (and iPhone/iPad) app around the
+        # helper, and its App Store icon, from the largest icon.
+        manifest["icons"].update({"512": "icon-512.png", "1024": "icon-1024.png"})
     with open(os.path.join(out, "manifest.json"), "w", encoding="utf-8") as handle:
         json.dump(manifest, handle, indent=2)
     for file in files:
         shutil.copy(os.path.join(SOURCE, file), out)
-    for size in (16, 32, 48, 128):
+    for size in sorted(int(k) for k in manifest["icons"]):
         with open(os.path.join(out, f"icon-{size}.png"), "wb") as handle:
             handle.write(_png(size))
     if target in ("store", "safari"):

@@ -93,3 +93,27 @@ def test_a_list_from_canvas_without_emails_is_not_taken_for_the_wrong_file(prof)
     r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": listed, "how": "helper"})
     page = text(prof.get(r.headers["Location"]))
     assert "no Name or Email column" not in page
+
+
+def test_the_safari_build_names_every_site_safari_asks_about(tmp_path, monkeypatch):
+    """Safari asks the professor about each website the helper touches, and
+    its Allow page may only ask for sites the helper names: Canvas, and
+    Scheduler's own (whose page talks to it). Apple's packager makes the app
+    and its icon from the largest icon."""
+    import importlib.util
+    import json
+    import zipfile
+
+    spec = importlib.util.spec_from_file_location("build_extension", "tools/build_extension.py")
+    build = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(build)
+    monkeypatch.setattr(build, "DIST", str(tmp_path))
+    build.build("safari")
+    with zipfile.ZipFile(tmp_path / "scheduler-helper-safari.zip") as z:
+        manifest = json.loads(z.read("manifest.json"))
+        assert {"allow.html", "allow.js", "background.js", "icon-1024.png"} <= set(z.namelist())
+    assert manifest["host_permissions"] == ["https://canvas.northwestern.edu/*", "https://scheduler-lottery.vercel.app/*"]
+    assert manifest["icons"]["1024"] == "icon-1024.png" and manifest["action"]["default_popup"] == "allow.html"
+    build.build("store")  # Chrome's: Canvas only (Chrome lets the page talk to it without asking)
+    with zipfile.ZipFile(tmp_path / "scheduler-helper.zip") as z:
+        assert json.loads(z.read("manifest.json"))["host_permissions"] == ["https://canvas.northwestern.edu/*"]
