@@ -307,47 +307,74 @@ def find_code(raw):
         if len(token) in sheets.SHEET_ID_LENGTHS and all(ch in ID_ALPHABET for ch in token) and (
                 sheets.get_sheet(token) or _was_deleted(token)):
             return token
-        if len(token) == sheets.SHORT_CODE_LENGTH and all(ch in ID_ALPHABET for ch in token):
+        if len(token) in sheets.SHORT_CODE_LENGTHS and all(ch in ID_ALPHABET for ch in token):
             sid = sheets.by_short_code(token)
             if sid:
                 return sid
     return ""
 
 
-JOIN_MISSES_PER_HOUR = 30
+# Codes that matched no class, typed in the "Have a code?" box or opened as
+# example.com/<code>: about 30 an hour from one browser, and a much higher
+# ceiling from one network address (a whole class on campus Wi-Fi mistyping
+# a link never gets near it, and a script that drops its cookies can't get
+# past it). Past either, no code is looked up at all, even a right one, or
+# the limit would only hide which tries worked. The full link (/c/<code>)
+# never comes through here, so it always works.
+CODE_MISSES_PER_BROWSER = 30
+CODE_MISSES_PER_NETWORK = 200
 
 
-def _join_misses(record=False):
-    """Wrong codes typed from this network address in the last hour (so the
-    box can't be used to try codes until one works)."""
-    import signin
-    from util import iso, new_id, now
+def _code_tries_from():
+    """The two counters a wrong code counts against: this browser, and its
+    network address (hashed, so the table holds no addresses)."""
+    return ("b:" + signin.browser_id(), "n:" + signin.keyed_hash("ip|" + (signin.client_ip() or "unknown")))
 
-    client = "b:" + signin.browser_id()
-    if record:
-        db.run("INSERT INTO auth_failures (id, scope, subject, client, at) VALUES (:id, 'join', '', :c, :at)",
-               id=new_id(16), c=client, at=iso())
-        db.commit()
-        return 0
-    return db.scalar(
-        "SELECT COUNT(*) FROM auth_failures WHERE scope = 'join' AND client = :c AND at > :since",
-        c=client, since=iso(now() - timedelta(hours=1)),
+
+def _code_misses_allowed():
+    """Whether this browser and network may try another code this hour."""
+    browser, network = _code_tries_from()
+    since = iso(now() - timedelta(hours=1))
+    count = lambda client: db.scalar(  # noqa: E731
+        "SELECT COUNT(*) FROM auth_failures WHERE scope = 'join' AND client = :client AND at > :since",
+        client=client, since=since,
     ) or 0
+    return count(browser) < CODE_MISSES_PER_BROWSER and count(network) < CODE_MISSES_PER_NETWORK
+
+
+def _record_code_miss():
+    at = iso()
+    db.run_many(
+        "INSERT INTO auth_failures (id, scope, subject, client, at) VALUES (:id, 'join', '', :client, :at)",
+        [{"id": new_id(16), "client": client, "at": at} for client in _code_tries_from()],
+    )
+    db.commit()
+
+
+def _code_shaped(token):
+    """A class's code or short code could be this: the right length, only
+    letters and digits a code uses, and (a short code) a digit. Anything
+    else (/robots.txt, /wp-login.php) is a plain 404, counted against no
+    one and never looked up."""
+    if not token or not all(ch in ID_ALPHABET for ch in token):
+        return False
+    return len(token) in sheets.SHEET_ID_LENGTHS or (
+        len(token) in sheets.SHORT_CODE_LENGTHS and any(ch.isdigit() for ch in token))
 
 
 @app.route("/join")
 def join():
     """Students who were given a code instead of a link."""
     raw = (request.args.get("code") or "").strip()
-    code = find_code(raw)
-    if code:
-        return redirect(url_for("student.signin", sid=code))
-    if raw and _join_misses() >= JOIN_MISSES_PER_HOUR:
+    if raw and not _code_misses_allowed():
         flash("Too many codes that didn't match were tried from here. Use the link your instructor shared, "
               "or try again in an hour.", "error")
         return redirect(url_for("landing"))
+    code = find_code(raw)
+    if code:
+        return redirect(url_for("student.signin", sid=code))
     if raw:
-        _join_misses(record=True)
+        _record_code_miss()
     if not raw:
         flash("Type the code your instructor gave you: the letters and numbers at the end of the class link.",
               "error")
@@ -363,10 +390,22 @@ def join():
 @app.route("/<code>")
 def short_link(code):
     """example.com/k7q2mx9pa3fh works as well as example.com/c/k7q2mx9pa3fh, and so
-    does the class's short link, example.com/k7q2mx."""
-    sid = find_code(code)
+    does the class's short link, example.com/k7q2mx9p (or an older k7q2mx).
+    Capitals, and a period or comma copied from the end of a sentence, are
+    forgiven."""
+    token = "".join(re.findall(r"[a-z0-9]+", code.lower()))
+    if not _code_shaped(token):
+        abort(404)
+    if not _code_misses_allowed():
+        return render_template(
+            "error.html", code=429, title="Too many links that didn’t match",
+            message="Too many links that didn’t match a class were opened from here in the last hour. Use the "
+                    "full link your instructor shared, the one with /c/ in it, or try again in an hour.",
+        ), 429
+    sid = find_code(token)
     if sid:
         return redirect(url_for("student.signin", sid=sid))
+    _record_code_miss()
     abort(404)
 
 

@@ -1118,7 +1118,10 @@ def _sheet_page(sid, tab):
     can_fill = bool(fill_plan) and (published or not stale)
 
     share_url = url_for("student.signin", sid=sid, _external=True)
-    short_url = url_for("short_link", code=sheets.short_code(sid), _external=True)
+    code = sheets.short_code(sid)
+    if not code:  # deleted from another tab while this page was loading: owned_sheet says so
+        return redirect(url_for("teach.sheet", sid=sid))
+    short_url = url_for("short_link", code=code, _external=True)
     # "Nudge": a reminder to everyone on the list who hasn't ranked, from the
     # instructor's own email (their addresses in Bcc).
     waiting_emails = [r["email"] for r in not_yet if r["email"]]
