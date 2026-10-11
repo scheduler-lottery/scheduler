@@ -2875,7 +2875,7 @@ def test_messages_can_be_closed_and_canvas_steps_pick_up_after_signing_in(prof, 
     page = html(prof.get(f"/teach/s/{sid}"))
     assert "Open Canvas" in page and 'data-canvas-went="signin"' in page  # in a tab of its own, where downloads show
     assert "popup=" not in raw(prof.get("/static/app.js"))  # (not a small window with no downloads to see)
-    assert page.count('class="canvas-pic"') == 3 and "Click Course Analytics" in page  # where to click, drawn
+    assert page.count('class="canvas-pic"') == 5 and "Click Course Analytics" in page  # where to click, drawn (step 4: two ways)
     assert "data-canvas-welcome" in page
     # No AI-assistant route for student data (agents' makers advise against using them on pages with
     # others' personal information; school policies restrict which AI tools may see a roster).

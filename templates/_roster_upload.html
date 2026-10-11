@@ -15,7 +15,7 @@
   <label class="dropzone" for="{{ drop_id }}">
     {% if from_canvas is defined and from_canvas %}
     <span class="dropzone-title" id="{{ drop_id }}-title">Click here to choose Canvas's file</span>
-    <span class="dropzone-sub" id="{{ drop_id }}-sub">The file Canvas just saved in Downloads, ending in .zip.<span class="dropzone-drag"> Or drag it onto this box.</span>{% if counts.roster %} You'll see what changes before anything is replaced.{% endif %}</span>
+    <span class="dropzone-sub" id="{{ drop_id }}-sub"><span data-not-safari>The file Canvas just saved in your Downloads folder.</span><span data-safari-only hidden>In Downloads: the newest folder, then the file with “student” in its name.</span>{% if counts.roster %} You'll see what changes before anything is replaced.{% endif %}</span>
     {% else %}
     <span class="dropzone-title" id="{{ drop_id }}-title">{{ 'Click here to choose the new class list' if counts.roster else 'Click here to choose your class list' }}</span>
     <span class="dropzone-sub" id="{{ drop_id }}-sub">An Excel or CSV file, or Canvas's file of your students (.zip).<span class="dropzone-drag"> Or drag it onto this box.</span>{% if counts.roster %} You'll see what changes before anything is replaced.{% endif %}</span>

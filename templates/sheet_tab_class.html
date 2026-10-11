@@ -8,6 +8,14 @@
   <a href="#share">Share</a>
   <a href="#signups">Sign-ups</a>
 </nav>
+{# The class list at a glance, and the way to bring it up to date from
+   Canvas, out in the open (app.js: with Scheduler Helper, one press). #}
+{% if counts.roster %}
+<div class="class-glance">
+  <span><strong>{{ counts.roster | plural('student') }}</strong> on your list{% if sheet.canvas_course %}, from <strong>{{ sheet.canvas_course }}</strong> in Canvas{% endif %}.</span>
+  <a class="btn btn-secondary btn-small" href="#canvas-update" data-canvas-update-go>Update from Canvas</a>
+</div>
+{% endif %}
 
 {# ------------------------------------------------------- getting started #}
 {% set remaining = steps | rejectattr('done') | list %}
@@ -95,24 +103,22 @@
       <button class="btn btn-secondary" type="submit">Add them</button>
     </div>
   </form>
-  <p class="privacy-line">Private: only names and emails are kept, everything is encrypted, and only you can see the list. <button type="button" class="btn-link" data-popover-target="privacy-details" aria-haspopup="dialog">How it's protected</button></p>
-  <div class="helper-row">
-    {% if list_next %}<a class="btn btn-primary btn-small" href="{{ tab_href(sheet.id, list_next.anchor) }}">Next: {{ list_next.title }} →</a>{% endif %}
-    <form method="post" action="{{ url_for('teach.clear_roster', sid=sheet.id) }}" data-confirm="Delete the whole class list and start over? Rankings stay, and you can undo this right after.">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit" class="btn btn-ghost btn-small">Delete this list and start over</button>
-    </form>
-  </div>
-  <details class="replace-list canvas-update">
+  <details class="replace-list canvas-update" id="canvas-update">
     <summary>Class changed in Canvas? Update from Canvas</summary>
     {% set canvas_host = canvas.domain if canvas else 'canvas.instructure.com' %}
-    {% include "_canvas_guide.html" %}
+    {% with guide_hl = 'h3' %}{% include "_canvas_guide.html" %}{% endwith %}
     <p class="mini-hint">You'll see who's new and who's gone before anything changes.</p>
   </details>
   <details class="replace-list">
     <summary>Replace it with a new file</summary>
     {% include "_roster_upload.html" %}
   </details>
+  <p class="privacy-line">Private: only names and emails are kept, everything is encrypted, and only you can see the list. <button type="button" class="btn-link" data-popover-target="privacy-details" aria-haspopup="dialog">How it's protected</button></p>
+  {% if list_next %}
+  <div class="helper-row">
+    <a class="btn btn-primary btn-small" href="{{ tab_href(sheet.id, list_next.anchor) }}">Next: {{ list_next.title }} →</a>
+  </div>
+  {% endif %}
   {% else %}
   <p class="lead-line">
     {% if sheet.allow_unlisted %}
@@ -231,6 +237,12 @@
     </div>
     {% endif %}
   </details>
+  {% if counts.roster %}
+  <form method="post" action="{{ url_for('teach.clear_roster', sid=sheet.id) }}" class="list-delete" data-confirm="Delete the whole class list and start over? Rankings stay, and you can undo this right after.">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn-link">Delete this list and start over</button>
+  </form>
+  {% endif %}
 </details>
 
 {# ---------------------------------------------------------------- try it #}

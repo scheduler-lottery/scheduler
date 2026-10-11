@@ -79,6 +79,7 @@
   <summary class="fold-summary"><span class="eyebrow">Next step</span><span class="fold-peek">{{ next_step.title }}</span></summary>
   <h2 class="next-step-title"><a href="{{ tab_href(sheet.id, next_step.anchor) }}">{{ next_step.title }}</a></h2>
   <p>{{ next_step.text }}</p>
+  {% if next_step.anchor == 'class-list' %}<p><a class="btn btn-primary btn-small" href="{{ tab_href(sheet.id, 'class-list') }}">Add your students</a></p>{% endif %}
   {% if seat_warning %}
   <p class="warn-line">{{ seat_warning.people }} {{ 'students' if seat_warning.counting_unranked else 'people have ranked' }} but only {{ seat_warning.seats }} seats — see <a href="{{ tab_href(sheet.id, 'schedule') }}">Schedule</a>.</p>
   {% endif %}

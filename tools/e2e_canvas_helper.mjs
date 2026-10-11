@@ -234,7 +234,8 @@ try {
     "Update from Canvas offers the same one button");
   const tabsBefore = (await send("Target.getTargets")).targetInfos.filter((t) => t.type === "page").length;
   await evaluate(me.session, `document.querySelector("[data-helper-go]").click()`);
-  check(await until(me.session, `!document.querySelector("[data-canvas-arrived]").hidden`, 10000), "one click: the list comes straight back");
+  check(await until(me.session, `document.readyState === "complete" && document.body.innerText.includes("already matches 2026FA_BUSCOM_615_SEC1")`, 15000),
+    "one click: Canvas's list read and compared, nothing changed, and it says so");
   const tabsAfter = (await send("Target.getTargets")).targetInfos.filter((t) => t.type === "page").length;
   check(tabsAfter === tabsBefore, "with no Canvas tab at all (read directly, signed in)");
 

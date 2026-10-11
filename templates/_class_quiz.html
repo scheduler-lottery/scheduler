@@ -2,7 +2,7 @@
    JavaScript every step simply shows, in order. Used on the class page and
    on the setup page (where `setup` is set: each form then says so, and
    comes back to the setup). #}
-<div class="quiz" data-quiz data-sheet="{{ sheet.id }}"
+<div class="quiz" data-quiz data-sheet="{{ sheet.id }}"{% if canvas_before %} data-first="canvas"{% endif %}
      data-schools-url="{{ url_for('teach.canvas_schools') }}" data-school-save="{{ url_for('teach.canvas_school') }}"
      {% if canvas %}data-canvas-host="{{ canvas.domain }}"{% endif %}>
 
@@ -65,6 +65,7 @@
     <h3 class="quiz-q" tabindex="-1">Get your class list from Canvas</h3>
     <p class="quiz-school">Your school's Canvas: <strong data-school-name>{{ canvas.name if canvas else 'not chosen yet' }}</strong>
       <button type="button" class="btn-link" data-go="school">Change</button></p>
+    <p class="mini-hint" data-first-only hidden>Not using Canvas for this class? <button type="button" class="btn-link" data-go="other">Other ways to add students</button></p>
     {% set canvas_host = canvas.domain if canvas else 'canvas.instructure.com' %}
     {% include "_canvas_guide.html" %}
     <details class="quiz-help">
@@ -76,7 +77,7 @@
       <p data-for="connect"><strong>Canvas asks you to “Authorize”?</strong> Canvas asks that for any app. Authorize lets {{ app_name }} read your list of courses and one class list, once; nothing in Canvas changes.</p>
       <p data-for="connect"><strong>Pressed Cancel by mistake?</strong> Nothing was read. Press Connect Canvas again.</p>
       {% endif %}
-      <p data-for="file" data-desktop-only><strong>Can't find Canvas's file?</strong> Click the box in the last step, then <strong>Downloads</strong> on the left of the window that opens. It's the newest file there, ending in .zip. If Canvas's download became a folder (Safari on a Mac does that), open it and choose the file with “student” in its name.</p>
+      <p data-for="file" data-desktop-only><strong>Can't find Canvas's file?</strong> Click the box in the last step, then <strong>Downloads</strong> on the left of the window that opens. It's the newest file there<span data-not-windows>, ending in .zip</span><span data-windows-only hidden>: Windows shows it as a zipped folder</span>. If Canvas's download became a folder (Safari on a Mac does that), open it and choose the file with “student” in its name.</p>
       <p data-for="file" data-phone-only hidden><strong>Can't find Canvas's file?</strong> Tap the box in the last step, then open <strong>Downloads</strong> (on an iPhone: <strong>Browse</strong>, then <strong>Downloads</strong>). It's the newest file there, ending in .zip.</p>
       <p data-for="file"><strong>No Course Analytics (or New Analytics) in the course menu?</strong> In Canvas, open the course's <strong>Settings</strong>, then <strong>Navigation</strong>. In the lower list, click the <strong>⋮</strong> next to it, choose <strong>Enable</strong>, then click <strong>Save</strong> at the bottom.</p>
       <p><strong>No email addresses came over?</strong> Then students sign in with a PIN instead of an emailed code, which works fine.</p>

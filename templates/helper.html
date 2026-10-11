@@ -4,8 +4,8 @@
 <article class="card prose">
   <p class="eyebrow">For instructors</p>
   <h1>Scheduler Helper</h1>
-  <p class="lead">A small browser extension that brings your class list from Canvas into {{ app_name }} with a button
-    and a pick of your course, so there's nothing to download, copy, or drag.</p>
+  <p class="lead">A small browser extension that brings your class list from Canvas into {{ app_name }} with one button,
+    so there's nothing to download, copy, or drag.</p>
   {% if not helper_ids %}
   <div class="note-box"><p>Scheduler Helper isn't offered on this site yet. For now, the <strong>Your students</strong>
     step of a new sign-up sheet shows you, click by click, how to download Canvas's file of your students and add it
@@ -16,7 +16,8 @@
   <ul>
     <li>On a sign-up sheet's <strong>Your students</strong> step (or, later, under <strong>Class changed in Canvas?</strong>
       on its class page), you click <strong>Get my class list from Canvas</strong>.</li>
-    <li>The helper asks your school's Canvas for your list of courses, then for the students in the one you pick. It
+    <li>The helper asks your school's Canvas for your list of courses, then for the students in one course: the one
+      your sheet is named for, or, if that isn't clear, the one you pick. It
       does that as you, signed in to Canvas the usual way. If you aren't signed in, Canvas's sign-in page comes up for
       you to sign in (with Duo, as always), and you're brought straight back.</li>
     <li>It hands {{ app_name }}'s page each student's <strong>name and email address</strong>, and nothing else. You
@@ -34,7 +35,7 @@
   <h2>What your browser will tell you</h2>
   <p>When you add it, Chrome or Edge says it can “read and change your data on canvas.northwestern.edu”. That's the
     permission it needs to ask Canvas for your class list; it only ever reads your list of courses and the names and
-    emails of that course's students, and only when you click. Safari asks you to allow it on Canvas and on
+    emails of one course's students, and only when you click. Safari asks you to allow it on Canvas and on
     {{ app_name }}: a Scheduler Helper page with an <strong>Allow</strong> button does that in one click. Its code is
     public: <a href="{{ source_url }}/tree/main/extension" rel="noopener">see exactly what it does</a>.</p>
 

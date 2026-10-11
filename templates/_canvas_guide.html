@@ -9,15 +9,18 @@
      only: it hides when another school is chosen on the page).
    On the class-list questions, and, once a sheet has a list, under "Update
    from Canvas" (data-has-list: a list that comes is compared, not added).
-   Lines marked data-safari-only, data-phone-only or data-desktop-only are
-   shown or hidden by app.js. #}
+   Lines marked data-safari-only/-not-safari, data-phone-only/-desktop-only,
+   data-windows-only/-not-windows and data-picker-downloads/-plain are shown
+   or hidden by app.js for the professor's computer. `guide_hl`: the level
+   of its headings (h4 under a question, h3 under "Update from Canvas"). #}
 {% set canvas_host = canvas.domain if canvas else 'canvas.instructure.com' %}
 {% set connect_here = canvas_connect and (not canvas or canvas.domain == canvas_connect_host) %}
 {% set has_list = counts and counts.roster %}
-{% set hl = 'h4' if setup else 'h3' %}
+{% set hl = guide_hl or 'h4' %}
 <div class="canvas-guide" data-canvas-guide data-sheet="{{ sheet.id }}" data-sheet-title="{{ sheet.title }}" data-host="{{ canvas_host }}"
      data-list-url="{{ url_for('teach.canvas_list_here', sid=sheet.id) }}"{% if setup %} data-setup="1"{% endif %}{% if has_list %} data-has-list{% endif %}
-     data-canvas-course-id="{{ sheet.canvas_course_id or '' }}"{% if canvas_connect %} data-connect-host="{{ canvas_connect_host }}"{% endif %}
+     data-canvas-course-id="{{ sheet.canvas_course_id or '' }}" data-canvas-course="{{ sheet.canvas_course or '' }}" data-heading="{{ hl }}"
+     data-used-courses='{{ (used_courses or {}) | tojson }}'{% if request.args.get('pick') %} data-ask-which{% endif %}{% if canvas_connect %} data-connect-host="{{ canvas_connect_host }}"{% endif %}
      data-helper-ids="{{ helper_ids }}" data-helper-hosts="{{ helper_hosts }}"
      data-helper-store="{{ helper_store_url }}" data-helper-safari="{{ helper_safari_url }}">
   {% if canvas_connect %}
@@ -27,7 +30,7 @@
     <ol class="helper-install-steps">
       <li>Canvas opens in this window. Sign in if it asks.</li>
       <li>Canvas says {{ app_name }} is “requesting access to your account”. Canvas says that for every app. Press <strong>Authorize</strong>.</li>
-      <li>{% if sheet.canvas_course_id %}The students in <strong>{{ sheet.canvas_course or "this sheet's Canvas course" }}</strong> come right back here.{% else %}Pick your course, and its students come right back here.{% endif %}</li>
+      <li>{% if sheet.canvas_course_id %}The students in <strong>{{ sheet.canvas_course or "this sheet's Canvas course" }}</strong> come right back here.{% else %}Your students come right back here. (If this sheet's name doesn't say which course it's for, you pick it.){% endif %}</li>
     </ol>
     <p class="mini-hint">{{ app_name }} then reads only your list of courses and, for the one you pick, the students' names and email addresses. It can't change anything in Canvas, and it hands the permission back to Canvas as soon as the list is read. Press <strong>Cancel</strong> there instead, and nothing is read. <a href="{{ url_for('privacy') }}#canvas" target="_blank" rel="noopener">More about this</a></p>
     {% if sheet.canvas_course_id %}<p class="mini-hint"><a href="{{ url_for('teach.canvas_connect', sid=sheet.id, setup=1 if setup else None, pick=1) }}">Use a different Canvas course</a></p>{% endif %}
@@ -40,12 +43,12 @@
       {% if sheet.canvas_course_id %}
       <p class="mini-hint">Scheduler Helper reads the names and email addresses of the students in <strong>{{ sheet.canvas_course or "this sheet's Canvas course" }}</strong>, this sheet's course in Canvas. If that's the wrong course, you can pick another before anything changes. If Canvas wants you to sign in first, its sign-in page comes up: sign in as usual, and you're brought straight back here.</p>
       {% else %}
-      <p class="mini-hint">Scheduler Helper reads your list of courses, then the names and email addresses of the students in the one you pick. You'll check them before anything {{ 'changes' if has_list else 'is added' }}. If Canvas wants you to sign in first, its sign-in page comes up: sign in as usual, and you're brought straight back here.</p>
+      <p class="mini-hint">Scheduler Helper reads your list of courses, then the names and email addresses of the students in one course. You'll see which course, and check the names, before anything {{ 'changes' if has_list else 'is added' }}. If Canvas wants you to sign in first, its sign-in page comes up: sign in as usual, and you're brought straight back here.</p>
       {% endif %}
     </div>
     <div data-helper-install hidden>
       <{{ hl }} class="canvas-easy-title">First, add Scheduler Helper to <span data-browser-name>Chrome</span></{{ hl }}>
-      <p class="canvas-easy-lead">Scheduler Helper is a small, free add-on for <span data-browser-name>Chrome</span> (an “extension”) that copies your class list from Canvas into this page when you ask. You add it once on this computer. After that, you press one button here and pick your course.</p>
+      <p class="canvas-easy-lead">Scheduler Helper is a small, free add-on for <span data-browser-name>Chrome</span> (an “extension”) that copies your class list from Canvas into this page when you ask. You add it once on this computer. After that, one button here brings your class list over.</p>
       <a class="btn btn-primary btn-large" href="#" target="_blank" rel="noopener" data-helper-add>Add Scheduler Helper to <span data-browser-name>Chrome</span></a>
       <ol class="helper-install-steps" data-steps-for="chrome">
         <li>Chrome's web store opens. Click <strong>Add to Chrome</strong>.</li>
@@ -63,7 +66,7 @@
         <li>On the Scheduler Helper page that opens, click <strong>Allow</strong>. Then click “<span data-page-title>{{ sheet.title }}</span>” at the very top of the window to come back here, and press <kbd>⌘</kbd> and <kbd>R</kbd> together to reload this page.</li>
       </ol>
       <p class="mini-hint"><strong><span data-browser-name>Chrome</span> won't add it?</strong> If it says it's blocked, or warns you off it, you don't need it: use <strong>Or use Canvas's file of your students instead</strong>, below. It brings the same names and emails.</p>
-      <p class="mini-hint">It reads only your list of courses and that course's names and email addresses, only when you press the button on this page, and it never sees your password. <a href="{{ url_for('helper') }}" target="_blank" rel="noopener">What it does, and how to remove it</a></p>
+      <p class="mini-hint">It reads only your list of courses and one course's student names and email addresses, only when you press the button on this page, and it never sees your password. <a href="{{ url_for('helper') }}" target="_blank" rel="noopener">What it does, and how to remove it</a></p>
     </div>
     <p class="helper-said" data-helper-said role="status"></p>
     <div class="canvas-copy-courses" data-helper-courses role="group" aria-labelledby="helper-courses-q-{{ sheet.id }}" hidden></div>
@@ -75,16 +78,19 @@
 
   <details class="canvas-by-hand canvas-upload" data-canvas-download>
     <summary><span data-upload-title="Get Canvas's file of your students">Or use Canvas's file of your students instead</span></summary>
+    <p class="canvas-welcome" data-file-said role="status" id="file-said-{{ sheet.id }}"></p>
     <p class="canvas-phone-note" data-phone-only hidden><strong>This part is easiest on a computer.</strong> Everything so far is saved, so you can stop here: on your computer, sign in to {{ app_name }}, click <strong>My sheets</strong>, then “{{ sheet.title }}”{% if has_list %}, then <strong>Class changed in Canvas? Update from Canvas</strong>{% else %}, and add your students from there{% endif %}. Or, on this phone, {% if has_list %}add anyone new in the <a href="#add-students">Add students</a> box above{% else %}<button type="button" class="btn-link" data-go="paste">type or paste your students</button> instead{% endif %}.</p>
     <p class="mini-hint">Canvas can give you a file listing your students. You save it from Canvas (steps 1 to 3), then choose it here (step 4). It also has grades in it: {{ app_name }} keeps only the names and email addresses, and throws everything else away as it reads the file, never saving it.</p>
     <div class="canvas-guide-top">
-      <button type="button" class="btn btn-secondary" data-canvas-open data-canvas-went="signin">Open Canvas</button>
+      <button type="button" class="btn btn-secondary" data-canvas-open data-canvas-went="signin" aria-describedby="file-said-{{ sheet.id }}">Open Canvas</button>
+      <button type="button" class="btn-link" data-canvas-choose>Already saved Canvas's file? Choose it now</button>
     </div>
     <p class="mini-hint" data-desktop-only>Canvas opens in a new tab, next to this one at the top of the window. These steps stay here.</p>
+    <p class="mini-hint" data-canvas-starts hidden></p>
     <p class="mini-hint" data-phone-only hidden>Canvas opens on top of this page, and this page stays open underneath. Once Canvas has saved its file, come back here: open your browser's list of open pages, and tap this one. Can't find it? Open {{ app_name }} again: you're still signed in, and this sheet is under My sheets.</p>
     <ol class="canvas-steps" data-canvas-steps>
     <li class="canvas-step" data-canvas-step="signin">
-      <p><strong>Click this class's card</strong> on your Canvas Dashboard (or, if you see a list, the class's name). If Canvas asks you to sign in first, sign in there as usual: {{ app_name }} never sees your password.</p>
+      <p><strong>Click this class's card</strong> on your Canvas Dashboard. No card for this class? Click <strong>Courses</strong> in the column of icons down the far left side of Canvas, then the class's name (still not there? click <strong>All Courses</strong> at the top of that list). If Canvas asks you to sign in first, sign in there as usual: {{ app_name }} never sees your password.</p>
       <svg class="canvas-pic" viewBox="0 0 360 132" role="img" aria-label="Canvas's Dashboard: the card for your course, to click">
         <rect class="pic-frame" x="0.5" y="0.5" width="359" height="131" rx="10"/>
         <rect class="pic-nav" x="0.5" y="0.5" width="38" height="131" rx="10"/>
@@ -114,7 +120,7 @@
       </svg>
     </li>
     <li class="canvas-step" data-canvas-step="list">
-      <p><strong>Click Students, then the download button</strong> (the arrow pointing down, next to Chart Options). Canvas saves one file in your <strong>Downloads</strong> folder; its name ends in .zip. You don't need to open it.<span data-desktop-only> Your browser shows it at the top right of its window once it's saved. Then come back to this page: click “<span data-page-title>{{ sheet.title }}</span>” at the top of the window.</span><span data-safari-only hidden> If Safari asks whether to allow downloads from Canvas, click <strong>Allow</strong>. Safari may turn the file into a folder in Downloads.</span><span data-phone-only hidden> If your phone asks whether to download it, tap <strong>Download</strong>.</span></p>
+      <p><strong>Click Students, then the download button</strong> (the arrow pointing down, next to Chart Options). Canvas saves one file in your <strong>Downloads</strong> folder<span data-not-safari><span data-not-windows>; its name ends in .zip</span><span data-windows-only hidden>; Windows shows it as a zipped folder</span>. You don't need to open it</span>.<span data-safari-only hidden> If Safari asks whether to allow downloads from Canvas, click <strong>Allow</strong>. Safari then opens Canvas's file into a folder in your Downloads. That's fine: your list is inside.</span><span data-desktop-only> Your browser shows it at the top right of its window once it's saved. Then come back to this page: click “<span data-page-title>{{ sheet.title }}</span>” at the top of the window.</span><span data-phone-only hidden> If your phone asks whether to download it, tap <strong>Download</strong>.</span></p>
       <svg class="canvas-pic" viewBox="0 0 360 120" role="img" aria-label="Course Analytics: first the Students tab, then the download button next to Chart Options">
         <rect class="pic-frame" x="0.5" y="0.5" width="359" height="119" rx="10"/>
         <text class="pic-heading" x="14" y="27">Course Analytics</text>
@@ -131,12 +137,51 @@
       </svg>
     </li>
     <li class="canvas-step" data-canvas-step="drop">
-      <p><span data-picker-downloads hidden><strong>Click the box below.</strong> A window opens right in your Downloads folder, showing only files like Canvas's: double-click the newest one (its name ends in .zip).</span><span data-desktop-only data-picker-plain><strong>Click the box below</strong>, then <strong>Downloads</strong> on the left of the window that opens, and double-click the file Canvas just saved (its name ends in .zip).</span><span data-phone-only hidden><strong>Tap the box below</strong>, then open <strong>Downloads</strong> (on an iPhone: <strong>Browse</strong>, then <strong>Downloads</strong>), and tap the file Canvas just saved. Its name ends in .zip.</span><span data-safari-only hidden> If Safari turned it into a folder, double-click that folder, then the file with “student” in its name (not the grades file).</span>{% if has_list %} If there's more than one, choose the newest.{% endif %}</p>
+      {% set which %}<span data-not-windows> (its name ends in .zip)</span><span data-windows-only hidden> (Windows shows it as a zipped folder, at the top, under Today)</span>{% endset %}
+      <p><span data-picker-downloads hidden><strong>Click the box below.</strong> A window opens right in your Downloads folder: double-click the newest file there{{ which }}.</span><span data-desktop-only data-picker-plain data-not-safari><strong>Click the box below</strong>, then <strong>Downloads</strong> on the left of the window that opens, and double-click the newest file there{{ which }}.</span><span data-safari-only hidden><strong>Click the box below</strong>, then <strong>Downloads</strong> on the left of the window that opens. Double-click the newest folder there (Safari made it from Canvas's file), then the file with “student” in its name (not the grades file). No folder? Double-click the file ending in .zip.</span><span data-phone-only hidden><strong>Tap the box below</strong>, then open <strong>Downloads</strong> (on an iPhone: <strong>Browse</strong>, then <strong>Downloads</strong>), and tap the file Canvas just saved. Its name ends in .zip.</span></p>
+      <div data-desktop-only data-picker-plain data-not-safari>
+      <svg class="canvas-pic" viewBox="0 0 360 132" role="img" aria-label="The window that opens: Downloads on the left, then Canvas's file, the newest one">
+        <rect class="pic-frame" x="0.5" y="0.5" width="359" height="131" rx="10"/>
+        <rect class="pic-nav" x="0.5" y="0.5" width="104" height="131" rx="10"/>
+        <text class="pic-small" x="14" y="28">Recents</text><text class="pic-small" x="14" y="48">Desktop</text><text class="pic-small" x="14" y="68">Documents</text>
+        <rect class="pic-target" x="8" y="77" width="88" height="22" rx="6"/><text class="pic-small is-strong" x="14" y="92">Downloads</text>
+        <circle class="pic-badge" cx="96" cy="77" r="8"/><text class="pic-badge-text" x="96" y="80.5">1</text>
+        <text class="pic-heading" x="120" y="28">Downloads</text>
+        <rect class="pic-target" x="116" y="40" width="222" height="22" rx="6"/>
+        <path class="pic-icon is-strong" d="M124 45 h9 l4 4 v9 h-13 z"/><text class="pic-small is-strong" x="144" y="55">Canvas's file (newest)</text>
+        <circle class="pic-badge" cx="338" cy="40" r="8"/><text class="pic-badge-text" x="338" y="43.5">2</text>
+        <path class="pic-pointer" d="M292 52 l0 22 l6 -6 l5 11 l4 -2 l-5 -11 l8 0 z"/>
+        <rect class="pic-line" x="120" y="76" width="160" height="8" rx="4"/><rect class="pic-line" x="120" y="94" width="130" height="8" rx="4"/><rect class="pic-line" x="120" y="112" width="148" height="8" rx="4"/>
+      </svg>
+      </div>
+      <div data-safari-only hidden>
+      <svg class="canvas-pic" viewBox="0 0 360 132" role="img" aria-label="The window that opens: Downloads on the left, then the folder Safari made of Canvas's file, then the file with “student” in its name">
+        <rect class="pic-frame" x="0.5" y="0.5" width="359" height="131" rx="10"/>
+        <rect class="pic-nav" x="0.5" y="0.5" width="104" height="131" rx="10"/>
+        <text class="pic-small" x="14" y="28">Recents</text><text class="pic-small" x="14" y="48">Desktop</text><text class="pic-small" x="14" y="68">Documents</text>
+        <rect class="pic-target" x="8" y="77" width="88" height="22" rx="6"/><text class="pic-small is-strong" x="14" y="92">Downloads</text>
+        <circle class="pic-badge" cx="96" cy="77" r="8"/><text class="pic-badge-text" x="96" y="80.5">1</text>
+        <text class="pic-heading" x="120" y="28">Downloads</text>
+        <path class="pic-icon is-strong" d="M124 44 h6 l2 3 h9 v10 h-17 z"/><text class="pic-small is-strong" x="148" y="55">Canvas's folder (newest)</text>
+        <circle class="pic-badge" cx="300" cy="50" r="8"/><text class="pic-badge-text" x="300" y="53.5">2</text>
+        <rect class="pic-target" x="132" y="64" width="206" height="22" rx="6"/>
+        <path class="pic-icon is-strong" d="M140 69 h9 l4 4 v9 h-13 z"/><text class="pic-small is-strong" x="160" y="79">…students….csv</text>
+        <circle class="pic-badge" cx="338" cy="64" r="8"/><text class="pic-badge-text" x="338" y="67.5">3</text>
+        <path class="pic-pointer" d="M292 76 l0 22 l6 -6 l5 11 l4 -2 l-5 -11 l8 0 z"/>
+        <path class="pic-icon" d="M140 97 h9 l4 4 v9 h-13 z"/><text class="pic-small" x="160" y="107">…grade….csv (not this one)</text>
+      </svg>
+      </div>
       {% with drop_id='canvas-file-' ~ sheet.id, from_canvas=True, paste_box=False %}{% include "_roster_upload.html" %}{% endwith %}
     </li>
     </ol>
     <p class="mini-hint">No download button? Click <strong>Reports</strong> instead, then <strong>Run Report</strong> next to <strong>Class Roster</strong>, and choose that file in the last step.</p>
-    <p class="mini-hint">Once your students show up here, you can delete Canvas's file from Downloads: it holds grades.</p>
   </details>
   <p class="canvas-welcome" data-canvas-welcome role="status"></p>
+  {# Back from Canvas: one press to choose its file (app.js), pinned to the
+     bottom of the window, without moving the page. #}
+  <div class="came-back" data-came-back hidden>
+    <p class="came-back-text" role="status" data-came-back-said></p>
+    <button type="button" class="btn btn-primary" data-came-back-choose>Choose Canvas's file</button>
+    <button type="button" class="btn-link" data-came-back-close>Not yet</button>
+  </div>
 </div>

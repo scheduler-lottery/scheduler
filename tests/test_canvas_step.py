@@ -64,3 +64,20 @@ def test_connect_canvas_shows_only_for_the_school_whose_key_this_site_has(prof, 
     page = raw(prof.get(f"/teach/s/{sid}/setup?step=students"))
     section = re.search(r"<section[^>]*data-connect[^>]*>", page).group(0)
     assert " hidden" in section  # another school's professor isn't sent to this one's Canvas
+
+
+def test_connect_canvas_brings_the_course_the_sheet_is_named_for(prof, monkeypatch):
+    from test_app import _authorize, q
+
+    canvas, fake = _connectable_canvas(monkeypatch)
+    sid = prof.create_sheet(title="LAW 540 Evidence", allow_unlisted=False)
+    back = _authorize(canvas, prof.get(f"/teach/s/{sid}/canvas/connect").headers["Location"])
+    r = prof.get(back.path + "?" + back.query)
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")  # no course to pick: straight to the list
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 8
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :sid", sid=sid) == "202"
+    assert not fake.TOKENS  # the permission given back
+    # A name that doesn't say which course: the list of courses, to pick from.
+    other = prof.create_sheet(title="Seminar on Privacy", allow_unlisted=False)
+    back = _authorize(canvas, prof.get(f"/teach/s/{other}/canvas/connect").headers["Location"])
+    assert prof.get(back.path + "?" + back.query).headers["Location"].endswith("/teach/canvas/oauth/pick")

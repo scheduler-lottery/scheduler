@@ -140,7 +140,9 @@ try {
     "Edge: Edge's own steps");
   await shot("edge-add-helper.png");
 
-  // Safari and Firefox, with no helper to add: the file, open, first.
+  // Safari and Firefox, with no helper to add: the file, open, first. (Neither
+  // has Chrome's way to open the file window in Downloads.)
+  const { identifier: noPicker } = await send("Page.addScriptToEvaluateOnNewDocument", { source: "delete window.showOpenFilePicker;" }, me);
   for (const [name, agent] of [["Safari", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"],
                                ["Firefox", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:140.0) Gecko/20100101 Firefox/140.0"]]) {
     await as(agent);
@@ -151,6 +153,8 @@ try {
   }
   check(await evaluate(me, `[...document.querySelectorAll("[data-safari-only]")].every((el) => el.hidden)`),
     "Firefox: no Safari folder lines");
+  check((await visibleText()).includes("Downloads on the left") && await evaluate(me, `[...document.querySelectorAll("[data-canvas-step=drop] svg")].some((p) => p.getClientRects().length)`),
+    "Firefox: step 4 says to click Downloads, with a picture of the window");
 
   // Both files from the folder Safari makes, dragged in together: the student file goes, not the grades file.
   await evaluate(me, `(() => {
@@ -173,23 +177,39 @@ try {
     "iPhone: what to do on a phone, and how to get back to this page later");
   check(!words.includes("Safari may turn") && !words.includes("double-click") && !words.includes("on the left of the window"),
     "iPhone: no Mac folder, no double-clicking, no window with Downloads on its left");
-  check(await evaluate(me, `getComputedStyle(document.querySelector("[data-canvas-download] .dropzone-drag")).display === "none"`),
-    "iPhone: nothing about dragging");
+  check(!/drag/i.test(words), "iPhone: nothing about dragging");
   await shot("iphone-file.png");
   await send("Emulation.setTouchEmulationEnabled", { enabled: false }, me);
   await send("Emulation.clearDeviceMetricsOverride", {}, me);
   await as("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15");
-  check((await visibleText()).includes("If Safari turned it into a folder"), "Safari on a Mac: the folder line");
+  words = await visibleText();
+  check(words.includes("Double-click the newest folder there") && words.includes("opens Canvas's file into a folder")
+    && !words.includes("its name ends in .zip"), "Safari on a Mac: the folder Safari makes is the usual case");
+  await send("Page.removeScriptToEvaluateOnNewDocument", { identifier: noPicker }, me);
+
+  // Windows: it hides the .zip ending, so the steps don't mention it.
+  await as("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0");
+  words = await visibleText();
+  check(words.includes("zipped folder") && !words.includes("ends in .zip"), "Windows: a zipped folder, no .zip ending");
+  await as("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15");
 
   // The file: Canvas opens in a tab of its own (the browser's usual top, where downloads show), and the file goes in.
-  await evaluate(me, `(() => { window.__opened = []; window.open = (u, n, f) => { const w = { closed: false, focus() { window.__focused = true; }, close() { w.closed = true; } };
-    window.__features = f; w.location = { set href(x) { window.__opened.push(x); } }; return w; }; })()`);
+  await evaluate(me, `(() => { window.__opened = []; window.open = (u, n, f) => { window.__opened.push([u, f]); return null; }; })()`);
   await evaluate(me, `document.querySelector("[data-canvas-open]").click()`);
-  check(await evaluate(me, `window.__opened[0] === "http://127.0.0.1:5077/" && !window.__features`),
+  check(await evaluate(me, `window.__opened.length === 1 && window.__opened[0][0] === "http://127.0.0.1:5077/" && window.__opened[0][1] === "noopener"`),
     "Open Canvas: Canvas (its Dashboard) in a tab of its own, not a small window without downloads");
   await evaluate(me, `document.querySelector("[data-canvas-open]").click()`);
-  check(await evaluate(me, `window.__opened.length === 1 && window.__focused === true`),
-    "pressed again, it brings Canvas forward rather than starting it over");
+  check(await evaluate(me, `window.__opened.length === 2`), "pressed again, Canvas opens again (never a button that does nothing)");
+  // Back from Canvas: a bar at the bottom to choose the file, and the page doesn't jump.
+  const y = await evaluate(me, `(() => { document.querySelector("[data-canvas-steps]").scrollIntoView(); return scrollY; })()`);
+  const { targetId: other } = await send("Target.createTarget", { url: "about:blank" });
+  await until(me, `document.visibilityState === "hidden"`, 3000);
+  await send("Target.activateTarget", { targetId: other });
+  await sleep(300);
+  await send("Target.closeTarget", { targetId: other });
+  await send("Target.activateTarget", { targetId });
+  check(await until(me, `!document.querySelector("[data-came-back]").hidden`, 4000) && await evaluate(me, `scrollY`) === y,
+    "back from Canvas: a bar to choose Canvas's file, and the page stays where it was");
   check(await evaluate(me, `typeof window.showOpenFilePicker === "function"`) ? (await visibleText()).includes("opens right in your Downloads folder")
     : true, "Chrome: the box's window opens right in Downloads, and step 4 says so");
   const csv = join(profile, "students.csv");

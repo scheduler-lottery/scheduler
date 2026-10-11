@@ -116,7 +116,8 @@ def _get_all(token, path, host=None):
 
 
 def courses(token, host=None):
-    """The professor's teaching courses: [{id, name, term}], this term's first."""
+    """The professor's teaching courses: [{id, name, term, students, start, end}] (start and end: the term's,
+    ISO, or "")."""
     found = []
     for c in _get_all(token, "/api/v1/courses?per_page=100&include[]=term&include[]=total_students", host):
         if not isinstance(c, dict) or not c.get("id") or not c.get("name"):
@@ -130,6 +131,7 @@ def courses(token, host=None):
             "id": str(c["id"]), "name": " ".join(str(c["name"]).split())[:200],
             "term": "" if re.search(r"default term", term_name, re.I) else term_name[:80],
             "students": c.get("total_students") if isinstance(c.get("total_students"), int) else None,
+            "start": str(term.get("start_at") or "")[:40], "end": str(term.get("end_at") or "")[:40],
         })
     return found
 

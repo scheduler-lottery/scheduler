@@ -1388,6 +1388,22 @@ def _get_pending(sheet, pid, kind):
     return json.loads(found["data"]) if found else None
 
 
+def _course_named(title, courses):
+    """The one Canvas course a sheet's name points to, or None: the same
+    name, or the one current course with the same course number ("LAW 540
+    Evidence" and "2026FA_LAW_540_SEC20")."""
+    same = [c for c in courses if c["name"].strip().lower() == title.strip().lower()]
+    if len(same) == 1:
+        return same[0]
+    ours = _course_numbers(title)
+    if not ours:
+        return None
+    today = iso(now())[:10]
+    current = [c for c in courses if (c.get("start") or "")[:10] <= today and (not c.get("end") or c["end"][:10] >= today)]
+    hits = [c for c in current if ours & _course_numbers(c["name"])]
+    return hits[0] if len(hits) == 1 else None
+
+
 def _course_numbers(text):
     """Course numbers in a title or a Canvas section ("LAW 540", "2026FA_LAW_540_SEC20"): three or more
     digits, not a year."""
@@ -1776,9 +1792,9 @@ def _courses_or_list(sheet, token, host, setup, pick=False):
     except canvas_oauth.CanvasError as err:
         canvas_oauth.revoke(token, host)
         return _connect_back(err.why)
-    if len(found) == 1 and not pick:
-        c = found[0]
-        return _from_connected_canvas(token, c["id"], c["name"] + (f" ({c['term']})" if c["term"] else ""))
+    named = None if pick else (found[0] if len(found) == 1 else _course_named(sheet["title"], found))
+    if named:  # the professor's only course, or the one the sheet's name says: no question
+        return _from_connected_canvas(token, named["id"], named["name"] + (f" ({named['term']})" if named["term"] else ""))
     if not found:
         canvas_oauth.revoke(token, host)
         return _connect_back("forbidden")
