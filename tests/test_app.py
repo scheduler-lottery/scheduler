@@ -3158,8 +3158,10 @@ def test_the_helper_is_offered_only_for_the_canvas_it_reads():
 
 def test_a_file_with_no_names_or_emails_gets_a_look_first(prof):
     sid = prof.create_sheet(allow_unlisted=False)
+    # Canvas's grades file isn't a list at all: it's turned away.
     grades = "Assignment Name,Points Possible,Average\nEssay 1,10,8.5\nReading Response 2,5,4.1\nMidterm Paper,20,17\n"
-    r = prof.upload(sid, grades, filename="course_grade.csv")
+    assert "That's Canvas's grades file" in follow(prof, prof.upload(sid, grades, filename="course_grade.csv"))
+    r = prof.upload(sid, "Alex Kim,2L,Torts\nSam Lee,3L,Contracts\nRiya Patel,2L,Torts\n", filename="class.csv")
     assert "/roster/review/" in r.headers["Location"]  # though the sheet has no list yet
     assert "may not be your class list" in text(prof.get(r.headers["Location"]))
     assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 0
