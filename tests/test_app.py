@@ -2413,8 +2413,12 @@ def test_a_short_school_name_lists_the_university_first(prof, monkeypatch):
 def test_a_typed_canvas_address_is_saved_with_its_schools_name(prof, monkeypatch):
     directory = {("domain", "canvas.lake.edu"): [
         {"name": "Lake University - Parents", "domain": "canvas.lake.edu"},
+        {"name": "Lake University - Students/Teachers", "domain": "canvas.lake.edu"},
         {"name": "Lake University", "domain": "canvas.lake.edu"},
         {"name": "Blake College", "domain": "mycanvas.lake.edu"},  # (the directory matches parts too)
+    ], ("domain", "lakes.instructure.com"): [  # (several schools share one Canvas)
+        {"name": "North Lake College", "domain": "lakes.instructure.com"},
+        {"name": "Lake System", "domain": "lakes.instructure.com"},
     ]}
     monkeypatch.setattr(canvasdir, "_ask", lambda **p: directory.get(next(iter(p.items())), []))
     headers = {"X-CSRF-Token": prof.csrf()}
@@ -2426,6 +2430,8 @@ def test_a_typed_canvas_address_is_saved_with_its_schools_name(prof, monkeypatch
     # The directory doesn't know it, or can't be asked: the address is saved all the same.
     r = prof.client.post("/teach/canvas/school", json={"domain": "canvas.pond.edu"}, headers=headers)
     assert r.get_json() == {"ok": True, "domain": "canvas.pond.edu", "name": "canvas.pond.edu"}
+    r = prof.client.post("/teach/canvas/school", json={"domain": "lakes.instructure.com"}, headers=headers)
+    assert r.get_json()["name"] == "lakes.instructure.com"  # the address, not one of the schools' names
     monkeypatch.setattr(canvasdir, "_ask", lambda **p: None)
     r = prof.client.post("/teach/canvas/school", json={"domain": "canvas.lake.edu"}, headers=headers)
     assert r.get_json() == {"ok": True, "domain": "canvas.lake.edu", "name": "canvas.lake.edu"}
@@ -2457,12 +2463,14 @@ def test_the_school_directory_is_asked_for_enough_names_to_rank(monkeypatch):
 
     def directory(request, timeout):
         asked.append(urllib.parse.parse_qs(urllib.parse.urlsplit(request.full_url).query))
-        return io.BytesIO(b'[{"name": "University of Chicago", "domain": "canvas.uchicago.edu"}]')
+        return io.BytesIO(b'["?", {"name": "University of Chicago", "domain": "canvas.uchicago.edu"}]')
     monkeypatch.setattr(urllib.request, "urlopen", directory)
     school = {"name": "University of Chicago", "domain": "canvas.uchicago.edu"}
     assert canvasdir.search("Chicago") == ([school], False)
     assert canvasdir._ask(domain="uchicago.edu") == [school]  # (the email guess's question, as before)
-    assert asked == [{"name": ["Chicago"], "per_page": ["50"]}, {"domain": ["uchicago.edu"], "per_page": ["8"]}]
+    assert canvasdir.name_of("canvas.uchicago.edu") == "University of Chicago"
+    assert asked == [{"name": ["Chicago"], "per_page": ["50"]}, {"domain": ["uchicago.edu"], "per_page": ["8"]},
+                     {"domain": ["canvas.uchicago.edu"], "per_page": ["50"]}]
 
 
 def test_nudge_reminds_only_the_students_who_havent_ranked(prof, browser):

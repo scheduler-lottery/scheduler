@@ -46,6 +46,8 @@ def _ask(**params):
         return None
     schools = []
     for school in found if isinstance(found, list) else []:
+        if not isinstance(school, dict):
+            continue
         host = clean_host(str(school.get("domain", "")))
         name = " ".join(str(school.get("name", "")).split())[:120]
         if host and name:
@@ -78,10 +80,16 @@ def search(query):
 def name_of(host):
     """The school whose Canvas is at exactly this address, by name, or ""
     (for a professor who typed the address instead of picking the school).
-    One quick question to the directory; never raises."""
-    ours = [s for s in _ask(domain=host) or [] if s["domain"] == host]
-    ours.sort(key=lambda s: (bool(SIDE_DOORS.search(s["name"])), len(s["name"])))
-    return ours[0]["name"] if ours else ""
+    The directory also answers with addresses that only contain this one
+    (iu.instructure.com: 13 others first), so ask for plenty. Several schools
+    can share one Canvas (umsystem.instructure.com: Mizzou, UMKC, Missouri
+    S&T...); no one name is right then, so "". One quick question to the
+    directory; never raises."""
+    ours = [s["name"] for s in _ask(domain=host, per_page=50) or [] if s["domain"] == host]
+    ours = sorted([n for n in ours if not SIDE_DOORS.search(n)] or ours, key=len)
+    if not ours or not all(n == ours[0] or n.startswith(ours[0] + " ") for n in ours):
+        return ""  # several schools (one school's entries all start with its name: "SW Law - Visitors")
+    return ours[0]
 
 
 def _best(schools, domain):
