@@ -633,9 +633,10 @@ def _add(result, raw_name, email, seen, pending=False, uid=""):
     email = email.lower()
     if email.startswith("mailto:"):
         email = email[7:]
+    bad = ""
     if email and not valid_email(email):
         result.bad_emails.append((display_name, email))
-        email = ""
+        bad, email = email, ""
     if any(0x80 <= ord(ch) <= 0x9F or ch == "�" for ch in display_name):
         result.garbled.append(display_name)
     key = normalize_name(display_name)
@@ -643,7 +644,7 @@ def _add(result, raw_name, email, seen, pending=False, uid=""):
         result.skipped += 1
         return
     row = {"name_key": key, "display_name": display_name, "email": email, "name_pending": 1 if pending else 0,
-           "uid": uid}
+           "uid": uid, "bad": bad}
     if key in seen:
         earlier = [st for st in result.students + result.same_name if st["name_key"] == key]
         first = earlier[0]
@@ -692,7 +693,7 @@ def _number_same_names(result):
     for s in result.students:
         group = [s] + [e for e in result.same_name if e["name_key"] == s["name_key"]]
         if len(group) == 1:
-            final.append({k: v for k, v in s.items() if k != "uid"})
+            final.append({k: s[k] for k in ("name_key", "display_name", "email", "name_pending")})
             continue
         group.sort(key=lambda e: (not e["email"], e["email"], len(e.get("uid", "")), e.get("uid", "")))
         # One spelling for all of them, preferring one that isn't all lower
@@ -701,6 +702,10 @@ def _number_same_names(result):
                        key=lambda name: name not in (name.lower(), name.upper()))
         for n, e in enumerate(group, start=1):
             name = numbered(spelling, n)
+            if e["bad"] and name != e["display_name"]:
+                # The note about an incomplete address names the twin it was on.
+                at = result.bad_emails.index((e["display_name"], e["bad"]))
+                result.bad_emails[at] = (name, e["bad"])
             final.append({"name_key": normalize_name(name), "display_name": name, "email": e["email"],
                           "name_pending": e.get("name_pending", 0)})
             if n > 1:
@@ -946,17 +951,22 @@ def describe(result, source=""):
     if result.tab > 1:
         tips.append(f"The class list was on tab {result.tab} of your Excel file, so that's the one we used.")
     if result.repeated:
-        one = len(result.repeated) == 1
-        tips.append(f"{_listed(result.repeated[:5])} {'was' if one else 'were each'} listed twice, with the same "
-                    f"email or ID both times; we kept one{'' if one else ' of each'}.")
+        shown = list(dict.fromkeys(result.repeated))  # each name once, though one was listed three times
+        one, twice = len(shown) == 1, len(shown) == len(result.repeated)
+        tips.append(f"{_listed(shown[:5])} {'was' if one else 'were each'} listed "
+                    f"{'twice' if twice else 'more than once'}, with the same email or ID "
+                    f"{'both times' if twice else 'each time'}; we kept one{'' if one else ' of each'}.")
     if result.merged:
-        one = len(result.merged) == 1
-        first = result.merged[0].split()
+        shown = list(dict.fromkeys(result.merged))
+        one, twice = len(shown) == 1, len(shown) == len(result.merged)
+        first = shown[0].split()
         example = f"{first[0]} X. {' '.join(first[1:])}" if len(first) > 1 else f"{first[0]} X."
         tips.append(
-            f"{_listed(result.merged[:5])} {'is' if one else 'are each'} on the list twice without separate emails, "
-            f"so we can't tell if that's one student or two. We kept one{'' if one else ' of each'}. If there really "
-            f"are two, add the second with a middle initial (like “{example}”) using “Add a student who joined late”."
+            f"{_listed(shown[:5])} {'is' if one else 'are each'} on the list {'twice' if twice else 'more than once'} "
+            f"without separate emails, so we can't tell if that's one student or {'two' if twice else 'more'}. "
+            f"We kept one{'' if one else ' of each'}. If there really are {'two' if twice else 'more'}, add the "
+            f"{'second' if twice else 'others'} with a middle initial (like “{example}”) using “Add a student who "
+            "joined late”."
         )
     tips += _same_name_tips(result)
     if result.duplicates:

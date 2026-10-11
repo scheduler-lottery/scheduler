@@ -450,3 +450,23 @@ def test_the_no_email_notes_say_who_picks_a_pin_and_name_no_browser_button():
     # An incomplete address has a note of its own.
     _message, tips = describe(parse_roster(b"Name,Email\nAlex Johnson,alex@x.edu\nSam Lee,sam@x\n"))
     assert not any("had no email address" in t for t in tips) and any("“sam@x” looks incomplete" in t for t in tips)
+
+
+def test_an_incomplete_email_is_reported_on_the_same_name_student_it_was_on():
+    # The one with the good email gets the plain name, so the note follows the other to “Sam Lee (2)”.
+    result = parse_roster(b"Name,ID,Email\nSam Lee,1,sam@x\nSam Lee,2,sl@x.edu\n")
+    assert [(s["display_name"], s["email"]) for s in result.students] == [("Sam Lee", "sl@x.edu"), ("Sam Lee (2)", "")]
+    assert result.bad_emails == [("Sam Lee (2)", "sam@x")]
+    tips = describe(result)[1]
+    assert any(t.startswith("Sam Lee (2)'s email “sam@x” looks incomplete") for t in tips)
+    assert not any("had no email address" in t for t in tips)  # the note above says it already
+
+
+def test_a_student_listed_three_times_is_named_once():
+    result = parse_roster(b"Name,ID\nMaria Diaz,1\nMaria Diaz,1\nMaria Diaz,1\nAl Bo,2\n")
+    assert names(result) == ["Maria Diaz", "Al Bo"]
+    assert ("Maria Diaz was listed more than once, with the same email or ID each time; we kept one."
+            in describe(result)[1])
+    _message, tips = describe(parse_roster(b"Sam Lee\nSam Lee\nSam Lee\nAl Bo\n"))
+    assert any(t.startswith("Sam Lee is on the list more than once without separate emails, so we can't tell if "
+                            "that's one student or more.") for t in tips)
