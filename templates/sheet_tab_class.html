@@ -46,6 +46,7 @@
   <div class="report{{ ' report-warn' if report.warn }}" tabindex="-1" data-focus-on-load>
     <p class="report-main">{{ report.message }}</p>
     {% with people=report_added, heading='Who was added', fix_href=None %}{% include "_roster_people.html" %}{% endwith %}
+    {% include "_report_dropped.html" %}
     {% if report.tips %}
     <ul class="tips">{% for tip in report.tips %}<li>{{ tip }}</li>{% endfor %}</ul>
     {% endif %}

@@ -98,9 +98,13 @@ SOURCE_URL = _env("SOURCE_URL", "https://github.com/scheduler-lottery/scheduler"
 # store page that installs it. Until they're set, the class-list step
 # doesn't offer it.
 CANVAS_HELPER_IDS = [i.strip() for i in _env("CANVAS_HELPER_IDS").split(",") if i.strip()]
-# The Canvas sites the helper can read (its manifest's host_permissions; a
-# test keeps the two the same). Professors at other schools aren't offered it.
-CANVAS_HELPER_HOSTS = ["canvas.northwestern.edu"]
+# The schools whose Canvas the helper can read, by email domain (a professor
+# at law.northwestern.edu is at northwestern.edu): the school's name and its
+# Canvas. Their professors are taken to be at that school without asking the
+# school directory. The Canvas sites are the manifest's host_permissions (a
+# test keeps the two the same); professors at other schools aren't offered it.
+CANVAS_HELPER_SCHOOLS = {"northwestern.edu": ("Northwestern University", "canvas.northwestern.edu")}
+CANVAS_HELPER_HOSTS = [host for _name, host in CANVAS_HELPER_SCHOOLS.values()]
 # Trying it all locally: tools/fake_canvas.py's address (e.g. 127.0.0.1:5077)
 # as every instructor's school's Canvas, and one the helper reads. Ignored on
 # Vercel.

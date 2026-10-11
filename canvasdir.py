@@ -15,11 +15,13 @@ from datetime import timedelta
 from sqlalchemy import text
 
 import db
+import settings
 from util import iso, now, parse_iso
 
 SEARCH_URL = "https://canvas.instructure.com/api/v1/accounts/search"
 HOST = re.compile(r"^(?=.{4,120}$)([a-z0-9-]+\.)+[a-z]{2,}$")
 REMEMBER_DAYS = 30
+RETRY_MINUTES = 5  # after the directory didn't answer
 SHOWN = 10  # schools listed for a typed name
 # A school's other ways into its Canvas, not the one its professors use.
 SIDE_DOORS = re.compile(r"parent|observer|catalog|pre-?college|professional development|executive education"
@@ -88,8 +90,12 @@ def name_of(host):
     The directory also answers with addresses that only contain this one
     (iu.instructure.com: 13 others first), so ask for plenty. Several schools
     can share one Canvas (umsystem.instructure.com: Mizzou, UMKC, Missouri
-    S&T...); no one name is right then, so "". One quick question to the
-    directory; never raises."""
+    S&T...); no one name is right then, so "". A school Scheduler Helper
+    reads is known without asking; anything else is one quick question to
+    the directory. Never raises."""
+    for name, canvas in settings.CANVAS_HELPER_SCHOOLS.values():
+        if canvas == host:
+            return name
     ours = [s["name"] for s in _ask(domain=host, per_page=50) or [] if s["domain"] == host]
     ours = sorted([n for n in ours if not SIDE_DOORS.search(n)] or ours, key=len)
     if not ours or not all(n == ours[0] or n.startswith(ours[0] + " ") for n in ours):
@@ -122,17 +128,20 @@ def guess(email):
                 return found.get("school")
     except Exception:  # noqa: BLE001
         pass
-    school, asked = None, False
+    school, failed = None, False
     for start in range(len(labels) - 1):
         candidate = ".".join(labels[start:])
         schools = _ask(domain=candidate)
         if schools is None:
+            failed = True
             break
-        asked = True
         school = _best(schools, candidate)
         if school:
             break
-    until = now() + (timedelta(days=REMEMBER_DAYS) if asked else timedelta(hours=1))
+    # A directory that didn't answer (even for school.edu after law.school.edu)
+    # says nothing about the school: asked again in a few minutes, not after a
+    # month, so one slow reply doesn't hide the guess from everyone there.
+    until = now() + (timedelta(minutes=RETRY_MINUTES) if failed else timedelta(days=REMEMBER_DAYS))
     try:
         with db.get_engine().begin() as connection:
             connection.execute(

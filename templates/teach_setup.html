@@ -23,6 +23,7 @@
     {% if report %}
     <div class="report{{ ' report-warn' if report.warn }}" tabindex="-1" data-focus-on-load>
       <p class="report-main">{{ report.message }}</p>
+      {% include "_report_dropped.html" %}
       {% if report.tips %}<ul class="tips">{% for tip in report.tips %}<li>{{ tip }}</li>{% endfor %}</ul>{% endif %}
     </div>
     {% endif %}
