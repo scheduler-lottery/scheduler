@@ -117,3 +117,28 @@ def test_the_safari_build_names_every_site_safari_asks_about(tmp_path, monkeypat
     build.build("store")  # Chrome's: Canvas only (Chrome lets the page talk to it without asking)
     with zipfile.ZipFile(tmp_path / "scheduler-helper.zip") as z:
         assert json.loads(z.read("manifest.json"))["host_permissions"] == ["https://canvas.northwestern.edu/*"]
+
+
+def test_signed_out_in_another_tab_says_so_and_comes_back_to_the_sheet(prof):
+    import json
+
+    sid = prof.create_sheet(allow_unlisted=False)
+    page = f"http://localhost/teach/s/{sid}/setup?step=students"
+    csrf = prof.csrf()
+    prof.post("/teach/logout")  # (another tab)
+    listed = json.dumps({"type": "scheduler-class-list", "v": 2, "courseId": "202", "course": "LAW 540",
+                         "students": [{"name": "Ana Lima", "email": "ana@school.edu"}]})
+    r = prof.client.post(f"/teach/s/{sid}/canvas-list", data={"csrf_token": csrf, "list": listed},
+                         headers={"Referer": page})
+    assert r.headers["Location"].endswith("/teach/login")
+    assert "your class list wasn't added yet" in text(prof.get(r.headers["Location"]))
+    r = prof.post("/teach/login", {"email": "prof@school.edu"})
+    r = prof.post("/teach/verify", {"code": prof.last_code("prof@school.edu")})
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students")  # straight back to the sheet
+    # A link from somewhere else is never followed back.
+    prof.post("/teach/logout")
+    prof.client.post(f"/teach/s/{sid}/canvas-list", data={"csrf_token": prof.csrf(), "list": listed},
+                     headers={"Referer": "https://evil.example/teach/s/x"})
+    prof.post("/teach/login", {"email": "prof@school.edu"})
+    r = prof.post("/teach/verify", {"code": prof.last_code("prof@school.edu")})
+    assert r.headers["Location"].endswith("/teach/")

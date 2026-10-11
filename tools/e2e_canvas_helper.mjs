@@ -294,6 +294,35 @@ try {
   check(await evaluate(old.session, `location.pathname === "/courses/101" && window.untouched === true`),
     "the professor's own Canvas tab is still on its course page, never reloaded");
 
+  // Signed out again, with the professor's own Canvas tab on its sign-in page.
+  // Pressing the button again while Canvas's sign-in waits brings that page
+  // back in front; and signing in on their OWN tab (not the helper's) still
+  // brings the list, and closes only the helper's tab.
+  await send("Network.deleteCookies", { name: "canvas_session", url: CANVAS + "/" }, old.session);
+  const own = await newPage(`${CANVAS}/login`); // (their own tab, not the one left on a course page)
+  check(!!(await canvasStep(me.session, "Own Tab Seminar"))
+    && await until(me.session, `document.querySelector("[data-helper-go]").offsetParent !== null`), "a third sheet, signed out of Canvas");
+  await send("Target.activateTarget", { targetId: me.targetId });
+  const before3 = created.length;
+  await evaluate(me.session, `document.querySelector("[data-helper-go]").click()`);
+  await until(me.session, `document.querySelector("[data-helper-said]").textContent.includes("sign-in page just came up")`, 10000);
+  const helperTab = await newCanvasTab(before3);
+  const signInSession = helperTab && await attach(helperTab.targetId);
+  await send("Target.activateTarget", { targetId: me.targetId }); // back to Scheduler, without signing in
+  await until(me.session, `document.visibilityState === "visible"`, 5000);
+  await evaluate(me.session, `document.querySelector("[data-helper-go]").click()`);
+  check(await until(me.session, `document.querySelector("[data-helper-said]").textContent.includes("in front again")`, 5000)
+    && !!signInSession && await until(signInSession, `document.visibilityState === "visible"`, 5000),
+    "pressed again while Canvas's sign-in waits: its sign-in page comes back in front, and the page says so");
+  await send("Target.activateTarget", { targetId: own.targetId });
+  await evaluate(own.session, `document.querySelector("form").submit()`); // signs in on their own tab
+  check(await until(me.session, `!document.querySelector("[data-helper-courses]").hidden`, 15000),
+    "signed in on their own Canvas tab instead: the courses still come");
+  await sleep(500);
+  check(!!helperTab && !(await pages()).some((t) => t.targetId === helperTab.targetId)
+    && (await pages()).some((t) => t.targetId === own.targetId), "the helper's sign-in tab closed; the professor's own stayed");
+  await send("Target.closeTarget", { targetId: own.targetId });
+
   // The page asks the helper to bring it to the front, from behind another tab.
   await send("Target.activateTarget", { targetId: old.targetId });
   check(await until(me.session, `document.visibilityState === "hidden"`, 5000), "with another tab in front, the Scheduler page is hidden");
@@ -384,6 +413,17 @@ try {
   await sleep(500);
   check(opened(since).length === 1 && !(await pages()).some((t) => t.targetId === opened(since)[0].targetId),
     "and that tab closed again too");
+  // The helper removed while the page is open: the page says so, and offers
+  // to add it again (it doesn't blame Canvas).
+  slowMs = 0;
+  held.splice(0).forEach((go) => go());
+  check(!!(await canvasStep(me.session, "Removed Helper Seminar"))
+    && await until(me.session, `document.querySelector("[data-helper-go]").offsetParent !== null`), "a sheet, with the helper ready");
+  await send("Extensions.uninstall", { id: DEV_ID });
+  await evaluate(me.session, `document.querySelector("[data-helper-go]").click()`);
+  check(await until(me.session, `document.querySelector("[data-helper-said]").textContent.includes("isn't turned on")
+    && document.querySelector("[data-helper-add]").offsetParent !== null`, 15000),
+    "the helper removed: the page says so, and offers to add it again");
 } catch (err) {
   console.log("FAIL " + err.message);
   failures++;

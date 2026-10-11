@@ -40,7 +40,7 @@
     <div data-helper-ready hidden>
       <{{ hl }} class="visually-hidden">Scheduler Helper</{{ hl }}>
       <button type="button" class="btn btn-primary btn-large" data-helper-go>Get my class list from Canvas</button>
-      {% if sheet.canvas_course_id %}
+      {% if sheet.canvas_course_id and not request.args.get('pick') %}
       <p class="mini-hint">Scheduler Helper reads the names and email addresses of the students in <strong>{{ sheet.canvas_course or "this sheet's Canvas course" }}</strong>, this sheet's course in Canvas. If that's the wrong course, you can pick another before anything changes. If Canvas wants you to sign in first, its sign-in page comes up: sign in as usual, and you're brought straight back here.</p>
       {% else %}
       <p class="mini-hint">Scheduler Helper reads your list of courses, then the names and email addresses of the students in one course. You'll see which course, and check the names, before anything {{ 'changes' if has_list else 'is added' }}. If Canvas wants you to sign in first, its sign-in page comes up: sign in as usual, and you're brought straight back here.</p>
@@ -62,9 +62,10 @@
       </ol>
       <ol class="helper-install-steps" data-steps-for="safari" hidden>
         <li>In the App Store, click <strong>Get</strong>, then <strong>Install</strong>, then <strong>Open</strong>.</li>
-        <li>Click the button that opens Safari's settings, and tick <strong>Scheduler Helper</strong>.</li>
-        <li>On the Scheduler Helper page that opens, click <strong>Allow</strong>. Then click “<span data-page-title>{{ sheet.title }}</span>” at the very top of the window to come back here, and press <kbd>⌘</kbd> and <kbd>R</kbd> together to reload this page.</li>
+        <li>Click the button that opens Safari's settings, tick <strong>Scheduler Helper</strong>, then close the settings window (the red dot at its top left).</li>
+        <li>On the Scheduler Helper page, click <strong>Allow</strong>, then <strong>Always Allow on These Websites</strong>. This page comes back by itself. (If it doesn't, click “<span data-page-title>{{ sheet.title }}</span>” at the very top of the window, then press <kbd>⌘</kbd> and <kbd>R</kbd> together.)</li>
       </ol>
+      <p class="mini-hint" data-steps-for="safari" hidden><strong>Added it already, and this page still shows this?</strong> Safari is waiting for your OK. Click Scheduler Helper's button in Safari's toolbar, at the top of the window (a brown square with a calendar), then <strong>Allow</strong>, and choose <strong>Always Allow on These Websites</strong>.</p>
       <p class="mini-hint"><strong><span data-browser-name>Chrome</span> won't add it?</strong> If it says it's blocked, or warns you off it, you don't need it: use <strong>Or use Canvas's file of your students instead</strong>, below. It brings the same names and emails.</p>
       <p class="mini-hint">It reads only your list of courses and one course's student names and email addresses, only when you press the button on this page, and it never sees your password. <a href="{{ url_for('helper') }}" target="_blank" rel="noopener">What it does, and how to remove it</a></p>
     </div>

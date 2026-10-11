@@ -20,6 +20,7 @@ import hmac
 import secrets
 from datetime import timedelta
 from functools import wraps
+from urllib.parse import urlsplit
 
 from flask import abort, current_app, flash, g, redirect, request, session, url_for
 
@@ -72,10 +73,28 @@ def instructor_required(view):
                 flash(switched_off_message(), "error")
             elif request.method == "GET":
                 session["teach_next"] = request.path
+            elif "csrf_token" in request.form:  # a form pressed on a page (not a fetch)
+                _signed_out_mid_page()
             return redirect(url_for("teach.login"))
         return view(*args, **kwargs)
 
     return wrapped
+
+
+def _signed_out_mid_page():
+    """A form pressed after this browser's sign-in ended (signed out in
+    another tab): nothing was saved. Say so, and bring them back to the page
+    they were on once they've signed in again."""
+    ref = urlsplit(request.referrer or "")
+    if (ref.netloc == request.host and ref.path.startswith(("/teach/", "/owner"))
+            and not ref.path.startswith(("/teach/login", "/teach/verify"))):
+        session["teach_next"] = ref.path + ("?" + ref.query if ref.query else "")
+    if request.endpoint == "teach.canvas_list_here":
+        what = ("so your class list wasn't added yet. Sign in again and you'll come straight back to your sheet: "
+                "then press Get my class list from Canvas once more.")
+    else:
+        what = "so that wasn't saved. Sign in again and you'll come straight back to where you were."
+    flash("You were signed out (in another tab, perhaps), " + what, "info")
 
 
 def owner_required(view):

@@ -1028,15 +1028,18 @@
         });
       };
       var watchStore = null;
-      guide.querySelector("[data-helper-add]").addEventListener("click", function () {
+      var watchFor = function () { // (for ten minutes: the helper added, or turned back on)
         wantsHelper = true;
-        helperSay("Once " + browserName + " says Scheduler Helper was added, this page comes back by itself.");
         clearInterval(watchStore);
         var until = Date.now() + 10 * 60 * 1000;
         watchStore = setInterval(function () {
           if (!wantsHelper || helperId || Date.now() > until) { clearInterval(watchStore); return; }
           lookAgain();
         }, 1500);
+      };
+      guide.querySelector("[data-helper-add]").addEventListener("click", function () {
+        helperSay("Once " + browserName + " says Scheduler Helper was added, this page comes back by itself.");
+        watchFor();
       });
       window.addEventListener("focus", lookAgain);
       document.addEventListener("visibilitychange", function () { if (!document.hidden) lookAgain(); });
@@ -1047,28 +1050,41 @@
       // about signing in if it's taking a while. A second press while a
       // message waits starts again (Safari can stop a quiet helper).
       var giveUp = null;
+      var signinUp = false; // Canvas's sign-in page is what's being waited on
+      var nudge = null; // (a press while Canvas is still answering: say so)
       var ask = function (request, onAnswer) {
         var rt = runtime();
         var answered = false;
         var answer = function (msg) {
           if (answered) return;
           answered = true;
+          signinUp = false;
           onAnswer(msg || { type: "problem", why: "gone" });
         };
         if (rt && rt.connect) {
           var port = rt.connect(helperId);
           var beat = setInterval(function () { try { port.postMessage({ type: "ping" }); } catch (err) { /* gone */ } }, 20000);
+          // Canvas slow to answer (a big class, a busy day): a word that it's
+          // still coming, unless its sign-in page is what's being waited on.
+          var still = function () {
+            if (!answered && !signinUp) helperSay("Still working: Canvas is slow to answer right now. Keep this page "
+              + "open; your list will show up here by itself. You don't need to press anything.");
+          };
+          var slow = setTimeout(still, 8000);
+          nudge = still;
+          var done = function () { clearTimeout(slow); clearInterval(beat); nudge = null; };
           port.onMessage.addListener(function (msg) {
             if (msg && msg.type === "wait") return; // still signing in
             if (msg && msg.type === "signin") {
+              signinUp = true;
               helperSay("Canvas's sign-in page just came up. Sign in there as usual, and you'll be brought back here.");
               return;
             }
-            clearInterval(beat);
+            done();
             port.disconnect();
             answer(msg);
           });
-          port.onDisconnect.addListener(function () { clearInterval(beat); answer(null); });
+          port.onDisconnect.addListener(function () { done(); answer(null); });
           port.postMessage(request);
           return;
         }
@@ -1080,8 +1096,10 @@
       };
       var trouble = function (why) {
         setBusy(false);
+        if (why === "gone") helperId = null; // (before tidy: the button it can't answer hides)
         tidy(false);
         helperCourses.hidden = true;
+        if (why === "gone") { helperGone(); return; }
         if (why === "host" || (why === "access" && !isSafari)) { cannotRead(why); return; }
         if (why === "missing" || why === "forbidden") askWhich = true; // (the next press: the list of courses)
         helperSay(why === "forbidden" ? "Canvas won't share that course's class list with you. Is it a course you teach?"
@@ -1091,6 +1109,46 @@
             + "there, then come back and press Get my class list from Canvas again."
           : "Canvas didn't answer just now. Wait a minute, then press Get my class list from Canvas again.");
         if (!helperBox.contains(document.activeElement)) helperGo.focus();
+      };
+      // The helper stopped answering (removed, turned off, or, in Safari, not
+      // allowed on this site any more): is it back after a moment? If not,
+      // how to get it back, or Canvas's file instead.
+      var helperGone = function () {
+        helperSay("Checking on Scheduler Helper…");
+        var tries = 0;
+        var check = function () {
+          findHelper(function (found) {
+            if (found) {
+              showReady();
+              helperSay("Scheduler Helper stopped for a moment. Press Get my class list from Canvas again.");
+              helperGo.focus({ preventScroll: true });
+              return;
+            }
+            if (++tries < 3) { setTimeout(check, 1000); return; } // (an update takes a moment)
+            watchFor(); // turned back on or added again: it says so, and points at the button
+            if (isSafari) {
+              uploadFirst();
+              fileSay("Safari has stopped letting Scheduler Helper answer this page. Click its button in Safari's "
+                + "toolbar (a brown square with a calendar), choose Always Allow, then press ⌘ and R together to "
+                + "reload this page. Or use Canvas's file of your students instead, just below.");
+              opener.focus({ preventScroll: true });
+            } else if (storeUrl && canOffer()) {
+              helperBox.hidden = false;
+              guide.querySelector("[data-helper-install]").hidden = false;
+              guide.querySelector("[data-helper-add]").href = storeUrl;
+              uploadSecond();
+              helperSay("Scheduler Helper isn't turned on in " + browserName + " any more, so it can't bring your class "
+                + "list. Add it again with the button above, or use Canvas's file of your students instead.");
+              guide.querySelector("[data-helper-add]").focus({ preventScroll: true });
+            } else {
+              uploadFirst();
+              fileSay("Scheduler Helper isn't turned on in " + browserName + " any more, so use Canvas's file of your "
+                + "students instead. It brings the same names and emails. Start with Open Canvas, just below.");
+              opener.focus({ preventScroll: true });
+            }
+          });
+        };
+        check();
       };
       var current = function (c) {
         var from = Date.parse(c.start || ""), to = Date.parse(c.end || ""), today = Date.now();
@@ -1129,7 +1187,14 @@
           askWhich = false;
           if (msg.type !== "courses") { trouble(msg.why); return; }
           var courses = (msg.courses || []).slice().sort(function (a, b) { return (current(b) ? 1 : 0) - (current(a) ? 1 : 0); });
-          if (!courses.length) { helperSay((note ? note + " " : "") + "Canvas doesn't list you as a teacher of any course."); return; }
+          if (!courses.length) {
+            helperSay((note ? note + " " : "") + "Canvas didn't list any course you teach. In Canvas: if a bar at the "
+              + "bottom says Student View, click Leave Student View; if Canvas is signed in as someone else, click "
+              + "Account, then Logout, and sign in as yourself. Then press Get my class list from Canvas again. Still "
+              + "nothing? Your school's Canvas help can add you to your course. Until then, you can add your students "
+              + "by email instead.");
+            return;
+          }
           if (courses.length === 1 && !choose) { getStudents(courses[0].id, courses[0].name); return; }
           var match = choose ? null : matching(courses);
           if (match) { autoPicked = String(match.id); getStudents(match.id, match.name); return; } // (and "Wrong course?" under the list)
@@ -1227,7 +1292,15 @@
       };
       helperGo.addEventListener("click", function () {
         if (busy && giveUp) { giveUp(); giveUp = null; setBusy(false); } // (a message still waiting: start again)
-        if (busy) return;
+        if (busy && signinUp) { // Canvas's sign-in waiting, behind: in front again
+          call(helperId, { type: "show-signin", host: host() }, function (r) {
+            helperSay(r && r.ok ? "Canvas's sign-in page is in front again. Sign in there as usual, and you'll be brought back here."
+              : "Canvas's sign-in page is open in another tab, at the top of this window. Click it, sign in as usual, and "
+                + "you'll be brought back here.");
+          });
+          return;
+        }
+        if (busy) { if (nudge) nudge(); return; }
         if (helperHosts.length && helperHosts.indexOf(host()) < 0) { trouble("host"); return; }
         helperCourses.hidden = true;
         arrivedBox.hidden = true;

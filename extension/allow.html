@@ -13,6 +13,7 @@
            background: #9a5520; border: 0; border-radius: 12px; padding: 14px 22px; cursor: pointer; }
   .done { font-weight: 650; color: #2f6b3b; }
   .small { font-size: 13px; color: #6b665c; margin-top: 22px; }
+  .next { margin-top: 14px; font-size: 15px; }
   code { font-size: 12px; user-select: all; }
   [hidden] { display: none; }
 </style>
@@ -23,8 +24,9 @@
     <p><strong>One last step:</strong> let Scheduler Helper use your Canvas and Scheduler.</p>
     <p>It reads only your students' names and email addresses, and only when you click “Get my class list from Canvas” on Scheduler.</p>
     <button type="button" data-allow>Allow</button>
+    <p class="next">Safari then asks about your Canvas and Scheduler: choose <strong>Always Allow on These Websites</strong> (not the one-day choice, or it stops working tomorrow).</p>
   </div>
-  <p class="done" data-done hidden>All set. Go back to Scheduler and click “Get my class list from Canvas”. You can close this page.</p>
+  <p class="done" data-done hidden>All set. Scheduler's page is back in front: click “Get my class list from Canvas” there. (If it isn't, click Scheduler's tab at the top of the window.) You can close this page.</p>
   <p class="small">For whoever runs Scheduler: this helper's ID is <code data-id></code></p>
   <script src="allow.js"></script>
 </body>

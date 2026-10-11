@@ -50,14 +50,22 @@ function canvasOrigin(host) {
   return (/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(host) ? "http://" : "https://") + host;
 }
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+// The Canvas sign-in tab a page is waiting on, by Canvas: a second press of
+// the page's button brings it forward again ("show-signin").
+const signInTabs = new Map();
 
 // Safari asks the professor to allow each site; the page to do it in, opened
-// when the helper is first turned on there (and whenever it's needed).
+// (in front, over Safari's Settings window) when the helper is first turned
+// on there and access is still missing, and whenever it's needed.
+const ALL_SITES = (chrome.runtime.getManifest().host_permissions || [])
+  .concat((chrome.runtime.getManifest().externally_connectable || {}).matches || []);
 function openAllowPage() {
-  return chrome.tabs.create({ url: chrome.runtime.getURL("allow.html"), active: true }).catch(() => {});
+  return chrome.tabs.create({ url: chrome.runtime.getURL("allow.html"), active: true })
+    .then((tab) => tab && focusWindow(tab.windowId)).catch(() => {});
 }
 chrome.runtime.onInstalled.addListener((details) => {
-  if (IN_SAFARI && details.reason === "install") openAllowPage();
+  if (!IN_SAFARI || details.reason !== "install") return;
+  chrome.permissions.contains({ origins: ALL_SITES }).then((ok) => { if (!ok) openAllowPage(); }, openAllowPage);
 });
 
 // One request from the page: the courses, or one course's students. `say`
@@ -98,12 +106,21 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, reply) => {
     toFront(sender.tab).then(() => reply({ ok: true }));
     return true;
   }
+  if (msg.type === "show-signin") { // pressed again while Canvas's sign-in waits: that tab, in front again
+    const id = signInTabs.get(canvasOrigin(String(msg.host || "")));
+    if (!id) { reply({ ok: false }); return undefined; }
+    chrome.tabs.get(id).then(toFront).then(() => reply({ ok: true }), () => reply({ ok: false }));
+    return true;
+  }
   return undefined;
 });
 
 chrome.runtime.onConnectExternal.addListener((port) => {
   if (!fromScheduler(port.sender)) { port.disconnect(); return; }
+  let gone = false; // the page closed or reloaded: stop waiting on its behalf
+  port.onDisconnect.addListener(() => { gone = true; });
   const say = (msg) => { try { port.postMessage(msg); } catch (err) { /* the page went away */ } };
+  say.gone = () => gone;
   port.onMessage.addListener(async (msg) => {
     if (!msg || msg.type === "ping") return;
     say(await handle(msg, say, port.sender.tab));
@@ -177,22 +194,23 @@ async function direct(origin, path) {
   return all;
 }
 
-// Inside a Canvas tab: the same request, made by Canvas's own page.
+// Inside a Canvas tab: the same request, made by Canvas's own page. Only a
+// tab the helper opened is closed after (never one of the professor's).
 async function inTab(origin, paths, say, schedulerTab) {
   let tab = await openSignedIn(origin);
-  let opened = false;
+  let openedId = null;
   if (!tab) {
     tab = await chrome.tabs.create({ url: origin + "/", active: false });
-    opened = true;
+    openedId = tab.id;
   }
-  tab = await signedIn(tab, origin, say);
   try {
+    tab = await signedIn(tab, origin, say);
     const [result] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: readHere, args: [paths] });
     const answer = result && result.result;
     if (!answer || answer.error) throw new Error((answer && answer.error) || "canvas");
     return answer.data;
   } finally {
-    if (opened) chrome.tabs.remove(tab.id).catch(() => {});
+    if (openedId !== null) chrome.tabs.remove(openedId).catch(() => {});
     toFront(schedulerTab);
   }
 }
@@ -230,22 +248,36 @@ function toFront(tab) {
 }
 
 // Wait until the tab is a loaded Canvas page with the professor signed in;
-// if it isn't, bring it forward for them to sign in.
+// if it isn't, bring it forward for them to sign in. Signing in on another
+// Canvas tab counts too (it's looked at every few seconds), and a page that
+// went away stops the wait.
 async function signedIn(tab, origin, say) {
   const until = Date.now() + SIGN_IN_WAIT_MS;
   let asked = false;
+  let looked = 0;
   // A word to the page keeps Safari from stopping the helper, on a timer of
   // its own, so a slow look at Canvas (up to SLOW_MS) can't delay it.
   const awake = setInterval(() => say({ type: "wait" }), KEEP_AWAKE_MS);
   try {
     while (Date.now() < until) {
+      if (say.gone && say.gone()) throw new Error("gone");
       const now = await chrome.tabs.get(tab.id).catch(() => null);
-      if (!now) throw new Error("closed");
+      if (!now) {
+        const other = await openSignedIn(origin); // (signed in on their own tab, then closed this one)
+        if (other) return other;
+        throw new Error("closed");
+      }
       if (now.status === "complete" && now.url && now.url.indexOf(origin + "/") === 0 && !/\/login\b/.test(now.url)) {
         if (await whoIn(now.id, SLOW_MS) === 200) return now;
       }
+      if (asked && Date.now() - looked > 3000) {
+        looked = Date.now();
+        const other = await openSignedIn(origin);
+        if (other && other.id !== now.id) return other;
+      }
       if (!asked && now.status === "complete") {
         asked = true;
+        signInTabs.set(origin, now.id);
         say({ type: "signin" });
         await chrome.tabs.update(now.id, { active: true });
         await focusWindow(now.windowId);
@@ -255,6 +287,7 @@ async function signedIn(tab, origin, say) {
     throw new Error("signin");
   } finally {
     clearInterval(awake);
+    if (signInTabs.get(origin) === tab.id) signInTabs.delete(origin);
   }
 }
 
