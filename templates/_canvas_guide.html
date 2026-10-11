@@ -63,13 +63,14 @@
       <ol class="helper-install-steps" data-steps-for="safari" hidden>
         <li>In the App Store, click <strong>Get</strong>, then <strong>Install</strong>, then <strong>Open</strong>.</li>
         <li>Click the button that opens Safari's settings, tick <strong>Scheduler Helper</strong>, then close the settings window (the red dot at its top left).</li>
-        <li>On the Scheduler Helper page, click <strong>Allow</strong>, then <strong>Always Allow on These Websites</strong>. This page comes back by itself. (If it doesn't, click “<span data-page-title>{{ sheet.title }}</span>” at the very top of the window, then press <kbd>⌘</kbd> and <kbd>R</kbd> together.)</li>
+        <li>On the Scheduler Helper page, click <strong>Allow</strong>, then <strong>Always Allow on These Websites</strong>. That's all: this page comes back by itself. (If it doesn't, click “<span data-page-title>{{ sheet.title }}</span>” at the very top of the window, then <strong>Reload this page</strong> if it shows.)</li>
       </ol>
       <p class="mini-hint" data-steps-for="safari" hidden><strong>Added it already, and this page still shows this?</strong> Safari is waiting for your OK. Click Scheduler Helper's button in Safari's toolbar, at the top of the window (a brown square with a calendar), then <strong>Allow</strong>, and choose <strong>Always Allow on These Websites</strong>.</p>
       <p class="mini-hint"><strong><span data-browser-name>Chrome</span> won't add it?</strong> If it says it's blocked, or warns you off it, you don't need it: use <strong>Or use Canvas's file of your students instead</strong>, below. It brings the same names and emails.</p>
       <p class="mini-hint">It reads only your list of courses and one course's student names and email addresses, only when you press the button on this page, and it never sees your password. <a href="{{ url_for('helper') }}" target="_blank" rel="noopener">What it does, and how to remove it</a></p>
     </div>
     <p class="helper-said" data-helper-said role="status"></p>
+    <button type="button" class="btn btn-secondary" data-helper-reload hidden>Reload this page</button>
     <div class="canvas-copy-courses" data-helper-courses role="group" aria-labelledby="helper-courses-q-{{ sheet.id }}" hidden></div>
   </section>
   {% endif %}
@@ -80,6 +81,7 @@
   <details class="canvas-by-hand canvas-upload" data-canvas-download>
     <summary><span data-upload-title="Get Canvas's file of your students">Or use Canvas's file of your students instead</span></summary>
     <p class="canvas-welcome" data-file-said role="status" id="file-said-{{ sheet.id }}"></p>
+    {% if helper_ids and not canvas_connect %}<button type="button" class="btn btn-secondary" data-helper-reload hidden>Reload this page</button>{% endif %}
     <p class="canvas-phone-note" data-phone-only hidden><strong>This part is easiest on a computer.</strong> Everything so far is saved, so you can stop here: on your computer, sign in to {{ app_name }}, click <strong>My sheets</strong>, then “{{ sheet.title }}”{% if has_list %}, then <strong>Class changed in Canvas? Update from Canvas</strong>{% else %}, and add your students from there{% endif %}. Or, on this phone, {% if has_list %}add anyone new in the <a href="#add-students">Add students</a> box above{% else %}<button type="button" class="btn-link" data-go="paste">type or paste your students</button> instead{% endif %}.</p>
     <p class="mini-hint">Canvas can give you a file listing your students. You save it from Canvas (steps 1 to 3), then choose it here (step 4). It also has grades in it: {{ app_name }} keeps only the names and email addresses, and throws everything else away as it reads the file, never saving it.</p>
     <div class="canvas-guide-top">

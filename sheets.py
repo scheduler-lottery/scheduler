@@ -272,12 +272,58 @@ def _signin_changes(before, after, pinned=()):
     return changed
 
 
-def compare_rosters(current_rows, new_students):
+def note_removed(sid, name_key, email, display_name):
+    """A student the instructor took off the list by hand: the next update
+    from Canvas leaves them off (compare_rosters' `took_off`). Not committed."""
+    db.run("DELETE FROM removed_by_hand WHERE sheet_id = :sid AND name_key = :key", sid=sid, key=name_key)
+    db.run("INSERT INTO removed_by_hand (sheet_id, name_key, email, display_name, at) "
+           "VALUES (:sid, :key, :email, :name, :at)",
+           sid=sid, key=name_key, email=email or "", name=display_name, at=iso())
+
+
+def forget_removed(sid):
+    """No one is taken off by hand any more (the list itself was taken off,
+    to start over). Not committed."""
+    db.run("DELETE FROM removed_by_hand WHERE sheet_id = :sid", sid=sid)
+
+
+def removed_by_hand(sid, listed=None):
+    """Students taken off the list by hand who aren't back on it. The records
+    of anyone back (added again, an undo, a restore) go here. `listed`: a
+    whole class list from Canvas (or its file) just taken: the records of
+    anyone it no longer has go too, since Canvas has caught up, so if they
+    enrol again, they're new. Not committed."""
+    rows = db.rows("SELECT * FROM removed_by_hand WHERE sheet_id = :sid ORDER BY at", sid=sid)
+    if not rows:
+        return []
+    on = [r for r in get_roster(sid) if not r["is_test"]]
+    keys, emails = {r["name_key"] for r in on}, {r["email"] for r in on if r["email"]}
+    stale = [r for r in rows if r["name_key"] in keys or (r["email"] and r["email"] in emails)]
+    if listed is not None:
+        listed_keys, listed_emails = {s["name_key"] for s in listed}, {s["email"] for s in listed if s["email"]}
+        stale += [r for r in rows if r not in stale
+                  and not (r["email"] in listed_emails if r["email"] else r["name_key"] in listed_keys)]
+    for r in stale:
+        db.run("DELETE FROM removed_by_hand WHERE sheet_id = :sid AND name_key = :key", sid=sid, key=r["name_key"])
+    return [r for r in rows if r not in stale]
+
+
+def without_removed(students, took_off):
+    """A new class list less the students compare_rosters says were taken
+    off by hand (by email, which two students who share a name never do)."""
+    emails = {s["email"] for s in took_off if s["email"]}
+    keys = {s["name_key"] for s in took_off if not s["email"]}
+    return [s for s in students if not (s["email"] in emails if s["email"] else s["name_key"] in keys)]
+
+
+def compare_rosters(current_rows, new_students, removed=()):
     """How a new class list differs from the current one, for the review
     page shown before anything is replaced. Students are matched up by
     carry_over, as replace_roster does, so it shows just what Replace would
     do. `unsure`: names with fewer students on the new list, where nothing
-    says which one left; Replace keeps all of them as they are."""
+    says which one left; Replace keeps all of them as they are. `removed`:
+    removed_by_hand's records; those still on the new list are `took_off`,
+    not new (they stay off unless the instructor puts them back)."""
     current = {r["name_key"]: r for r in current_rows if not r["is_test"]}
     tests = {r["name_key"] for r in current_rows if r["is_test"]}
     new_students = [s for s in new_students if s["name_key"] not in tests]
@@ -285,6 +331,16 @@ def compare_rosters(current_rows, new_students):
     incoming = {s["name_key"]: s for s in carried}
     by_email = {r["email"]: r for r in current.values() if r["email"]}
     adding = [s for k, s in incoming.items() if k not in current]
+    gone_emails = {r["email"] for r in removed if r["email"]}
+    gone_keys = {r["name_key"]: r for r in removed}
+
+    def was_removed(s):  # by email first: two students who share a name have different ones
+        if s["email"] and s["email"] in gone_emails:
+            return True
+        return s["name_key"] in gone_keys and not (s["email"] and gone_keys[s["name_key"]]["email"])
+
+    took_off = [s for s in adding if current and was_removed(s)]
+    adding = [s for s in adding if s not in took_off]
     dropping = [r for k, r in current.items() if k not in incoming]
     same_person = [
         (by_email[s["email"]], s) for s in adding
@@ -315,6 +371,7 @@ def compare_rosters(current_rows, new_students):
             current[k] for k, s in incoming.items() if k in current and current[k]["email"] and not s["email"]
         ],
         "unsure": unsure,
+        "took_off": took_off,
     }
 
 
@@ -1322,7 +1379,7 @@ def delete_sheet(sheet):
     snap_id = take_snapshot(sheet, "deleted", "Deleted the sheet")
     # The foreign keys cascade too; being explicit doesn't depend on that.
     for table in ("assignments", "submissions", "name_pins", "roster", "sheet_days", "student_signouts",
-                  "pending_uploads"):
+                  "pending_uploads", "removed_by_hand"):
         db.run(f"DELETE FROM {table} WHERE sheet_id = :sid", sid=sid)
     db.run("DELETE FROM login_codes WHERE scope = :sid", sid=sid)
     db.run("DELETE FROM login_links WHERE scope = :sid", sid=sid)

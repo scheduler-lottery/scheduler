@@ -3006,6 +3006,7 @@ input[type="date"] {
 .next-step:not([open]) .fold-peek { display: inline; }
 details.guide:not([open]) { padding-bottom: 20px; }
 .card[id], .fold-card { scroll-margin-top: 92px; }  /* a link to a card lands below the top bar */
+.canvas-update { scroll-margin-top: 92px; }
 
 /* Canvas: steps with pictures of where to click (drawn like Canvas, in this
    site's colors). */

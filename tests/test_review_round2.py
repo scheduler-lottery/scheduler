@@ -275,8 +275,8 @@ def test_starting_over_a_list_from_canvas_asks_which_course_next(prof):
 def test_when_it_cant_tell_which_twin_left_the_review_says_so(prof, monkeypatch):
     real = sheets.compare_rosters
 
-    def unsure(current, incoming):
-        return {**real(current, incoming), "unsure": ["Sam Rivera"]}
+    def unsure(current, incoming, removed=()):
+        return {**real(current, incoming, removed), "unsure": ["Sam Rivera"]}
     sid = prof.create_sheet(allow_unlisted=False)
     prof.upload(sid, _csv("Ana Lima", "Bo Chen"))
     monkeypatch.setattr(sheets, "compare_rosters", unsure)

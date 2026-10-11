@@ -60,7 +60,10 @@ const signInTabs = new Map();
 const ALL_SITES = (chrome.runtime.getManifest().host_permissions || [])
   .concat((chrome.runtime.getManifest().externally_connectable || {}).matches || []);
 function openAllowPage() {
-  return chrome.tabs.create({ url: chrome.runtime.getURL("allow.html"), active: true })
+  const url = chrome.runtime.getURL("allow.html");
+  return chrome.tabs.query({ url }).catch(() => []).then((open) => open[0] // (one already open: that one, asking afresh)
+    ? chrome.tabs.reload(open[0].id).then(() => chrome.tabs.update(open[0].id, { active: true })).then(() => open[0])
+    : chrome.tabs.create({ url, active: true }))
     .then((tab) => tab && focusWindow(tab.windowId)).catch(() => {});
 }
 chrome.runtime.onInstalled.addListener((details) => {
@@ -98,7 +101,7 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, reply) => {
     reply({ ok: true, v: VERSION, hosts: CANVAS_HOSTS });
     return undefined;
   }
-  if (msg.type === "courses" || msg.type === "students") { // (Safari: no ports from pages)
+  if (msg.type === "courses" || msg.type === "students") { // (a page that can't connect a port: one message)
     handle(msg, () => {}, sender.tab).then(reply);
     return true; // the answer comes later
   }
@@ -255,6 +258,7 @@ async function signedIn(tab, origin, say) {
   const until = Date.now() + SIGN_IN_WAIT_MS;
   let asked = false;
   let looked = 0;
+  let loginLooked = 0;
   // A word to the page keeps Safari from stopping the helper, on a timer of
   // its own, so a slow look at Canvas (up to SLOW_MS) can't delay it.
   const awake = setInterval(() => say({ type: "wait" }), KEEP_AWAKE_MS);
@@ -267,8 +271,13 @@ async function signedIn(tab, origin, say) {
         if (other) return other;
         throw new Error("closed");
       }
-      if (now.status === "complete" && now.url && now.url.indexOf(origin + "/") === 0 && !/\/login\b/.test(now.url)) {
-        if (await whoIn(now.id, SLOW_MS) === 200) return now;
+      if (now.status === "complete" && now.url && now.url.indexOf(origin + "/") === 0) {
+        // Its sign-in page too, every few seconds: signed in in another tab, Canvas says so there.
+        const login = /\/login\b/.test(now.url);
+        if (!login || Date.now() - loginLooked > 3000) {
+          if (login) loginLooked = Date.now();
+          if (await whoIn(now.id, login ? LOOK_MS : SLOW_MS) === 200) return now;
+        }
       }
       if (asked && Date.now() - looked > 3000) {
         looked = Date.now();

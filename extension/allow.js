@@ -27,10 +27,12 @@ async function backToScheduler() {
   if (chrome.windows && chrome.windows.update) await chrome.windows.update(tab.windowId, { focused: true }).catch(() => {});
 }
 
+const refused = document.querySelector("[data-refused]");
 chrome.permissions.contains({ origins: ORIGINS }).then(show, () => show(false));
 document.querySelector("[data-allow]").addEventListener("click", () => {
   chrome.permissions.request({ origins: ORIGINS }).then((allowed) => {
     show(allowed);
-    if (allowed) backToScheduler();
-  }, () => show(false));
+    refused.hidden = allowed; // (Safari didn't allow it: say how to try again)
+    if (allowed) backToScheduler().catch(() => {});
+  }, () => { show(false); refused.hidden = false; });
 });

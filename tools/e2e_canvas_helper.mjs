@@ -261,6 +261,14 @@ try {
   check(await until(me.session, `!document.querySelector("[data-helper-courses]").hidden`, 10000),
     "and \"Wrong course?\" asks which course after all");
 
+  // The same number in another school's course ("LAW 615" isn't "BUSCOM_615"): asked, not guessed.
+  check(!!(await canvasStep(me.session, "LAW 615 Privacy"))
+    && await until(me.session, `document.querySelector("[data-helper-go]").offsetParent !== null`), "a sheet named LAW 615 Privacy");
+  await evaluate(me.session, `document.querySelector("[data-helper-go]").click()`);
+  check(await until(me.session, `!document.querySelector("[data-helper-courses]").hidden`, 10000)
+    && await evaluate(me.session, `document.querySelector("[data-canvas-arrived]").hidden`),
+    "one click: the list of courses, since only the business school's course has 615 in it");
+
   // Canvas left open on a course page all day, and its sign-in ran out: the
   // helper leaves that tab alone and opens a new one to sign in.
   const old = await newPage(`${CANVAS}/courses/101`);

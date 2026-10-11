@@ -1380,7 +1380,7 @@ def undo(sid, snap_id):
         listed = sum(1 for r in data["roster"] if not r.get("is_test"))
         session["roster_report"] = {
             "sid": sheet["id"], "message": f"Your previous class list is back ({plural(listed, 'student')}).",
-            "tips": [], "warn": False, "undo": None,
+            "tips": [], "warn": False, "undo": None, "restored": True,
         }
     flash("Undone.", "success")
     return _back(sheet, "class-list" if "roster" in allowed else "schedule" if allowed == {"assignments"} else "signups")
@@ -1542,8 +1542,9 @@ def _updated_message(message, came, dropped):
 
 def _who_was_added(sheet, report):
     """The students the class list just reported on brought in: those not on
-    the list before it (its restore point), or everyone, for a first list."""
-    if not report:
+    the list before it (its restore point), or everyone, for a first list.
+    Nobody, for a list put back."""
+    if not report or report.get("restored"):
         return []
     before = set()
     if report.get("undo"):
@@ -1639,25 +1640,36 @@ def _take_list(sheet, data, source, source_label, pasted=False, setup=False, par
     sections = dict(result.sections)
 
     current = [r for r in sheets.get_roster(sheet["id"]) if not r["is_test"]]
+    whole = None if pasted else result.students  # (a whole class list: Canvas's, or its file)
     if not current and not look_first:
         _apply_roster(sheet, result.students, "replace", message, tips, warn, source_label, sections)
+        sheets.removed_by_hand(sheet["id"], whole)
         _tie_to_canvas(sheet, canvas, "replace")
         return _list_back(sheet, setup)
     if current and not look_first:
         # The same students, spelled the same, with the same emails: nothing to
-        # ask about (the weekly "Update from Canvas", most weeks).
-        diff = sheets.compare_rosters(current, result.students)
+        # ask about (the weekly "Update from Canvas", most weeks). Students
+        # taken off by hand and still in Canvas stay off, and that's said.
+        # Names pasted in are meant: they go back on.
+        diff = sheets.compare_rosters(current, result.students, [] if pasted else sheets.removed_by_hand(sheet["id"]))
         shown = {r["name_key"]: r["display_name"] for r in current}
         # (Not when it can't tell which of two same-name students left: that's said on the review page.)
         if not (diff["adding"] or diff["dropping"] or diff["new_emails"] or diff.get("unsure")) and all(
                 shown[s["name_key"]] == s["display_name"] for s in diff["same"]):
+            sheets.removed_by_hand(sheet["id"], whole)  # (anyone Canvas no longer has: new if they enrol again)
             _tie_to_canvas(sheet, canvas, "add")  # a sheet untied (its list from a file) learns its course
             db.run("DELETE FROM pending_uploads WHERE sheet_id = :sid AND kind = 'roster'", sid=sheet["id"])
             db.commit()
             course = canvas["name"] if canvas else source[len("Canvas: "):] if source.startswith("Canvas: ") else ""
             where = f"{course} in Canvas" if course else "your names" if pasted else f"“{source}”"
             everyone = f"all {plural(len(current), 'student')}" if len(current) > 1 else "1 student"
-            said = f"Your class list already matches {where}: {everyone}, nobody new and nobody gone. Nothing changed."
+            said = f"Your class list already matches {where}: {everyone}, nobody new and nobody gone."
+            off = diff["took_off"]
+            if off:
+                names = _names([s["display_name"] for s in off])
+                said += (f" {names} {'is' if len(off) == 1 else 'are'} still {'in Canvas' if course else 'in it'}, "
+                         "but you took them off your list, so they stay off.")
+            said += " Nothing changed."
             if not course and not pasted:
                 said += " Just downloaded a new file from Canvas? Choose the newest one in Downloads."
             if canvas_file:
@@ -1952,6 +1964,7 @@ def quick_add(sid):
     added, filled, changed = sheets.add_to_roster(sheet["id"], students)
     auth.end_student_sessions(sheet["id"], changed, reason="list")
     db.commit()
+    session.pop("roster_report", None)  # (its "Who was added" and "Put the previous one back" are out of date)
     new_rows = [r for r in sheets.get_roster(sheet["id"]) if r["name_key"] not in before and not r["is_test"]]
     if not new_rows and not filled:
         flash("They're all on your list already.", "info")
@@ -2041,11 +2054,19 @@ def review_roster(sid, pid):
             tips, warn = pending["tips"], pending["warn"]
             if pending.get("look_first"):  # put in after all: why it was worth a look stays first, in yellow
                 tips, warn = [pending["look_first"]] + list(tips), True
-            _apply_roster(sheet, pending["students"], action, pending["message"], tips, warn,
+            students = pending["students"]
+            whole = None if pending.get("pasted") else students
+            if whole is not None and request.form.get("put_back") != "1":  # (taken off by hand: they stay off)
+                off = sheets.compare_rosters(sheets.get_roster(sheet["id"]), students,
+                                             sheets.removed_by_hand(sheet["id"]))["took_off"]
+                students = sheets.without_removed(students, off)
+            _apply_roster(sheet, students, action, pending["message"], tips, warn,
                           pending["source_label"], pending.get("sections"), setup=bool(pending.get("setup")))
+            sheets.removed_by_hand(sheet["id"], whole)
             _tie_to_canvas(sheet, pending.get("canvas"), action)
             return _list_back(sheet, pending.get("setup"))
-    diff = sheets.compare_rosters(sheets.get_roster(sheet["id"]), pending["students"])
+    diff = sheets.compare_rosters(sheets.get_roster(sheet["id"]), pending["students"],
+                                  [] if pending.get("pasted") else sheets.removed_by_hand(sheet["id"]))
     ranked = {r["name_key"] for r in sheets.get_submissions(sheet["id"])}
     dropping_ranked = [r for r in diff["dropping"] if r["name_key"] in ranked]
     overlap = len(diff["same"]) / diff["current"] if diff["current"] else 1
@@ -2127,6 +2148,7 @@ def clear_roster(sid):
     had_course = bool(sheet.get("canvas_course_id"))
     snap_id = sheets.take_snapshot(sheet, "roster", "Before the class list was removed")
     removed = sheets.clear_roster(sheet["id"])
+    sheets.forget_removed(sheet["id"])  # (starting over: the next list goes in whole)
     db.run("UPDATE sheets SET canvas_course_id = NULL, canvas_course = NULL WHERE id = :sid", sid=sheet["id"])
     auth.end_student_sessions(sheet["id"], removed)
     db.commit()
@@ -2211,6 +2233,7 @@ def add_student(sid):
         auth.end_student_sessions(sheet["id"], [key], reason="list")
     already = db.scalar("SELECT 1 FROM submissions WHERE sheet_id = :sid AND name_key = :key", sid=sheet["id"], key=key)
     db.commit()
+    session.pop("roster_report", None)  # (its "Who was added" and "Put the previous one back" are out of date)
     message = f"Added {name} to the class list." + twin_note
     if already:
         message += " They had already signed up, so their ranking now counts as on your list."
@@ -2277,6 +2300,7 @@ def edit_student(sid):
         auth.end_student_sessions(sheet["id"], [key, new_key], reason="list")
     sheets.touch(sheet["id"])
     db.commit()
+    session.pop("roster_report", None)  # (its "Who was added" and "Put the previous one back" are out of date)
     typo = _domain_typo_note(sheet, email) if email != row["email"] else ""
     flash(f"Updated {name}." + typo, "info" if typo else "success")
     return _back(sheet, "class-list")
@@ -2298,6 +2322,7 @@ def remove_student(sid):
     snap_id = sheets.take_snapshot(sheet, "roster", f"Before taking {found['display_name']} off the class list")
     db.run("DELETE FROM roster WHERE sheet_id = :sid AND name_key = :key", sid=sheet["id"], key=key)
     db.run("DELETE FROM name_pins WHERE sheet_id = :sid AND name_key = :key", sid=sheet["id"], key=key)
+    sheets.note_removed(sheet["id"], key, found["email"], found["display_name"])  # (an update from Canvas leaves them off)
     signin.clear_pin_failures(sheet["id"], key)
     if also_ranking:
         for table in ("submissions", "assignments"):
@@ -2305,6 +2330,7 @@ def remove_student(sid):
     auth.end_student_sessions(sheet["id"], [key], reason="removed", email=found["email"])
     sheets.touch(sheet["id"])
     db.commit()
+    session.pop("roster_report", None)  # (its "Who was added" and "Put the previous one back" are out of date)
     parts = ["roster", "submissions"] if also_ranking else ["roster"]
     _offer_undo(
         sheet, snap_id,

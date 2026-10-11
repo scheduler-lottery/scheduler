@@ -40,6 +40,7 @@
     <li><strong>{{ diff.dropping | length }}</strong> on your list but not in this one{% if diff.dropping %}: {% for r in diff.dropping[:12] %}<bdi>{{ r.display_name }}</bdi>{% if not loop.last %}, {% endif %}{% endfor %}{% if diff.dropping | length > 12 %} …{% endif %}{% endif %}</li>
     {% if diff.renamed %}<li>Same email, different name: {% for old, new in diff.renamed %}<bdi>{{ old.display_name }}</bdi> → <bdi>{{ new.display_name }}</bdi>{% if not loop.last %}; {% endif %}{% endfor %}</li>{% endif %}
     {% if diff.new_emails %}<li>New email address for: {% for old, new in diff.new_emails %}<bdi>{{ old.display_name }}</bdi>{% if not loop.last %}, {% endif %}{% endfor %}</li>{% endif %}
+    {% if diff.took_off %}<li>Still {{ 'in Canvas' if from_canvas else 'in it' }}, but you took them off your list: {% for s in diff.took_off[:12] %}<bdi>{{ s.display_name }}</bdi>{% if not loop.last %}, {% endif %}{% endfor %}{% if diff.took_off | length > 12 %} …{% endif %}. They stay off.</li>{% endif %}
   </ul>
 
   {% if pending.tips %}
@@ -52,9 +53,11 @@
   {# The buttons, each written once, then put in order. With a list here
      and nobody taken off, "Add A" is the replace button, and the only one. #}
   {% set only_adding = diff.current and not doubtful and diff.adding and not diff.dropping %}
+  {# Ticking "Put … back" names them on the buttons too (app.js), so a button never does more than it says. #}
+  {% set put_back_say %}{% if diff.took_off %}<span data-put-back-say hidden>, and put {{ who(diff.took_off) }} back</span>{% endif %}{% endset %}
   {% set add_button %}
     <button type="submit" name="action" value="add" class="btn {{ 'btn-primary' if recommend == 'add' else 'btn-secondary' }} btn-block"{% if warnings %} aria-describedby="review-warn"{% endif %}>
-      {% if doubtful %}Add them too: {{ (diff.current + diff.adding | length) | plural('student') }} from both lists on one sheet{% else %}Only add {{ who(diff.adding) }} ({% if diff.dropping | length > 3 %}keep everyone already on my list{% else %}keep {{ who(diff.dropping) }} on my list{% endif %}){% endif %}
+      {% if doubtful %}Add them too: {{ (diff.current + diff.adding | length) | plural('student') }} from both lists on one sheet{% else %}Only add {{ who(diff.adding) }} ({% if diff.dropping | length > 3 %}keep everyone already on my list{% else %}keep {{ who(diff.dropping) }} on my list{% endif %}){% endif %}{{ put_back_say }}
     </button>
   {% endset %}
   {% set replace_button %}
@@ -65,7 +68,7 @@
       {%- elif diff.adding %}Add {{ who(diff.adding) }}{% if diff.new_emails %}, and update {{ emails(diff.new_emails) }}{% endif %}
       {%- elif diff.dropping %}Take {{ who(diff.dropping) }} off my list
       {%- elif diff.new_emails %}Update {{ emails(diff.new_emails) }}
-      {%- else %}Update my list to match{% endif %}
+      {%- else %}Update my list to match{% endif %}{% if diff.current %}{{ put_back_say }}{% endif %}
     </button>
   {% endset %}
   {% set cancel_button %}
@@ -75,6 +78,9 @@
   {% endset %}
   <form method="post" class="choice-stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if diff.took_off and diff.current %}
+    <label class="choice choice-small"><input type="checkbox" name="put_back" value="1" data-put-back> Put {{ who(diff.took_off) }} back on my list too</label>
+    {% endif %}
     {% if doubtful and not recommend %}
     {{ cancel_button }}{{ replace_button }}{% if diff.adding and diff.current %}{{ add_button }}{% endif %}
     {% elif doubtful %}

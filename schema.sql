@@ -142,6 +142,19 @@ CREATE TABLE IF NOT EXISTS student_signouts (
     PRIMARY KEY (sheet_id, name_key)
 );
 
+-- Students an instructor took off the class list by hand who may still be
+-- in Canvas (or its file): the next update from there leaves them off rather
+-- than calling them new. Gone once they're back on the list, or once a list
+-- from Canvas no longer has them.
+CREATE TABLE IF NOT EXISTS removed_by_hand (
+    sheet_id     TEXT NOT NULL REFERENCES sheets (id) ON DELETE CASCADE,
+    name_key     TEXT NOT NULL,
+    email        TEXT NOT NULL DEFAULT '',
+    display_name TEXT NOT NULL DEFAULT '',
+    at           TEXT NOT NULL,
+    PRIMARY KEY (sheet_id, name_key)
+);
+
 -- Rate-limit rows: wrong PIN and code guesses (per browser and per network
 -- address, stored hashed, so a guesser locks themselves out rather than the
 -- real student), plus name lookups and code requests. Pruned after a day.

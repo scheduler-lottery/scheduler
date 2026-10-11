@@ -183,6 +183,16 @@
     } catch (e) { /* older browser: the site's default is used */ }
   });
 
+  // A new class list's review: students taken off by hand stay off, unless
+  // "Put … back" is ticked; then the buttons say they put them back too.
+  document.querySelectorAll("[data-put-back]").forEach(function (box) {
+    var say = function () {
+      box.form.querySelectorAll("[data-put-back-say]").forEach(function (span) { span.hidden = !box.checked; });
+    };
+    box.addEventListener("change", say);
+    say(); // (ticked already, back on this page)
+  });
+
   // "12 / 100" under boxes with a length limit, once they're nearly full.
   document.querySelectorAll("[data-count]").forEach(function (box) {
     var limit = parseInt(box.getAttribute("maxlength"), 10);
@@ -529,14 +539,20 @@
       var question = quiz.querySelector('[data-step="' + name + '"] .quiz-q');
       if (focus && question) question.focus({ preventScroll: false });
     };
+    var shownAt = 0; // when a click last brought up a step
     var go = function (name) { trail.push(current); show(name, true); };
     // Another part of the page bringing its step into view (the Canvas
     // step, when a class list arrives from Canvas).
     quiz.addEventListener("quiz-go", function (e) { if (current !== e.detail) go(e.detail); });
+    // A double-click's second click lands on whatever its first click just
+    // brought up ("Change", "Type or paste…"): ignore it.
+    quiz.addEventListener("click", function (e) {
+      if (e.detail > 1 && Date.now() - shownAt < 1500) { e.preventDefault(); e.stopPropagation(); }
+    }, true);
     quiz.addEventListener("click", function (e) {
       var to = e.target.closest("[data-go]");
-      if (to) { go(to.getAttribute("data-go")); return; }
-      if (e.target.closest("[data-back]")) show(trail.pop() || "start", true);
+      if (to) { go(to.getAttribute("data-go")); shownAt = Date.now(); return; }
+      if (e.target.closest("[data-back]")) { show(trail.pop() || "start", true); shownAt = Date.now(); }
     });
     var saved = null;
     try { saved = sessionStorage.getItem(key); } catch (e) { saved = null; }
@@ -891,7 +907,7 @@
 
     // Scheduler Helper. It answers only this site (its manifest says so).
     // The page talks to it over a port, which keeps it awake through a Canvas
-    // sign-in (single messages if a browser has no ports).
+    // sign-in (single messages where a browser can't connect one).
     var helperIds = (guide.getAttribute("data-helper-ids") || "").split(",").filter(Boolean);
     var coveredHosts = (guide.getAttribute("data-helper-hosts") || "").split(",").filter(Boolean);
     var covered = function () { return coveredHosts.indexOf(host()) >= 0; };
@@ -1012,12 +1028,26 @@
       // front, too), asks the helper to bring this page back to the front,
       // and points at the button. It reads nothing until that's pressed.
       var looking = false;
-      var lookAgain = function () {
+      // Safari: a page that was open before the helper was allowed may not
+      // reach it until it's reloaded. A button for that, not a key combination.
+      var reloads = guide.querySelectorAll("[data-helper-reload]");
+      Array.prototype.forEach.call(reloads, function (b) { b.addEventListener("click", function () { location.reload(); }); });
+      var offerReload = function (where) { // "helper" (its box), "file" (the file's), or none
+        Array.prototype.forEach.call(reloads, function (b) { b.hidden = (b.closest("[data-helper]") ? "helper" : "file") !== where; });
+      };
+      var lookAgain = function (back) {
         if (helperId || looking || !canOffer()) return;
         looking = true;
         findHelper(function (found) {
           looking = false;
-          if (!found) return;
+          if (!found) {
+            if (back === true && isSafari && wantsHelper && !document.hidden) {
+              helperSay("Clicked Allow and Always Allow on These Websites, and this page still shows this? Click Reload this page.");
+              offerReload("helper");
+            }
+            return;
+          }
+          offerReload(null);
           showReady();
           if (!wantsHelper) return;
           wantsHelper = false;
@@ -1028,21 +1058,30 @@
         });
       };
       var watchStore = null;
-      var watchFor = function () { // (for ten minutes: the helper added, or turned back on)
+      var stopWatch = function () {
+        if (watchStore && watchStore.terminate) watchStore.terminate(); else clearInterval(watchStore);
+        watchStore = null;
+      };
+      var watchFor = function () { // (for half an hour: the helper added, or turned back on)
         wantsHelper = true;
-        clearInterval(watchStore);
-        var until = Date.now() + 10 * 60 * 1000;
-        watchStore = setInterval(function () {
-          if (!wantsHelper || helperId || Date.now() > until) { clearInterval(watchStore); return; }
+        stopWatch();
+        var until = Date.now() + 30 * 60 * 1000;
+        var beat = function () {
+          if (!wantsHelper || helperId || Date.now() > until) { stopWatch(); return; }
           lookAgain();
-        }, 1500);
+        };
+        // A worker keeps its beat while the store is in front; this page's own
+        // timers slow to once a minute after five minutes hidden.
+        try { watchStore = new Worker("/static/tick.js"); watchStore.onmessage = beat; }
+        catch (err) { watchStore = setInterval(beat, 1500); }
       };
       guide.querySelector("[data-helper-add]").addEventListener("click", function () {
-        helperSay("Once " + browserName + " says Scheduler Helper was added, this page comes back by itself.");
+        helperSay(isSafari ? "Once you click Allow on the Scheduler Helper page, this page comes back by itself."
+          : "Once " + browserName + " says Scheduler Helper was added, this page comes back by itself.");
         watchFor();
       });
-      window.addEventListener("focus", lookAgain);
-      document.addEventListener("visibilitychange", function () { if (!document.hidden) lookAgain(); });
+      window.addEventListener("focus", function () { lookAgain(true); });
+      document.addEventListener("visibilitychange", function () { if (!document.hidden) lookAgain(true); });
 
       // One request to the helper, and its answer. A port where there is
       // one (it says when Canvas wants a sign-in); else one message, waited
@@ -1072,10 +1111,24 @@
           };
           var slow = setTimeout(still, 8000);
           nudge = still;
-          var done = function () { clearTimeout(slow); clearInterval(beat); nudge = null; };
+          // Three minutes without a word from the helper (it says "wait"
+          // through a sign-in): Canvas isn't answering, so say so, and the
+          // button works again.
+          var quiet = null;
+          var hush = function () {
+            clearTimeout(quiet);
+            quiet = setTimeout(function () {
+              done();
+              try { port.disconnect(); } catch (err) { /* gone */ }
+              answer({ type: "problem", why: "slow" });
+            }, 3 * 60 * 1000);
+          };
+          var done = function () { clearTimeout(slow); clearTimeout(quiet); clearInterval(beat); nudge = null; };
+          hush();
           port.onMessage.addListener(function (msg) {
-            if (msg && msg.type === "wait") return; // still signing in
+            if (msg && msg.type === "wait") { hush(); return; } // still signing in
             if (msg && msg.type === "signin") {
+              hush();
               signinUp = true;
               helperSay("Canvas's sign-in page just came up. Sign in there as usual, and you'll be brought back here.");
               return;
@@ -1105,8 +1158,9 @@
         helperSay(why === "forbidden" ? "Canvas won't share that course's class list with you. Is it a course you teach?"
           : why === "missing" ? "Canvas couldn't find that course. Press Get my class list from Canvas to choose it again."
           : why === "signin" || why === "closed" ? "Canvas sign-in didn't finish. Press Get my class list from Canvas to try again."
-          : why === "access" ? "Safari needs your OK first. A Scheduler Helper page just opened: click Allow "
-            + "there, then come back and press Get my class list from Canvas again."
+          : why === "access" ? "Safari needs your OK first. A Scheduler Helper page just opened: click Allow there, "
+            + "then Always Allow on These Websites. This page comes back by itself; then press Get my class list "
+            + "from Canvas again."
           : "Canvas didn't answer just now. Wait a minute, then press Get my class list from Canvas again.");
         if (!helperBox.contains(document.activeElement)) helperGo.focus();
       };
@@ -1129,8 +1183,9 @@
             if (isSafari) {
               uploadFirst();
               fileSay("Safari has stopped letting Scheduler Helper answer this page. Click its button in Safari's "
-                + "toolbar (a brown square with a calendar), choose Always Allow, then press ⌘ and R together to "
-                + "reload this page. Or use Canvas's file of your students instead, just below.");
+                + "toolbar (a brown square with a calendar), then Allow, and choose Always Allow on These Websites. "
+                + "Then click Reload this page. Or use Canvas's file of your students instead, just below.");
+              offerReload("file");
               opener.focus({ preventScroll: true });
             } else if (storeUrl && canOffer()) {
               helperBox.hidden = false;
@@ -1158,19 +1213,36 @@
       var autoPicked = ""; // the course picked from the sheet's name (if Canvas then won't give its list: ask)
       // The course this sheet is for, when its name says: the same name, or
       // the one current course with the same course number ("LAW 540" and
-      // "2026FA_LAW_540_SEC20"). Years aren't course numbers.
+      // "2026FA_LAW_540_SEC20"), unless the letters just before that number
+      // name another subject ("LAW 615" isn't "BUSCOM_615"). Years aren't
+      // course numbers.
       var numbers = function (text) {
-        return (String(text).match(/\d{3,}/g) || []).filter(function (n) { return !/^(19|20)\d\d$/.test(n); });
+        var out = [];
+        String(text).toLowerCase().replace(/([a-z]*)[\s_-]*(\d{3,})/g, function (all, subject, n) {
+          if (!/^(19|20)\d\d$/.test(n)) out.push({ subject: subject, n: n });
+          return all;
+        });
+        return out;
+      };
+      var sheetTitle = function () { return (guide.getAttribute("data-sheet-title") || "").trim().toLowerCase(); };
+      var sameNumber = function (c) {
+        var ours = numbers(sheetTitle());
+        return numbers(c.name).some(function (x) {
+          return ours.some(function (y) {
+            return y.n === x.n && (!y.subject || !x.subject || y.subject.indexOf(x.subject) === 0 || x.subject.indexOf(y.subject) === 0);
+          });
+        });
+      };
+      // The sheet's name is for another course ("LAW 615 Privacy"; this one, BUSCOM_615 or LAW_700).
+      var otherCourse = function (c) {
+        return numbers(sheetTitle()).length > 0 && String(c.name).trim().toLowerCase() !== sheetTitle() && !sameNumber(c);
       };
       var matching = function (courses) {
-        var title = (guide.getAttribute("data-sheet-title") || "").trim().toLowerCase();
+        var title = sheetTitle();
         var same = courses.filter(function (c) { return String(c.name).trim().toLowerCase() === title; });
         if (same.length === 1) return same[0];
-        var ours = numbers(title);
-        if (!ours.length) return null;
-        var hits = courses.filter(function (c) {
-          return current(c) && numbers(c.name).some(function (n) { return ours.indexOf(n) >= 0; });
-        });
+        if (!numbers(title).length) return null;
+        var hits = courses.filter(function (c) { return current(c) && sameNumber(c); });
         return hits.length === 1 ? hits[0] : null;
       };
       // Courses on the professor's other sheets, marked in the list.
@@ -1195,7 +1267,7 @@
               + "by email instead.");
             return;
           }
-          if (courses.length === 1 && !choose) { getStudents(courses[0].id, courses[0].name); return; }
+          if (courses.length === 1 && !choose && !otherCourse(courses[0])) { getStudents(courses[0].id, courses[0].name); return; }
           var match = choose ? null : matching(courses);
           if (match) { autoPicked = String(match.id); getStudents(match.id, match.name); return; } // (and "Wrong course?" under the list)
           helperSay("");
@@ -1330,9 +1402,12 @@
       link.addEventListener("click", function (e) {
         e.preventDefault();
         showHere(guide);
-        guide.scrollIntoView({ block: "start", behavior: "smooth" });
+        // (the box's own title, "Class changed in Canvas?", shows above the guide)
+        (guide.closest("details") || guide).scrollIntoView({ block: "start", behavior: "smooth" });
+        var add = guide.querySelector("[data-helper-add]");
         if (helperGo && helperId && ready && !ready.hidden) helperGo.click();
         else if (helperGo && !helperGo.closest("[hidden]")) helperGo.focus({ preventScroll: true });
+        else if (add && !add.closest("[hidden]")) add.focus({ preventScroll: true });
       });
     });
 

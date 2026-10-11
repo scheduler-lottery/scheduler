@@ -14,6 +14,7 @@
   .done { font-weight: 650; color: #2f6b3b; }
   .small { font-size: 13px; color: #6b665c; margin-top: 22px; }
   .next { margin-top: 14px; font-size: 15px; }
+  .refused { margin-top: 14px; font-weight: 650; color: #9b2c1f; }
   code { font-size: 12px; user-select: all; }
   [hidden] { display: none; }
 </style>
@@ -24,6 +25,7 @@
     <p><strong>One last step:</strong> let Scheduler Helper use your Canvas and Scheduler.</p>
     <p>It reads only your students' names and email addresses, and only when you click “Get my class list from Canvas” on Scheduler.</p>
     <button type="button" data-allow>Allow</button>
+    <p class="refused" data-refused hidden>Safari didn't allow it. Click <strong>Allow</strong> again, then <strong>Always Allow on These Websites</strong>.</p>
     <p class="next">Safari then asks about your Canvas and Scheduler: choose <strong>Always Allow on These Websites</strong> (not the one-day choice, or it stops working tomorrow).</p>
   </div>
   <p class="done" data-done hidden>All set. Scheduler's page is back in front: click “Get my class list from Canvas” there. (If it isn't, click Scheduler's tab at the top of the window.) You can close this page.</p>
