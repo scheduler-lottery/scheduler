@@ -14,11 +14,12 @@ days and can take a couple of weeks for a new developer.
 .venv/bin/python tools/build_extension.py store
 ```
 
-The upload is `dist/scheduler-helper.zip`. It is version **1.0.1**, the one to upload
-now. What changed since 1.0.0: when Canvas is left open in a tab and has signed the
-professor out, the helper opens a new Canvas tab to sign in (1.0.0 brought up the old
-tab, which had nowhere to sign in), and Scheduler's page can ask it to bring that page
-back to the front.
+The upload is `dist/scheduler-helper.zip`. It is version **1.0.2**, the one to upload
+now (in place of any earlier one still waiting for review). What changed since 1.0.0:
+the helper signs in from a fresh Canvas tab when an open one has signed the professor
+out; signing in on the professor's own Canvas tab works too; pressing the page's button
+again brings Canvas's sign-in page back to the front; and Scheduler's page can ask it to
+bring that page back to the front.
 
 The screenshots are in `dist/store/`; the browser test makes them:
 
@@ -117,8 +118,8 @@ extensions from other stores" click, and the page says so):
 ## Updates
 
 Bump `version` in `extension/manifest.json`, run `tools/build_extension.py store`
-again, upload the new zip under **Package**, and submit. If 1.0.0 is in the store,
-upload 1.0.1 now: it is already the version in `extension/manifest.json`, so skip
+again, upload the new zip under **Package**, and submit. If 1.0.0 or 1.0.1 is in the
+store, upload 1.0.2 now: it is already the version in `extension/manifest.json`, so skip
 the bump this once. It asks for no new permissions, so Chrome updates professors
 who have the helper without asking them anything.
 

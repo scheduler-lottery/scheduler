@@ -82,4 +82,4 @@ steps on the page:
 
 Raise `version` in `extension/manifest.json`, rebuild, and upload the new zip the same
 way (step 2.3). Apple requires a higher version each time. The first upload is version
-**1.0.1**, as it is now.
+**1.0.2**, as it is now.
