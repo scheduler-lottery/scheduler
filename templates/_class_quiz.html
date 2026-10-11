@@ -11,7 +11,7 @@
     <div class="quiz-choices">
       <button type="button" class="quiz-choice" data-go="{{ 'canvas' if canvas and canvas.saved else 'school' }}">
         <strong>Yes, my class is in Canvas</strong>
-        <span>We'll bring its class list over from Canvas for you.</span>
+        <span>We'll walk you through bringing its class list over.</span>
       </button>
       <button type="button" class="quiz-choice" data-go="other">
         <strong>No, I don't use Canvas</strong>
@@ -23,7 +23,17 @@
   <section class="quiz-step" data-step="school">
     <button type="button" class="quiz-back" data-back>← Back</button>
     <h3 class="quiz-q" tabindex="-1">Which school's Canvas do you use?</h3>
-    {% if canvas %}
+    {% if canvas and canvas.saved %}
+    <p class="quiz-guess">Right now: <strong data-school-name>{{ canvas.name }}</strong> <span class="muted">(<span data-school-domain>{{ canvas.domain }}</span>)</span>.</p>
+    <div class="quiz-choices">
+      <button type="button" class="quiz-choice" data-go="canvas">
+        <strong>Keep this school</strong>
+      </button>
+      <button type="button" class="quiz-choice" data-school-other>
+        <strong>Choose a different school</strong>
+      </button>
+    </div>
+    {% elif canvas %}
     <p class="quiz-guess">From your email address, it looks like <strong>{{ canvas.name }}</strong> <span class="muted">({{ canvas.domain }})</span>.</p>
     <div class="quiz-choices">
       <button type="button" class="quiz-choice" data-school-pick data-domain="{{ canvas.domain }}" data-name="{{ canvas.name }}">
@@ -59,10 +69,16 @@
     {% include "_canvas_guide.html" %}
     <details class="quiz-help">
       <summary>Stuck?</summary>
-      <p data-for="helper"><strong>Not signed in to Canvas?</strong> When Canvas asks, sign in as usual, in the tab that opens. This page carries on by itself.</p>
+      <p data-for="helper"><strong>Can't add Scheduler Helper?</strong> You don't need it: use <strong>Or use Canvas's file of your students instead</strong>, above. It brings the same names and emails.</p>
+      <p data-for="helper"><strong>Not signed in to Canvas?</strong> When Canvas's sign-in page comes up, sign in as usual. You're brought straight back here, and this page carries on.</p>
       <p data-for="helper"><strong>Your course isn't in the list?</strong> Only courses where you're a teacher or TA show. Check you're signed in to Canvas as yourself.</p>
-      <p><strong>Can't find Canvas's file?</strong> Click the box in the last step, then <strong>Downloads</strong> on the left of the window that opens. If Canvas's download became a folder (Safari does that), open it and choose the file with “student” in its name.</p>
-      <p><strong>No Course Analytics in the course menu?</strong> In Canvas, open the course's <strong>Settings</strong>, then <strong>Navigation</strong>. In the lower list, click the <strong>⋮</strong> next to Course Analytics, choose <strong>Enable</strong>, then click <strong>Save</strong> at the bottom.</p>
+      {% if canvas_connect %}
+      <p data-for="connect"><strong>Canvas asks you to “Authorize”?</strong> Canvas asks that for any app. Authorize lets {{ app_name }} read your list of courses and one class list, once; nothing in Canvas changes.</p>
+      <p data-for="connect"><strong>Pressed Cancel by mistake?</strong> Nothing was read. Press Connect Canvas again.</p>
+      {% endif %}
+      <p data-for="file" data-desktop-only><strong>Can't find Canvas's file?</strong> Click the box in the last step, then <strong>Downloads</strong> on the left of the window that opens. It's the newest file there, ending in .zip. If Canvas's download became a folder (Safari on a Mac does that), open it and choose the file with “student” in its name.</p>
+      <p data-for="file" data-phone-only hidden><strong>Can't find Canvas's file?</strong> Tap the box in the last step, then open <strong>Downloads</strong> (on an iPhone: <strong>Browse</strong>, then <strong>Downloads</strong>). It's the newest file there, ending in .zip.</p>
+      <p data-for="file"><strong>No Course Analytics (or New Analytics) in the course menu?</strong> In Canvas, open the course's <strong>Settings</strong>, then <strong>Navigation</strong>. In the lower list, click the <strong>⋮</strong> next to it, choose <strong>Enable</strong>, then click <strong>Save</strong> at the bottom.</p>
       <p><strong>No email addresses came over?</strong> Then students sign in with a PIN instead of an emailed code, which works fine.</p>
       <p><strong>Students missing?</strong> Canvas can take a day or two to list new enrollments, and an unpublished course may show none.</p>
       <p><strong>None of this working?</strong> <button type="button" class="btn-link" data-go="paste">Type or paste your students</button> instead.</p>

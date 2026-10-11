@@ -103,20 +103,29 @@
   <section class="policy-section" id="canvas" data-reveal>
     <h2>Class lists from Canvas</h2>
     <div class="policy-body">
-      <p>An instructor can bring a course's class list over from Canvas in their own browser, signed in to Canvas
-        the usual way. The site never sees a Canvas or school password, and never changes anything in Canvas.</p>
+      <p>An instructor can bring a course's class list over from Canvas, signed in to Canvas the usual way. The site
+        never sees a Canvas or school password, and never changes anything in Canvas.</p>
       <ul>
+        <li><strong>Canvas's student file</strong> (downloaded from Canvas, then chosen here): it comes to this site as
+          soon as the instructor chooses it. Only names and email addresses are kept; everything else in it, such as
+          grades, activity and Canvas's grades file beside it, is thrown away as the file is read, and never saved.</li>
+        {% if helper_ids %}
         <li><strong>Scheduler Helper</strong> (a browser extension, if the instructor adds it): when the instructor
           clicks “Get my class list from Canvas” here, it asks Canvas for their list of courses, then for one course's
           students, and hands this page each student's name and email address. It reads nothing else, does nothing
-          when not asked, keeps nothing, and sends nothing anywhere but this site.
+          when not asked, keeps nothing, and sends nothing anywhere but this site. The list is shown to the instructor
+          first, and comes to this site only when they press the button under it.
           <a href="{{ url_for('helper') }}">More about it</a>.</li>
-        <li><strong>Canvas's student file</strong> (downloaded from Canvas, then uploaded here): only names and email
-          addresses are kept; every other column, such as grades and activity, is thrown away as the file is read.</li>
-        <li>A list from Canvas is shown to the instructor first, and comes to this site only when they press the button
-          under it. If it would change a class list the sheet already has, it waits for them to look it over, and is
-          deleted within a day if they don't. Once added, it's part of the sheet's class list, kept as described
-          here.</li>
+        {% endif %}
+        {% if canvas_connect %}
+        <li><strong>Connect Canvas</strong>: Canvas's own sign-in page, then Canvas asks the instructor to allow this
+          site to read (only) their list of courses and one course's people. When they pick the course, this site reads
+          each student's name and email address from Canvas, then hands the permission straight back to Canvas. It
+          keeps no Canvas password or key.</li>
+        {% endif %}
+        <li>A sheet's first class list goes straight onto the sheet, where the instructor can fix or remove anyone. A
+          list that would change one the sheet already has waits for them to look it over, and is deleted within a day
+          if they don't. Once added, it's part of the sheet's class list, kept as described here.</li>
       </ul>
     </div>
   </section>

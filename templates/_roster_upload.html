@@ -1,22 +1,27 @@
 {# The box for a class-list file: click it to choose the file (or drag the
    file onto it), and it goes in at once (app.js). `drop_id` tells two such
-   boxes on one page apart; `from_canvas` words it for Canvas's student
-   file; `paste_box` (default on) adds "Or paste names". #}
+   boxes on one page apart (and is sent as `box`, so a wrong file comes back
+   to the same box); `from_canvas` words it for Canvas's student file;
+   `replacing` says the professor came here to replace a wrong list;
+   `paste_box` (default on) adds "Or paste names". #}
 {% set drop_id = drop_id if drop_id is defined else 'roster-file' %}
 <form method="post" action="{{ url_for('teach.upload_roster', sid=sheet.id) }}" enctype="multipart/form-data" data-dropzone>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   {% if setup %}<input type="hidden" name="setup" value="1">{% endif %}
-  <input type="file" id="{{ drop_id }}" name="roster" accept=".csv,.tsv,.txt,.xlsx,.zip,text/csv,text/plain,application/zip" class="visually-hidden-file">
+  <input type="hidden" name="box" value="{{ drop_id }}">
+  {% if replacing is defined and replacing %}<input type="hidden" name="replacing" value="1">{% endif %}
+  <input type="file" id="{{ drop_id }}" name="roster" accept=".csv,.tsv,.txt,.xlsx,.zip,text/csv,text/plain,application/zip" class="visually-hidden-file"
+         aria-labelledby="{{ drop_id }}-title" aria-describedby="{{ drop_id }}-sub">
   <label class="dropzone" for="{{ drop_id }}">
     {% if from_canvas is defined and from_canvas %}
-    <span class="dropzone-title">Click here to choose Canvas's file</span>
-    <span class="dropzone-sub">It's in your Downloads folder. Or drag it onto this box.{% if counts.roster %} You'll see what changes before anything is replaced.{% endif %}</span>
+    <span class="dropzone-title" id="{{ drop_id }}-title">Click here to choose Canvas's file</span>
+    <span class="dropzone-sub" id="{{ drop_id }}-sub">The file Canvas just saved in Downloads, ending in .zip.<span class="dropzone-drag"> Or drag it onto this box.</span>{% if counts.roster %} You'll see what changes before anything is replaced.{% endif %}</span>
     {% else %}
-    <span class="dropzone-title">{{ 'Click here to choose the new class list' if counts.roster else 'Click here to choose your class list' }}</span>
-    <span class="dropzone-sub">An Excel or CSV file. Or drag it onto this box.{% if counts.roster %} You'll see what changes before anything is replaced.{% endif %}</span>
+    <span class="dropzone-title" id="{{ drop_id }}-title">{{ 'Click here to choose the new class list' if counts.roster else 'Click here to choose your class list' }}</span>
+    <span class="dropzone-sub" id="{{ drop_id }}-sub">An Excel or CSV file, or Canvas's file of your students (.zip).<span class="dropzone-drag"> Or drag it onto this box.</span>{% if counts.roster %} You'll see what changes before anything is replaced.{% endif %}</span>
     {% endif %}
-    <span class="dropzone-status" data-dropzone-status role="status"></span>
   </label>
+  <p class="dropzone-status" data-dropzone-status role="status"></p>
   <noscript><button class="btn btn-primary" type="submit">Upload</button></noscript>
   {% if paste_box is not defined or paste_box %}
   <details class="paste-box">

@@ -4,7 +4,7 @@
 {% if people %}
 <details class="report-people" open>
   <summary>{{ heading }} ({{ people | length }})</summary>
-  <ol class="report-people-list">
+  <ol class="report-people-list" tabindex="0" aria-label="{{ heading }}: {{ people | length | plural('student') }}">
     {% for r in people %}<li><bdi>{{ r.display_name }}</bdi>{% if r.email %} <span class="muted">{{ r.email }}</span>{% else %} <span class="muted">(no email: signs in with a PIN)</span>{% endif %}{% if r.name_pending %} <span class="tag" title="Added by email alone. This name is made from the address until they sign in and type their own.">name not typed yet</span>{% endif %}</li>{% endfor %}
   </ol>
   <p class="mini-hint">Someone missing, extra, or misspelled? {% if fix_href %}<a href="{{ fix_href }}">Change the list</a>{% else %}Change it under “See or change the list” below{% endif %}: fix a name or email, add a student, or remove one.</p>

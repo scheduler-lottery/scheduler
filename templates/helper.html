@@ -4,15 +4,21 @@
 <article class="card prose">
   <p class="eyebrow">For instructors</p>
   <h1>Scheduler Helper</h1>
-  <p class="lead">A small browser extension that brings your class list from Canvas into {{ app_name }} with one click,
-    so there's nothing to download, copy, or drag.</p>
+  <p class="lead">A small browser extension that brings your class list from Canvas into {{ app_name }} with a button
+    and a pick of your course, so there's nothing to download, copy, or drag.</p>
+  {% if not helper_ids %}
+  <div class="note-box"><p>Scheduler Helper isn't offered on this site yet. For now, the <strong>Your students</strong>
+    step of a new sign-up sheet shows you, click by click, how to download Canvas's file of your students and add it
+    here.</p></div>
+  {% endif %}
 
   <h2>What it does</h2>
   <ul>
-    <li>On a sign-up sheet's <strong>Class list</strong> step, you click <strong>Get my class list from Canvas</strong>.</li>
+    <li>On a sign-up sheet's <strong>Your students</strong> step (or, later, under <strong>Class changed in Canvas?</strong>
+      on its class page), you click <strong>Get my class list from Canvas</strong>.</li>
     <li>The helper asks your school's Canvas for your list of courses, then for the students in the one you pick. It
-      does that as you, signed in to Canvas the usual way. If you aren't signed in, a Canvas tab opens for you to sign
-      in (with Duo, as always), and it carries on after.</li>
+      does that as you, signed in to Canvas the usual way. If you aren't signed in, Canvas's sign-in page comes up for
+      you to sign in (with Duo, as always), and you're brought straight back.</li>
     <li>It hands {{ app_name }}'s page each student's <strong>name and email address</strong>, and nothing else. You
       look the list over, and press Add.</li>
   </ul>
@@ -35,7 +41,8 @@
   <h2>Removing it</h2>
   <p>In Chrome or Edge, open the puzzle-piece menu at the top right, find Scheduler Helper, and choose
     <strong>Remove</strong>. In Safari, open Settings, then Extensions, and untick it (or delete the Scheduler Helper
-    app). Without it, you can still upload Canvas's student file: the Class list step shows where to click.</p>
+    app). Without it, you can still use Canvas's file of your students: the <strong>Your students</strong> step shows
+    where to click.</p>
 
   <p><a href="{{ url_for('privacy') }}#canvas">Privacy: class lists from Canvas</a></p>
 </article>

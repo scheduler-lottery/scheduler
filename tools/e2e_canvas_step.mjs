@@ -8,7 +8,10 @@
 //
 // Chrome and Edge: "Add Scheduler Helper", with their own steps, and the file
 // folded under it. Safari and Firefox (no helper to add yet): the file, open,
-// first. The file: Canvas opens beside the page, and the file goes in.
+// first; an iPhone: a phone's words. The file: Canvas opens beside the page,
+// both files from Safari's folder dropped at once send the student file, and
+// the file goes in. Then the class page: its links open what they point at,
+// and messages come up where screen readers read them.
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -17,7 +20,7 @@ import { join } from "node:path";
 const SITE = process.env.SITE || "http://127.0.0.1:5050";
 const CANVAS = process.env.CANVAS || "http://127.0.0.1:5077";
 const CHROME = process.env.CHROME || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const PORT = 9335;
+const PORT = Number(process.env.DEBUG_PORT || 9335);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failures = 0;
 const check = (ok, what) => { console.log((ok ? "PASS " : "FAIL ") + what); if (!ok) failures++; };
@@ -28,6 +31,7 @@ const chrome = spawn(CHROME, ["--headless=new", `--remote-debugging-port=${PORT}
 
 let ws, nextId = 1;
 const waiting = new Map();
+const thrown = []; // the pages' uncaught errors
 async function connect() {
   for (let i = 0; i < 50; i++) {
     try {
@@ -36,6 +40,7 @@ async function connect() {
       await new Promise((ok, no) => { ws.onopen = ok; ws.onerror = no; });
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
+        if (msg.method === "Runtime.exceptionThrown") thrown.push(msg.params.exceptionDetails);
         if (msg.id && waiting.has(msg.id)) {
           const { ok, no } = waiting.get(msg.id);
           waiting.delete(msg.id);
@@ -123,7 +128,7 @@ try {
   let words = await visibleText();
   check(words.includes("Add to Chrome") && words.includes("Add extension") && !words.includes("Allow extensions from other stores"),
     "with Chrome's own words");
-  check(await evaluate(me, `!document.querySelector("[data-canvas-download]").open`) && words.includes("Or upload Canvas's student file instead"),
+  check(await evaluate(me, `!document.querySelector("[data-canvas-download]").open`) && words.includes("Or use Canvas's file of your students instead"),
     "and the file folded under it");
   check(!/token|bookmark|copy and paste/i.test(words), "and nothing else: no token, no bookmark, no copy and paste");
   await shot("chrome-add-helper.png");
@@ -140,10 +145,41 @@ try {
                                ["Firefox", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:140.0) Gecko/20100101 Firefox/140.0"]]) {
     await as(agent);
     check(!(await shown("[data-helper-add]")) && await evaluate(me, `document.querySelector("[data-canvas-download]").open`)
-      && (await visibleText()).includes("Upload Canvas's student file"), `${name}: no helper to add yet, so the file, first`);
+      && (await visibleText()).includes("Get Canvas's file of your students"), `${name}: no helper to add yet, so the file, first`);
     check(await shown("[data-canvas-download] form[data-dropzone]"), `${name}: and the box for it, in the last step`);
     await shot(`${name.toLowerCase()}-upload-first.png`);
   }
+  check(await evaluate(me, `[...document.querySelectorAll("[data-safari-only]")].every((el) => el.hidden)`),
+    "Firefox: no Safari folder lines");
+
+  // Both files from the folder Safari makes, dragged in together: the student file goes, not the grades file.
+  await evaluate(me, `(() => {
+    HTMLFormElement.prototype.submit = function () { window.__sent = this.querySelector("input[type=file]").files[0].name; };
+    const dt = new DataTransfer();
+    dt.items.add(new File(["Assignment Name,Points Possible\\nMemo,10\\n"], "course_grade.csv", { type: "text/csv" }));
+    dt.items.add(new File(["Name,Email\\nAlex Kim,akim@u.school.edu\\n"], "students.csv", { type: "text/csv" }));
+    document.querySelector("[data-canvas-download] .dropzone").dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+  })()`);
+  check(await until(me, `window.__sent === "students.csv"`, 3000), "both of Safari's files dropped at once: the student file is the one sent");
+
+  // An iPhone: a phone's words, no Mac folder, and nothing about dragging.
+  await send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 2, mobile: true }, me);
+  await send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 }, me);
+  await as("Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1");
+  words = await visibleText();
+  check(await evaluate(me, `document.querySelector("[data-canvas-beside]").textContent`) === "Open Canvas",
+    "iPhone: the button says Open Canvas");
+  check(words.includes("This part is easiest on a computer") && words.includes("Tap the box below") && words.includes("Browse"),
+    "iPhone: what to do on a phone, and how to get back to this page later");
+  check(!words.includes("Safari may turn") && !words.includes("double-click") && !words.includes("on the left of the window"),
+    "iPhone: no Mac folder, no double-clicking, no window with Downloads on its left");
+  check(await evaluate(me, `getComputedStyle(document.querySelector("[data-canvas-download] .dropzone-drag")).display === "none"`),
+    "iPhone: nothing about dragging");
+  await shot("iphone-file.png");
+  await send("Emulation.setTouchEmulationEnabled", { enabled: false }, me);
+  await send("Emulation.clearDeviceMetricsOverride", {}, me);
+  await as("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15");
+  check((await visibleText()).includes("If Safari turned it into a folder"), "Safari on a Mac: the folder line");
 
   // The file: Canvas opens beside this page (a window of its own), and the file goes in.
   await evaluate(me, `(() => { window.__opened = []; window.open = (u, n, f) => { const w = { closed: false, focus() {}, close() { w.closed = true; } };
@@ -162,6 +198,25 @@ try {
   check(await until(me, `document.readyState === "complete" && /Added 2 students/.test(document.body.innerText)`, 10000),
     "the downloaded file goes in: 2 students");
   check(await until(me, `document.body.innerText.includes("Who's on your list (2)")`), "named, right there");
+  check(await until(me, `document.activeElement && document.activeElement.hasAttribute("data-focus-on-load")`, 4000),
+    "and the report of what was added has the focus (so it's read out)");
+
+  // The class page: a link to a folded card opens it (and nothing throws).
+  thrown.length = 0;
+  await send("Page.navigate", { url: `${SITE}/teach/s/${sid}` }, me);
+  await loaded(me, `${SITE}/teach/s/${sid}`);
+  await sleep(400);
+  await evaluate(me, `(() => { try { localStorage.clear(); } catch (e) {} document.getElementById("try-it").open = false; location.hash = "#try-it"; })()`);
+  check(await until(me, `document.getElementById("try-it").open`, 3000), "class page: a link to See it as a student opens it");
+  await evaluate(me, `(() => { document.getElementById("share").open = false; location.hash = "#share"; })()`);
+  check(await until(me, `document.getElementById("share").open`, 3000), "and a link to Share opens Share");
+  // A message after adding a student: brought up over the page, where screen readers read it, and gone after a while.
+  await evaluate(me, `(() => { const f = document.querySelector("form.quick-add"); f.querySelector("textarea").value = "Dana Ho, dana@u.school.edu"; f.requestSubmit(); })()`);
+  await loaded(me, `${SITE}/teach/s/${sid}`);
+  check(await until(me, `(() => { const s = document.querySelector("[data-flash-stack]"); return !!s && s.parentElement === document.body; })()`, 4000),
+    "class page: the message comes up where screen readers read it");
+  check(await until(me, `!document.querySelector("[data-flash-stack] .flash")`, 12000), "and good news fades after a while");
+  check(!thrown.length, "no errors on the page" + (thrown.length ? ": " + JSON.stringify(thrown[0]).slice(0, 300) : ""));
 } catch (err) {
   console.log("FAIL " + err.message);
   failures++;

@@ -85,12 +85,28 @@
     if (!document.documentElement.classList.contains("fonts-loading")) {
       arrive();
     } else {
-      var arrived = false;
-      var once = function () { if (!arrived) { arrived = true; arrive(); } };
+      var flashShown = false;
+      var once = function () { if (!flashShown) { flashShown = true; arrive(); } };
       document.addEventListener("page-shown", once);
       setTimeout(once, 3100); // the page shows by itself after 3 seconds
     }
   }
+
+  // Once the page shows (a page still hidden while its fonts load can't
+  // take focus): run `then`.
+  var whenShown = function (then) {
+    if (document.documentElement.classList.contains("fonts-loading")) document.addEventListener("page-shown", then);
+    else then();
+  };
+  // The box a page asks to be typed in, and a report of what just happened
+  // (a class list just added: data-focus-on-load), get the focus, so
+  // keyboards start there and screen readers read it out.
+  whenShown(function () {
+    var first = document.querySelector("[data-focus-on-load]") || document.querySelector("[autofocus]");
+    if (first && (!document.activeElement || document.activeElement === document.body)) {
+      first.focus({ preventScroll: first.hasAttribute("autofocus") });
+    }
+  });
 
   // Close buttons on the notes pinned to the bottom of the screen.
   document.addEventListener("click", function (e) {
@@ -219,13 +235,30 @@
     card.addEventListener("toggle", function () { store(key, card.open ? "open" : "closed"); });
   });
   // A link to something folded away (a card, a "Modify this"): unfold it.
+  // A link to a file box (back from a wrong file): its question shows, and
+  // the box is ready to click, with its step marked.
   var reveal = function (scroll) {
     var target = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)));
     if (!target) return;
     for (var el = target; el; el = el.parentElement) {
       if (el.tagName === "DETAILS") el.open = true;
     }
-    if (scroll) target.scrollIntoView({ block: "start" });
+    var step = target.closest(".quiz-step[data-step]");
+    var quiz = step && step.closest("[data-quiz]");
+    if (quiz) {
+      var name = step.getAttribute("data-step");
+      try { sessionStorage.setItem("quiz-step-" + quiz.getAttribute("data-sheet"), name); } catch (e) { /* fine */ }
+      quiz.dispatchEvent(new CustomEvent("quiz-go", { detail: name }));
+    }
+    var isFile = target.matches("input[type=file]");
+    var shown = isFile ? (target.closest("[data-canvas-step]") || target.form || target) : target;
+    if (shown.matches("[data-canvas-step]")) shown.classList.add("is-next");
+    // (Once the rest of this script has laid out the page: the questions
+    // show just the one step.)
+    setTimeout(function () {
+      if (scroll) shown.scrollIntoView({ block: isFile ? "center" : "start" });
+      if (isFile) whenShown(function () { target.focus({ preventScroll: true }); });
+    }, 0);
   };
   reveal(true);
   window.addEventListener("hashchange", function () { reveal(true); });
@@ -245,14 +278,18 @@
   }
 
   // Class-list upload: pick a file (or drop one) and it uploads right away.
-  // A dropped folder (Safari unzips Canvas's download into one) gives up
-  // its student file; a file dropped anywhere else on the page goes to the
-  // box in view, rather than replacing the page.
+  // A dropped folder (Safari unzips Canvas's download into one), or both
+  // files from it dropped at once, gives up its student file, not the
+  // grades file beside it; a file dropped anywhere else on the page goes to
+  // the box in view, rather than replacing the page.
+  var pickList = function (items) { // files, or a folder's entries: anything with a .name
+    var lists = items.filter(function (x) { return /\.(csv|tsv|txt|xlsx|zip)$/i.test(x.name); });
+    return lists.filter(function (x) { return /student/i.test(x.name); })[0] || lists[0] || null;
+  };
   var dropFolder = function (entry, done) {
     var reader = entry.createReader();
     reader.readEntries(function (entries) {
-      var csv = entries.filter(function (x) { return x.isFile && /\.(csv|tsv|txt|xlsx)$/i.test(x.name); });
-      var pick = csv.filter(function (x) { return /student/i.test(x.name); })[0] || csv[0];
+      var pick = pickList(entries.filter(function (x) { return x.isFile; }));
       if (!pick) { done(null); return; }
       pick.file(function (file) { done(file); }, function () { done(null); });
     }, function () { done(null); });
@@ -269,6 +306,7 @@
       if (status) status.textContent = "Reading “" + input.files[0].name + "”…";
       var pasted = form.querySelector('textarea[name="pasted"]');
       if (pasted) pasted.value = "";
+      form.dispatchEvent(new CustomEvent("file-chosen", { bubbles: true })); // (Canvas beside the page can close)
       form.submit();
     }
     form.takeDrop = function (dt) {
@@ -288,7 +326,9 @@
         return;
       }
       if (!dt.files.length) return;
-      input.files = dt.files;
+      var one = new DataTransfer(); // (the box takes one file)
+      one.items.add(pickList(Array.prototype.slice.call(dt.files)) || dt.files[0]);
+      input.files = one.files;
       upload();
     };
 
@@ -474,8 +514,11 @@
           if (!answer.ok) { if (status) status.textContent = answer.data.error || "That didn't work. Try again."; return; }
           quiz.setAttribute("data-canvas-host", answer.data.domain);
           quiz.dispatchEvent(new CustomEvent("canvas-school")); // (the Canvas step's offer may change)
-          var named = quiz.querySelector("[data-school-name]");
-          if (named) named.textContent = answer.data.name;
+          quiz.querySelectorAll("[data-school-name]").forEach(function (el) { el.textContent = answer.data.name; });
+          quiz.querySelectorAll("[data-school-domain]").forEach(function (el) { el.textContent = answer.data.domain; });
+          // (Next time, "Change" asks the short question again; the search
+          // keeps what was found, for "a different school".)
+          if (search && search.hasAttribute("data-start-hidden")) search.hidden = true;
           var home = quiz.querySelector("[data-canvas-home]");
           if (home) home.href = "https://" + answer.data.domain + "/courses";
           var course = document.getElementById("canvas-course");
@@ -529,9 +572,10 @@
                 results.appendChild(item);
               });
               if (status) {
-                status.textContent = (data.schools || []).length
-                  ? "Pick yours."
-                  : "No school by that name. Try another spelling, or use “My school isn't listed” below.";
+                status.textContent = !(data.schools || []).length
+                  ? "No school by that name. Try another spelling, or use “My school isn't listed” below."
+                  : data.more ? "Pick yours. Not there? Type more of its name, like “University of Chicago”."
+                  : "Pick yours.";
               }
             })
             .catch(function () { if (status) status.textContent = "Couldn't search just now. Try again, or type the address below."; });
@@ -561,11 +605,12 @@
   // Whichever way, the list shows here first; nothing changes until the
   // professor presses the button under it.
   var guide = document.querySelector("[data-canvas-guide]");
-  if (guide) {
+  if (guide) (function () { // (its own scope: its names never clash with the rest of this file's)
     var quizBox = guide.closest("[data-quiz]");
     var stepBox = guide.closest(".quiz-step") || guide.parentNode;
     var panel = guide.closest("[data-canvas-panel]") || guide.parentNode;
     var savedCourse = guide.getAttribute("data-canvas-course-id") || "";
+    var forgotCourse = ""; // this sheet's course, which Canvas no longer has: the next list's course replaces it
     var hasList = guide.hasAttribute("data-has-list");
     var ua = navigator.userAgent;
     var isEdge = /Edg\//.test(ua);
@@ -596,12 +641,20 @@
       return canvasBase() + "/courses/" + savedCourse
         + (tool ? "/external_tools/" + tool + "?launch_type=course_navigation" : "");
     };
-    if (isSafari) guide.querySelectorAll("[data-safari-only]").forEach(function (el) { el.hidden = false; });
-    if (isPhone) guide.querySelectorAll("[data-phone-only]").forEach(function (el) { el.hidden = false; });
+    // Words for this kind of computer: Safari on a Mac unzips Canvas's
+    // download into a folder (Safari on a phone doesn't); phones tap, and
+    // have no window with Downloads on its left.
+    if (isSafari && !isPhone) stepBox.querySelectorAll("[data-safari-only]").forEach(function (el) { el.hidden = false; });
+    if (isPhone) {
+      stepBox.querySelectorAll("[data-phone-only]").forEach(function (el) { el.hidden = false; });
+      stepBox.querySelectorAll("[data-desktop-only]").forEach(function (el) { el.hidden = true; });
+    }
+    var pageName = document.title.split(" — ")[0];
+    guide.querySelectorAll("[data-page-title]").forEach(function (el) { el.textContent = pageName; });
 
     // Something to show in the guide: its step of the class-list questions
     // comes into view, and any folded section around it opens.
-    var reveal = function (el) {
+    var showHere = function (el) {
       for (var d = el.closest("details"); d; d = d.parentElement && d.parentElement.closest("details")) d.open = true;
       var step = stepBox.getAttribute && stepBox.getAttribute("data-step");
       if (quizBox && step) quizBox.dispatchEvent(new CustomEvent("quiz-go", { detail: step }));
@@ -610,12 +663,12 @@
     // Canvas beside this page, for downloading the file: a window on the
     // right (or a tab), with the picture steps on the left. It's cut off from
     // this page (no window.opener): it only needs to show Canvas.
-    var helper = null;
+    var canvasWindow = null;
     var watching = null;
     var download = guide.querySelector("[data-canvas-download]");
     var opener = guide.querySelector("[data-canvas-beside]");
     var done = guide.querySelector("[data-canvas-close]");
-    var openLabel = isPhone ? "Open Canvas in a new tab" : "Open Canvas beside this page";
+    var openLabel = isPhone ? "Open Canvas" : "Open Canvas beside this page";
     opener.textContent = openLabel;
     var guideOn = function (on) {
       document.documentElement.classList.toggle("canvas-beside", on);
@@ -626,32 +679,39 @@
     var watch = function () {
       clearInterval(watching);
       watching = setInterval(function () {
-        if (!helper || helper.closed) { clearInterval(watching); guideOn(false); }
+        if (!canvasWindow || canvasWindow.closed) { clearInterval(watching); guideOn(false); }
       }, 1000);
     };
     opener.addEventListener("click", function () {
-      if (helper && !helper.closed) { helper.focus(); return; } // already open: just bring it forward
+      if (canvasWindow && !canvasWindow.closed) { canvasWindow.focus(); return; } // already open: just bring it forward
       var url = analyticsUrl();
       var width = Math.min(screen.availWidth - 380, Math.max(760, Math.round(screen.availWidth * 0.6)));
-      helper = (isPhone ? null : window.open("", "scheduler-canvas", "popup=yes,width=" + width + ",height="
+      canvasWindow = (isPhone ? null : window.open("", "scheduler-canvas", "popup=yes,width=" + width + ",height="
         + screen.availHeight + ",left=" + ((screen.availLeft || 0) + screen.availWidth - width) + ",top=" + (screen.availTop || 0)))
         || window.open("", "scheduler-canvas");
-      if (!helper) return;
-      try { helper.opener = null; } catch (err) { /* fine */ }
-      helper.location.href = url;
+      if (!canvasWindow) return;
+      try { canvasWindow.opener = null; } catch (err) { /* fine */ }
+      canvasWindow.location.href = url;
       if (!isPhone) guideOn(true);
       watch();
     });
     done.addEventListener("click", function () {
       guideOn(false);
-      if (helper && !helper.closed) helper.close();
+      if (canvasWindow && !canvasWindow.closed) canvasWindow.close();
+    });
+    // Canvas's file chosen: Canvas's window has done its job.
+    guide.addEventListener("file-chosen", function () {
+      if (canvasWindow && !canvasWindow.closed) canvasWindow.close();
     });
 
     // A class list, here to look over before anything changes.
-    var arrived = guide.querySelector("[data-canvas-arrived]");
+    var arrivedBox = guide.querySelector("[data-canvas-arrived]");
     var ready = guide.querySelector("[data-helper-ready]");
     var help = stepBox.querySelector && stepBox.querySelector(".quiz-help");
     var upload = download;
+    var connectBox = guide.querySelector("[data-connect]");
+    var helperBox = guide.querySelector("[data-helper]");
+    var helperId = null;
     // While a list waits here, it's the one thing to do.
     var tidy = function (on) {
       if (ready) ready.hidden = on || !helperId;
@@ -660,24 +720,25 @@
       if (upload && !upload.classList.contains("is-first")) upload.hidden = on;
     };
     var showArrived = function (list, origin, how) {
-      reveal(arrived);
+      showHere(arrivedBox);
       var people = list.students.filter(function (p) { return p && typeof p === "object" && (p.name || p.email); })
         .map(function (p) { return { name: String(p.name || "").slice(0, 120), email: String(p.email || "").slice(0, 254) }; });
       var emails = people.filter(function (p) { return p.email; }).length;
       var count = people.length + (people.length === 1 ? " student" : " students");
       var course = String(list.course || "your Canvas course").slice(0, 200);
-      arrived.textContent = "";
+      arrivedBox.textContent = "";
       var add = function (tag, text, cls, into) {
         var el = document.createElement(tag);
         if (text) el.textContent = text;
         if (cls) el.className = cls;
-        (into || arrived).appendChild(el);
+        (into || arrivedBox).appendChild(el);
         return el;
       };
       add("p", "From Canvas · " + origin.replace(/^https?:\/\//, ""), "eyebrow");
-      var title = add("h4", (hasList ? count + " in " + course + " in Canvas now" : count + " from " + course),
-                      "canvas-arrived-title");
-      title.id = "arrived-title-" + guide.getAttribute("data-sheet");
+      var heading = add(guide.hasAttribute("data-setup") ? "h4" : "h3",
+                        (hasList ? count + " in " + course + " in Canvas now" : count + " from " + course),
+                        "canvas-arrived-title");
+      heading.id = "arrived-title-" + guide.getAttribute("data-sheet");
       var hint = add("p", hasList ? "Nothing changes until you've seen who's new and who's gone."
         : emails === people.length ? "All with email addresses, so each can sign in with an emailed code."
         : emails ? emails + " with email addresses. The rest sign in with a PIN (usually students who haven't "
@@ -685,7 +746,7 @@
         : "Canvas didn't share their email addresses, so they'll sign in with a PIN.", "mini-hint");
       hint.id = "arrived-hint-" + guide.getAttribute("data-sheet");
       var names = add("details", "", "arrived-names");
-      add("summary", "See the names", "", names);
+      add("summary", people.length === 1 ? "See the name" : "See all " + people.length + " names", "", names);
       var ol = add("ol", "", "arrived-list", names);
       people.forEach(function (p) {
         add("li", (p.name || p.email) + (p.name && p.email ? " · " + p.email : ""), "", ol);
@@ -704,33 +765,68 @@
       field("list", JSON.stringify({ type: "scheduler-class-list", v: 2, courseId: String(list.courseId || ""),
                                      course: course, host: origin.replace(/^https?:\/\//, ""), students: people }));
       field("how", how);
+      if (forgotCourse) field("forget_course", forgotCourse);
       if (guide.hasAttribute("data-setup")) field("setup", "1");
       var go = document.createElement("button");
       go.type = "submit";
       go.className = "btn btn-primary btn-large";
       go.textContent = hasList ? "See what changes" : "Add " + count;
-      go.setAttribute("aria-describedby", title.id + " " + hint.id);
+      go.setAttribute("aria-describedby", heading.id + " " + hint.id);
       form.appendChild(go);
       if (how === "helper") {
         var other = add("button", "Wrong course? Pick a different one", "btn-link arrived-other");
         other.type = "button";
         other.addEventListener("click", function () {
-          arrived.hidden = true;
+          arrivedBox.hidden = true;
           savedCourse = ""; // ask which, this time
           tidy(false);
           helperGo.click();
         });
       }
       tidy(true);
-      arrived.hidden = false;
-      arrived.scrollIntoView({ block: "center", behavior: "smooth" });
+      arrivedBox.hidden = false;
+      arrivedBox.scrollIntoView({ block: "center", behavior: "smooth" });
       go.focus({ preventScroll: true });
+    };
+
+    // "Stuck?" speaks to the way on screen: Connect Canvas or Scheduler
+    // Helper. (Its lines about Canvas's file always show: the file is
+    // always there.)
+    var showHelp = function () {
+      if (!help) return;
+      var route = connectBox && !connectBox.hidden ? "connect"
+        : helperBox && !helperBox.hidden && !(upload && upload.classList.contains("is-first")) ? "helper" : "file";
+      help.querySelectorAll('[data-for="helper"], [data-for="connect"]').forEach(function (p) {
+        p.hidden = p.getAttribute("data-for") !== route;
+      });
+    };
+    // With no helper to offer, the file is the way: open, and said plainly;
+    // and back again, when a school it reads is chosen after all.
+    var uploadTitle = upload && upload.querySelector("[data-upload-title]");
+    var uploadWas = uploadTitle ? uploadTitle.textContent : "";
+    var uploadFirst = function () {
+      if (helperBox) helperBox.hidden = true;
+      if (upload && !upload.classList.contains("is-first")) {
+        upload.open = true;
+        upload.classList.add("is-first");
+        if (uploadTitle) uploadTitle.textContent = uploadTitle.getAttribute("data-upload-title");
+        opener.classList.replace("btn-secondary", "btn-primary"); // the one thing to do first
+      }
+      showHelp();
+    };
+    var uploadSecond = function () {
+      if (upload && upload.classList.contains("is-first")) {
+        upload.classList.remove("is-first");
+        upload.open = false;
+        if (uploadTitle) uploadTitle.textContent = uploadWas;
+        opener.classList.replace("btn-primary", "btn-secondary");
+      }
+      showHelp();
     };
 
     // Scheduler Helper. It answers only this site (its manifest says so).
     // The page talks to it over a port, which keeps it awake through a Canvas
     // sign-in (single messages if a browser has no ports).
-    var helperBox = guide.querySelector("[data-helper]");
     var helperIds = (guide.getAttribute("data-helper-ids") || "").split(",").filter(Boolean);
     var coveredHosts = (guide.getAttribute("data-helper-hosts") || "").split(",").filter(Boolean);
     var covered = function () { return coveredHosts.indexOf(host()) >= 0; };
@@ -740,28 +836,27 @@
       if (window.chrome && chrome.runtime && chrome.runtime.sendMessage) return chrome.runtime;
       return null;
     };
-    var helperId = null;
     var helperHosts = [];
-    // With no helper to offer, the file is the way: open, and said plainly.
-    var uploadFirst = function () {
-      if (!upload || upload.classList.contains("is-first")) return;
-      upload.open = true;
-      upload.classList.add("is-first");
-      var titleSpan = upload.querySelector("[data-upload-title]");
-      if (titleSpan) titleSpan.textContent = titleSpan.getAttribute("data-upload-title");
-      opener.classList.replace("btn-secondary", "btn-primary"); // the one thing to do first
-      if (help) help.querySelectorAll('[data-for="helper"]').forEach(function (p) { p.hidden = true; });
-      if (helperBox) helperBox.hidden = true;
-    };
     var canOffer = function () { return !!helperBox && helperIds.length && !isPhone && covered(); };
-    if (!guide.querySelector("[data-connect]") && !canOffer()) uploadFirst();
+    var offerHelper = null; // (decide, below, where a helper can be offered)
+    if (connectBox && !connectBox.hidden) showHelp();
+    else if (!canOffer()) uploadFirst();
+    // The school changed on this page: what's offered may change with it.
+    // Connect Canvas reads only the school whose key this site has.
+    if (quizBox) quizBox.addEventListener("canvas-school", function () {
+      if (connectBox) {
+        connectBox.hidden = host() !== guide.getAttribute("data-connect-host");
+        if (!connectBox.hidden) { uploadSecond(); return; }
+      }
+      if (offerHelper && canOffer()) offerHelper(); else uploadFirst();
+    });
     if (helperBox && helperIds.length && !isPhone) {
       var helperSaid = guide.querySelector("[data-helper-said]");
       var helperCourses = guide.querySelector("[data-helper-courses]");
       var helperGo = guide.querySelector("[data-helper-go]");
       var busy = false;
       var setBusy = function (on) { busy = on; helperGo.toggleAttribute("aria-disabled", on); };
-      var wantsHelper = false; // pressed "Add Scheduler Helper": carry on once it's there
+      var wantsHelper = false; // pressed "Add Scheduler Helper": watch for it, and say what's next once it's there
       var helperSay = function (text) { helperSaid.textContent = text; }; // (always in the page, so it's read out)
       // The browser's own words in the install steps.
       var browserName = isEdge ? "Edge" : isSafari ? "Safari" : "Chrome";
@@ -807,6 +902,7 @@
         helperBox.hidden = false;
         guide.querySelector("[data-helper-install]").hidden = true;
         ready.hidden = false;
+        uploadSecond();
         if (hadFocus) helperGo.focus();
       };
       var decide = function () {
@@ -817,27 +913,44 @@
             helperBox.hidden = false;
             guide.querySelector("[data-helper-install]").hidden = false;
             guide.querySelector("[data-helper-add]").href = storeUrl;
+            uploadSecond();
           } else {
             uploadFirst(); // nothing to add in this browser (yet): the file it is
           }
         });
       };
+      offerHelper = decide;
       if (canOffer()) decide();
-      // The school changed on this page: the offer may change with it.
-      if (quizBox) quizBox.addEventListener("canvas-school", function () { if (canOffer()) decide(); else uploadFirst(); });
-      guide.querySelector("[data-helper-add]").addEventListener("click", function () {
-        wantsHelper = true;
-        helperSay("Once " + browserName + " says Scheduler Helper was added, close that tab. This page carries on by itself.");
-      });
-      // Back from the store with it added: the page notices, and carries on.
+      // Added from the store: the page notices (while the store is still in
+      // front, too), asks the helper to bring this page back to the front,
+      // and points at the button. It reads nothing until that's pressed.
+      var looking = false;
       var lookAgain = function () {
-        if (helperId || !canOffer()) return;
+        if (helperId || looking || !canOffer()) return;
+        looking = true;
         findHelper(function (found) {
+          looking = false;
           if (!found) return;
           showReady();
-          if (wantsHelper) { wantsHelper = false; helperGo.click(); }
+          if (!wantsHelper) return;
+          wantsHelper = false;
+          call(helperId, { type: "front" }, function () { /* (an older helper doesn't know how: fine) */ });
+          helperSay("Scheduler Helper is added. Now press Get my class list from Canvas.");
+          helperGo.scrollIntoView({ block: "center" });
+          helperGo.focus({ preventScroll: true });
         });
       };
+      var watchStore = null;
+      guide.querySelector("[data-helper-add]").addEventListener("click", function () {
+        wantsHelper = true;
+        helperSay("Once " + browserName + " says Scheduler Helper was added, this page comes back by itself.");
+        clearInterval(watchStore);
+        var until = Date.now() + 10 * 60 * 1000;
+        watchStore = setInterval(function () {
+          if (!wantsHelper || helperId || Date.now() > until) { clearInterval(watchStore); return; }
+          lookAgain();
+        }, 1500);
+      });
       window.addEventListener("focus", lookAgain);
       document.addEventListener("visibilitychange", function () { if (!document.hidden) lookAgain(); });
 
@@ -858,7 +971,7 @@
           port.onMessage.addListener(function (msg) {
             if (msg && msg.type === "wait") return; // still signing in
             if (msg && msg.type === "signin") {
-              helperSay("Sign in to Canvas in the tab that just opened. This page carries on by itself after.");
+              helperSay("Canvas's sign-in page just came up. Sign in there as usual, and you'll be brought back here.");
               return;
             }
             clearInterval(beat);
@@ -870,7 +983,7 @@
           return;
         }
         var slow = setTimeout(function () {
-          if (!answered) helperSay("Still working. If a Canvas tab opened, sign in there; this page carries on by itself.");
+          if (!answered) helperSay("Still working. If Canvas's sign-in page came up, sign in there as usual; you'll be brought back here.");
         }, 4000);
         call(helperId, request, function (msg) { clearTimeout(slow); answer(msg); });
       };
@@ -884,52 +997,38 @@
           : why === "signin" || why === "closed" ? "Canvas sign-in didn't finish. Press Get my class list from Canvas to try again."
           : why === "access" && isSafari ? "Safari needs your OK first. A Scheduler Helper page just opened: click Allow "
             + "there, then come back and press Get my class list from Canvas again."
-          : why === "access" ? browserName + " is keeping Scheduler Helper away from " + school + ". Upload Canvas's "
-            + "student file instead (below), or let the helper read " + school + " in " + browserName + "'s Extensions "
+          : why === "access" ? browserName + " is keeping Scheduler Helper away from " + school + ". Use Canvas's file "
+            + "of your students instead (below), or let the helper read " + school + " in " + browserName + "'s Extensions "
             + "settings, and press Get my class list from Canvas again."
-          : why === "host" ? "Scheduler Helper doesn't know your school's Canvas yet. Upload Canvas's student file instead (below)."
+          : why === "host" ? "Scheduler Helper doesn't know your school's Canvas yet. Use Canvas's file of your students instead (below)."
           : "Canvas didn't answer just now. Wait a minute, then press Get my class list from Canvas again.");
         if (why === "host" || (why === "access" && !isSafari)) uploadFirst();
         if (!helperBox.contains(document.activeElement)) helperGo.focus();
-      };
-      var getStudents = function (courseId, label) {
-        setBusy(true);
-        helperSay("Getting the class list" + (label ? " for " + label : "") + "…");
-        ask({ type: "students", host: host(), courseId: courseId }, function (msg) {
-          setBusy(false);
-          if (msg.type !== "students") { trouble(msg.why); return; }
-          var c = msg.course || {};
-          var name = (c.name || label || "your Canvas course") + (c.term ? " (" + c.term + ")" : "");
-          if (!msg.students || !msg.students.length) {
-            tidy(false);
-            helperSay(name + " has no students in Canvas yet. If it isn't published, or students just enrolled, Canvas may "
-              + "not list them for a day or two.");
-            return;
-          }
-          helperSay("");
-          showArrived({ course: name, courseId: String(c.id || courseId), students: msg.students }, canvasBase(), "helper");
-        });
       };
       var current = function (c) {
         var from = Date.parse(c.start || ""), to = Date.parse(c.end || ""), today = Date.now();
         return (isNaN(from) || from <= today) && (isNaN(to) || to >= today);
       };
-      helperGo.addEventListener("click", function () {
-        if (busy) return;
-        if (helperHosts.length && helperHosts.indexOf(host()) < 0) { trouble("host"); return; }
-        helperCourses.hidden = true;
-        arrived.hidden = true;
-        if (savedCourse) { getStudents(savedCourse, ""); return; } // this sheet's course, from last time
+      var pickNote = ""; // said above the courses, the once
+      var getCourses = function () {
         setBusy(true);
         helperSay("Getting your courses from Canvas…");
         ask({ type: "courses", host: host() }, function (msg) {
           setBusy(false);
+          var note = pickNote;
+          pickNote = "";
           if (msg.type !== "courses") { trouble(msg.why); return; }
           var courses = (msg.courses || []).slice().sort(function (a, b) { return (current(b) ? 1 : 0) - (current(a) ? 1 : 0); });
-          if (!courses.length) { helperSay("Canvas doesn't list you as a teacher of any course."); return; }
+          if (!courses.length) { helperSay((note ? note + " " : "") + "Canvas doesn't list you as a teacher of any course."); return; }
           if (courses.length === 1) { getStudents(courses[0].id, courses[0].name); return; }
           helperSay("");
           helperCourses.textContent = "";
+          if (note) {
+            var said = document.createElement("p");
+            said.className = "mini-hint";
+            said.textContent = note;
+            helperCourses.appendChild(said);
+          }
           var question = document.createElement("p");
           question.id = "helper-courses-q-" + guide.getAttribute("data-sheet");
           question.className = "helper-courses-q";
@@ -944,9 +1043,9 @@
               + (typeof c.students === "number" ? " · " + c.students + (c.students === 1 ? " student" : " students") : "")
               + (c.published === false ? " (not published yet)" : "");
             b.addEventListener("click", function () {
-              helperGo.focus({ preventScroll: true });
               helperCourses.hidden = true;
               ready.hidden = false;
+              helperGo.focus({ preventScroll: true }); // (where the list's news is said, while it comes)
               getStudents(c.id, c.name);
             });
             helperCourses.appendChild(b);
@@ -955,31 +1054,81 @@
           helperCourses.hidden = false;
           question.focus();
         });
+      };
+      var getStudents = function (courseId, label) {
+        setBusy(true);
+        helperSay("Getting the class list" + (label ? " for " + label : "") + "…");
+        ask({ type: "students", host: host(), courseId: courseId }, function (msg) {
+          setBusy(false);
+          if (msg.type !== "students") {
+            // The course this sheet's list came from, gone from Canvas (or
+            // no longer theirs): which course it is now, from their list.
+            if ((msg.why === "missing" || msg.why === "forbidden") && savedCourse && String(courseId) === savedCourse) {
+              forgotCourse = savedCourse;
+              savedCourse = "";
+              pickNote = "Canvas no longer has the course this sheet's list came from (it may have been deleted or "
+                + "merged, or you're no longer on it).";
+              getCourses();
+              return;
+            }
+            trouble(msg.why);
+            return;
+          }
+          var c = msg.course || {};
+          var name = (c.name || label || "your Canvas course") + (c.term ? " (" + c.term + ")" : "");
+          if (!msg.students || !msg.students.length) {
+            tidy(false);
+            helperSay(name + " has no students in Canvas yet. If it isn't published, or students just enrolled, Canvas may "
+              + "not list them for a day or two.");
+            return;
+          }
+          helperSay("");
+          showArrived({ course: name, courseId: String(c.id || courseId), students: msg.students }, canvasBase(), "helper");
+        });
+      };
+      helperGo.addEventListener("click", function () {
+        if (busy) return;
+        if (helperHosts.length && helperHosts.indexOf(host()) < 0) { trouble("host"); return; }
+        helperCourses.hidden = true;
+        arrivedBox.hidden = true;
+        if (savedCourse) { getStudents(savedCourse, ""); return; } // this sheet's course, from last time
+        getCourses();
       });
     }
 
-    // Back from Canvas (this tab looked at again) after opening it for the
-    // file: point at the last step and its box.
+    // Back from Canvas (this page hidden, then looked at again: a tab, or a
+    // phone) after opening it for the file: point at the last step, and its
+    // box is ready to click. (Beside this page, the steps never left.)
     var canvasSteps = guide.querySelector("[data-canvas-steps]");
     var welcome = guide.querySelector("[data-canvas-welcome]");
     var dropBox = guide.querySelector("form[data-dropzone]");
     var went = false;
+    var wasHidden = false;
     guide.querySelectorAll("[data-canvas-went]").forEach(function (link) {
-      link.addEventListener("click", function () { went = true; });
+      link.addEventListener("click", function () { went = true; wasHidden = false; });
     });
     var cameBack = function () {
-      if (!went || document.visibilityState === "hidden" || !welcome) return;
+      if (document.visibilityState === "hidden") { wasHidden = true; return; }
+      if (!went || !wasHidden || !welcome) return;
       went = false;
-      welcome.textContent = "Welcome back. Downloaded Canvas's file? Click the box in the last step and choose it from "
-        + "your Downloads folder. Not there yet? The pictures show where to click in Canvas.";
+      wasHidden = false;
+      welcome.textContent = isPhone
+        ? "Welcome back. Has Canvas saved its file? Tap the box in step 4 and choose it: it's in Downloads, and its "
+          + "name ends in .zip. Not yet? The pictures show where to tap in Canvas."
+        : "Welcome back. Downloaded Canvas's file? Follow step 4: click the box, then Downloads on the left of the "
+          + "window that opens. Not there yet? The pictures show where to click in Canvas.";
       if (canvasSteps) canvasSteps.querySelectorAll("[data-canvas-step]").forEach(function (li) {
         li.classList.toggle("is-next", li.getAttribute("data-canvas-step") === "drop");
       });
-      if (dropBox && dropBox.offsetParent !== null) dropBox.scrollIntoView({ block: "center", behavior: "smooth" });
+      if (dropBox && dropBox.offsetParent !== null) {
+        var file = dropBox.querySelector("input[type=file]");
+        if (file) file.focus({ preventScroll: true });
+        dropBox.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
     };
     document.addEventListener("visibilitychange", cameBack);
     window.addEventListener("focus", cameBack);
-  }
+  })();
 
   // Name fields start read-only so browsers don't autofill a stranger's name
   // into them; unlock on focus.

@@ -1443,7 +1443,10 @@ section[id], main[id] { scroll-margin-top: 80px; }
 }
 .dropzone-title { font-weight: 650; font-size: 1.05rem; }
 .dropzone-sub { color: var(--muted); font-size: 0.9rem; }
-.dropzone-status { color: var(--accent-strong); font-size: 0.9rem; font-weight: 600; }
+.dropzone-status { margin: 6px 0 0; color: var(--accent-strong); font-size: 0.9rem; font-weight: 600; text-align: center; }
+.dropzone-status:empty { display: none; }
+/* Phones and tablets can't drag a file onto the box: no need to say so. */
+@media (hover: none) and (pointer: coarse) { .dropzone-drag { display: none; } }
 .paste-box { margin-top: 10px; }
 .paste-box > summary { cursor: pointer; color: var(--accent-strong); font-size: 0.92rem; padding: 4px 0; }
 .paste-box textarea { width: 100%; margin: 6px 0 8px; }
@@ -3051,6 +3054,9 @@ details.guide:not([open]) { padding-bottom: 20px; }
     margin: 0; padding: 18px; overflow-y: auto; overscroll-behavior: contain;
     border: 1px solid var(--border); border-radius: 16px; background: var(--card-bg); box-shadow: var(--shadow-lg);
   }
+  /* The rest of the page, behind it, out of sight (and out of reach) until
+     Canvas closes; the top bar (z-index 40) stays. */
+  html.canvas-beside body::before { content: ""; position: fixed; inset: 0; z-index: 39; background: var(--bg); }
 }
 
 /* Canvas, the easy way: Scheduler Helper's one button (or Connect Canvas),
@@ -3073,7 +3079,10 @@ details.guide:not([open]) { padding-bottom: 20px; }
 .canvas-arrived-title { margin: 0 0 4px; font-size: 1.25rem; }
 .arrived-names { margin: 8px 0 12px; }
 .arrived-names > summary { cursor: pointer; color: var(--accent-strong); font-weight: 600; }
-.arrived-list { max-height: 220px; overflow: auto; margin: 8px 0 0; padding-left: 1.6em; font-size: 0.92rem; line-height: 1.5; }
+.arrived-list {
+  max-height: 280px; overflow: auto; margin: 8px 0 0; padding: 8px 12px 8px 2.4em; font-size: 0.92rem; line-height: 1.55;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--card-bg);
+}
 .arrived-form { margin: 0; }
 .canvas-by-hand { margin: 4px 0 12px; }
 .canvas-by-hand > summary { cursor: pointer; font-weight: 650; color: var(--accent-strong); }
@@ -3123,7 +3132,8 @@ details.guide:not([open]) { padding-bottom: 20px; }
 .helper-courses-q:focus { outline: none; }
 .arrived-other { display: inline-block; margin: 10px 0 0; }
 .canvas-arrived-here[hidden], .canvas-upload[hidden], .quiz-help[hidden] { display: none; }
-[data-safari-only][hidden], [data-phone-only][hidden], [data-quiz-leave][hidden], .quiz-help p[hidden] { display: none; }
+[data-safari-only][hidden], [data-phone-only][hidden], [data-desktop-only][hidden], [data-quiz-leave][hidden],
+.quiz-help p[hidden], .canvas-connect[hidden] { display: none; }
 .canvas-step [data-dropzone] { margin-top: 8px; }
 .canvas-phone-note { margin: 0 0 10px; }
 @media (max-width: 560px) {

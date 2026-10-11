@@ -10,7 +10,7 @@ Any professor with a school email can use it — no setup on their end:
 
 1. **Sign in** with their school email (a 6-digit code, no password).
 2. **Create a sign-up sheet**: a title, the days, seats per day, and an optional "rank by" date.
-3. **Drag in the class list** from Canvas (a step-by-step Canvas guide is built in), drop an
+3. **Bring in the class list** from Canvas (a step-by-step Canvas guide is built in), drop an
    Excel file, or paste names.
 4. **See it as a student** with one click.
 5. **Share the link** (a ready-to-paste Canvas announcement is provided).

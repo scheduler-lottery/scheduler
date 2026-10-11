@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Set up {{ sheet.title }} — {{ app_name }}{% endblock %}
+{% block title %}{% if report %}{{ report.message.split(". ")[0] | truncate(80) }} — {% endif %}Set up {{ sheet.title }} — {{ app_name }}{% endblock %}
 {% block content %}
 {# The rest of the setup, after the new-sheet questions: the students, then
    sharing the link, under the same progress bar (teach.setup). #}
@@ -21,7 +21,7 @@
   <section class="setup-step" aria-labelledby="setup-q">
     <h2 class="wizard-q" id="setup-q">Add your students</h2>
     {% if report %}
-    <div class="report{{ ' report-warn' if report.warn }}">
+    <div class="report{{ ' report-warn' if report.warn }}" tabindex="-1" data-focus-on-load>
       <p class="report-main">{{ report.message }}</p>
       {% if report.tips %}<ul class="tips">{% for tip in report.tips %}<li>{{ tip }}</li>{% endfor %}</ul>{% endif %}
     </div>

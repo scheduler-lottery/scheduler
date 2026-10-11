@@ -3039,7 +3039,7 @@ def test_scheduler_helper_is_offered_only_once_it_exists(prof, monkeypatch):
     assert 'data-helper-store="https://chromewebstore.google.com/detail/x"' in page
     assert 'data-helper-safari="https://apps.apple.com/app/id1"' in page
     assert "Add Scheduler Helper to Chrome" in text(prof.get(f"/teach/s/{sid}"))
-    assert "upload Canvas's student file" in text(prof.get(f"/teach/s/{sid}"))
+    assert "use Canvas's file of your students" in text(prof.get(f"/teach/s/{sid}"))
     # A list the helper fetched for this page goes in like one copied here.
     r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=3), "how": "helper"})
     assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")

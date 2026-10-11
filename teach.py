@@ -1155,7 +1155,7 @@ def _sheet_page(sid, tab):
         {"title": "Create your sign-up sheet", "done": True, "anchor": "top"},
         {"title": "Add your class list", "done": counts["roster"] > 0, "anchor": "class-list",
          "optional": bool(sheet["allow_unlisted"]),
-         "hint": "One link and one button in Canvas, then drag the file in."},
+         "hint": "From Canvas, a spreadsheet, or typed in: a few quick questions walk you through it."},
         {"title": "See it as a student", "done": bool(sheet["tested_at"] or sheet["shared_at"]), "anchor": "try-it",
          "optional": True, "hint": "Opens in a new tab; this page stays open."},
         {"title": "Share the link with your class", "done": bool(sheet["shared_at"]),
@@ -1378,18 +1378,27 @@ def _get_pending(sheet, pid, kind):
     return json.loads(found["data"]) if found else None
 
 
+def _course_numbers(text):
+    """Course numbers in a title or a Canvas section ("LAW 540", "2026FA_LAW_540_SEC20"): three or more
+    digits, not a year."""
+    return {n for n in re.findall(r"\d{3,}", fold(text)) if not re.fullmatch(r"(19|20)\d\d", n)}
+
+
 def _section_mismatch(sheet, sections):
-    """A Section/Course column that never mentions anything from the sheet's
-    title (every row says "BIO 101-2" on a "LAW 310" sheet): likely the
-    wrong course's list."""
-    if not sections:
+    """A Section column naming a different course number than the sheet's
+    title ("BIO 101-2" on a "LAW 310" sheet): likely the wrong course's
+    list. A title in words ("Evidence Seminar"), or a section like
+    "Section 01", gives nothing to compare, so no warning."""
+    ours = _course_numbers(sheet["title"])
+    if not sections or not ours:
         return ""
-    value, _count = Counter(sections).most_common(1)[0]
-    words = lambda text: {w for w in re.findall(r"[a-z]+|\d+", fold(text)) if len(w) >= 2}  # noqa: E731
-    if words(value) & words(sheet["title"]):
+    theirs = set().union(*(_course_numbers(s) for s in sections))
+    if not theirs or ours & theirs:
         return ""
-    return (f"Every row says section “{value}”, but this sheet is “{sheet['title']}”. Is this the right "
-            "course's list?")
+    names = [name for name, _count in Counter(sections).most_common(3)]
+    label = f"section “{names[0]}”" if len(sections) == 1 else "sections " + ", ".join(f"“{n}”" for n in names)
+    return (f"This list is from Canvas {label}, but this sheet is “{sheet['title']}”. If that's a different "
+            "course, it may be the wrong file: check the names below.")
 
 
 def _roster_tips(sheet, students, tips, sections=None, changed=()):
