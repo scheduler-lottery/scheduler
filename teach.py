@@ -1741,6 +1741,12 @@ def canvas_connected_pick():
         if not found:
             return _connect_back("forbidden")
         return render_template("canvas_connect.html", sheet=sheet, courses=found, gone=bool(pending.get("forget")))
+    if request.form.get("sid", sheet["id"]) != sheet["id"]:
+        # A course list left open for another sheet (Connect Canvas pressed since, for this one): nothing read,
+        # and the list that's waiting shows instead, so no class list lands on the wrong sheet.
+        flash("That list of courses was for a different sheet, so nothing was read. This one is for "
+              f"“{sheet['title']}”.", "info")
+        return redirect(url_for("teach.canvas_connected_pick"))
     course_id = request.form.get("course_id", "")
     if not re.fullmatch(r"\d{1,15}", course_id):
         return _connect_back("missing")

@@ -3145,13 +3145,17 @@ def test_connect_canvas_takes_no_for_an_answer_and_nothing_forged(prof, monkeypa
     assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")
     assert "already been used, so nothing happened" in follow(prof, r) and not fake.TOKENS
     assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 0
-    # The permission waits ten minutes for the course to be picked, no more, and is given back even then.
-    back = _authorize(canvas, prof.get(f"/teach/s/{sid}/canvas/connect").headers["Location"])
-    prof.get(back.path + "?" + back.query)
-    assert len(fake.TOKENS) == 1
+    # The permission waits ten minutes for the course to be picked, no more, and is given back even then: on a
+    # pick, or on a reload of the course list.
     monkeypatch.setattr(canvas_oauth, "SEALED_FOR", -1)
-    assert "permission ran out" in follow(prof, prof.post("/teach/canvas/oauth/pick", {"course_id": "101"}))
-    assert not fake.TOKENS
+    for too_late in (lambda: prof.post("/teach/canvas/oauth/pick", {"course_id": "101"}),
+                     lambda: prof.get("/teach/canvas/oauth/pick")):
+        back = _authorize(canvas, prof.get(f"/teach/s/{sid}/canvas/connect").headers["Location"])
+        prof.get(back.path + "?" + back.query)
+        assert len(fake.TOKENS) == 1
+        r = too_late()
+        assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")
+        assert "permission ran out" in follow(prof, r) and not fake.TOKENS
     # Someone else's sheet can't be connected.
     other = prof.create_sheet(title="Mine")
     prof.post("/teach/logout")
@@ -3227,6 +3231,27 @@ def test_leaving_the_course_list_any_way_gives_canvas_its_permission_back(prof, 
     r = prof.get(again.path + "?" + again.query)
     assert r.headers["Location"].endswith("/teach/")
     assert "already been used" in follow(prof, r)
+
+
+def test_a_course_list_left_open_for_another_sheet_reads_nothing(prof, monkeypatch):
+    first = prof.create_sheet(title="Evidence", allow_unlisted=False)
+    second = prof.create_sheet(title="Torts", allow_unlisted=False)
+    canvas, fake = _connectable_canvas(monkeypatch)
+    _connect(prof, canvas, first)
+    assert f'name="sid" value="{first}"' in prof.get("/teach/canvas/oauth/pick").get_data(as_text=True)
+    # Connect Canvas pressed for the other sheet; then a course picked on the first sheet's list, still open.
+    _connect(prof, canvas, second)
+    assert len(fake.TOKENS) == 1
+    r = prof.post("/teach/canvas/oauth/pick", {"sid": first, "course_id": "202", "course_name": "2026FA_LAW_540_SEC20"})
+    assert r.headers["Location"].endswith("/teach/canvas/oauth/pick") and len(fake.TOKENS) == 1
+    page = follow(prof, r)
+    assert "was for a different sheet, so nothing was read" in page and "Which course is “Torts” for?" in page
+    for sid in (first, second):
+        assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 0
+    # Picked on the list that's waiting: that sheet's.
+    prof.post("/teach/canvas/oauth/pick", {"sid": second, "course_id": "202", "course_name": "2026FA_LAW_540_SEC20"})
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=second) == 8 and not fake.TOKENS
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=first) == 0
 
 
 def test_connect_canvas_asks_again_when_the_sheets_course_is_gone(prof, monkeypatch):

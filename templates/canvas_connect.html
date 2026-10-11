@@ -11,9 +11,10 @@
   <div class="warn-box"><p>Canvas no longer has the course this list came from (it may have been deleted or merged, or you're no longer on it).</p></div>
   {% endif %}
   <h1>Which {% if gone %}Canvas {% endif %}course is “{{ sheet.title }}” for?</h1>
-  <p class="subtitle">Pick it, and Scheduler reads only that course's students' names and email addresses. Nothing in Canvas changes, and Scheduler hands the permission you gave back to Canvas right after.</p>
+  <p class="subtitle">Pick it, and Scheduler reads only that course's students' names and email addresses. Nothing in Canvas changes. Right after, Scheduler hands back the permission you gave it.</p>
   <form method="post" action="{{ url_for('teach.canvas_connected_pick') }}" class="connect-courses">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="sid" value="{{ sheet.id }}">
     {% for c in courses %}
     <button type="submit" class="quiz-choice" name="course_id" value="{{ c.id }}" data-name="{{ c.name }}{% if c.term %} ({{ c.term }}){% endif %}">
       <strong>{{ c.name }}</strong>{% if c.term or c.students is not none %} <span>{% if c.term %}{{ c.term }}{% endif %}{% if c.term and c.students is not none %} · {% endif %}{% if c.students is not none %}{{ c.students | plural('student') }}{% endif %}</span>{% endif %}
