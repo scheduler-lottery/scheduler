@@ -38,7 +38,7 @@ from matching_engine import (
     ALGORITHMS, CHOOSABLE, COMPARE_TRIALS, DEFAULT_ALGORITHM, MANUAL, compare_algorithms,
     compute_assignment, fill_open_seats, verdict,
 )
-from roster import describe, find_email, flip_last_first, parse_people, parse_roster, _is_last_first
+from roster import RosterResult, describe, find_email, flip_last_first, parse_people, parse_roster, _is_last_first
 from util import (
     clean_name, clean_text, date_label, fold, in_zone, iso, mask_email, new_id, normalize_name, now, parse_iso,
     plural, read_date, slugify, valid_email,
@@ -1027,15 +1027,17 @@ def setup(sid):
         report = None
     share_url = url_for("student.signin", sid=sid, _external=True)
     announcement = _announcement(sheet, share_url, counts)
-    emails = [r["email"] for r in sheets.get_roster(sid) if r["email"] and not r["is_test"]]
+    roster_rows = [r for r in sheets.get_roster(sid) if not r["is_test"]]
+    emails = [r["email"] for r in roster_rows if r["email"]]
     # The message, ready to send from the instructor's own email, with the
-    # class in Bcc.
+    # class in Bcc; and who it can't reach, having no email address.
     invite = {
         "to": me["email"], "bcc": ", ".join(emails), "count": len(emails),
+        "no_email": [r["display_name"] for r in roster_rows if not r["email"]],
         "subject": f"Rank your presentation days for {sheet['title']}",
         "body": f"Hi everyone,\n\n{announcement}\n\nThanks!\n",
     } if announcement and emails else None
-    on_list = [r for r in sheets.get_roster(sid) if not r["is_test"]] if step == "students" else []
+    on_list = roster_rows if step == "students" else []
     return render_template(
         "teach_setup.html", sheet=sheet, step=step, counts=counts, canvas=canvas, report=report, on_list=on_list,
         share_url=share_url, announcement=announcement, invite=invite, days=sheets.get_days(sid),
@@ -1044,12 +1046,13 @@ def setup(sid):
     )
 
 
-def _list_back(sheet, setup=None):
+def _list_back(sheet, setup=None, box=None):
     """Back to where the class list was being added: the setup page's
-    students step, or the class page."""
+    students step, or the class page. `box`: the file box to land on (its
+    id), when a file didn't go in and another is to be chosen there."""
     if request.form.get("setup") if setup is None else setup:
-        return redirect(url_for("teach.setup", sid=sheet["id"], step="students"))
-    return _back(sheet, "class-list")
+        return redirect(url_for("teach.setup", sid=sheet["id"], step="students", _anchor=box))
+    return _back(sheet, box or "class-list")
 
 
 def _sheet_page(sid, tab):
@@ -1473,9 +1476,15 @@ def _who_was_added(sheet, report):
 @instructor_required
 def upload_roster(sid):
     sheet = owned_sheet(sid)
-    upload = request.files.get("roster")
+    # Two files dropped at once (Safari unzips Canvas's download into a
+    # folder of two): the class list is the one with "student" in its name.
+    uploads = [f for f in request.files.getlist("roster") if f and f.filename]
+    upload = next((f for f in uploads if "student" in f.filename.lower()), uploads[0] if uploads else None)
     pasted = (request.form.get("pasted") or "").strip()
-    if upload and upload.filename:
+    # The box the file came from, to land back on if it doesn't go in.
+    box = request.form.get("box") or ""
+    box = box if re.fullmatch(r"[a-z0-9-]{1,60}", box) else None
+    if upload:
         data = upload.read(MAX_UPLOAD_BYTES + 1)
         source = os.path.basename(upload.filename)[:80]
         source_label = f"uploaded “{source}”"
@@ -1483,38 +1492,45 @@ def upload_roster(sid):
         data, source, source_label = pasted.encode("utf-8"), "", "pasted list"
     else:
         flash("Choose a file to upload, or paste a list of names first.", "error")
-        return _list_back(sheet)
+        return _list_back(sheet, box=box)
     if len(data) > MAX_UPLOAD_BYTES:
         flash("That file is over 1 MB — a class list is far smaller. Is it the right file?", "error")
-        return _list_back(sheet)
+        return _list_back(sheet, box=box)
 
-    return _take_list(sheet, data, source, source_label, pasted=not source, setup=bool(request.form.get("setup")))
+    return _take_list(sheet, data, source, source_label, pasted=not source, setup=bool(request.form.get("setup")),
+                      box=box, replacing=request.form.get("replacing") == "1")
 
 
 def _take_list(sheet, data, source, source_label, pasted=False, setup=False, parsed=None, canvas=None,
-               look_first=None):
+               look_first=None, box=None, replacing=False):
     """A class list (a file, pasted names, or one sent from Canvas), read and
     checked the same way: the first list goes straight in, with a report;
-    one that would change an existing list is shown for review first. So is
-    one that comes with a reason to look first (`look_first`). `canvas`:
-    the Canvas course the sheet is tied to once this list is in."""
+    one that would change an existing list, or comes with a reason to look
+    first (`look_first`), is shown for review first; one that would change
+    nothing is just said so. `canvas`: the Canvas course the sheet is tied
+    to once this list is in. `box`: the file box it came from; `replacing`:
+    it came to replace the list (the review recommends that)."""
     result = parsed or parse_roster(data)
     if result.error:
         flash(result.error, "error")
-        return _list_back(sheet, setup)
+        return _list_back(sheet, setup, box)
     # A file with no name column and no emails may be the wrong file (say,
     # the grades file from the folder Safari makes of Canvas's download):
     # a look before it goes in.
-    if source and not pasted and not result.name_column and not result.with_email and not look_first:
+    wrong_file = bool(source and not pasted and not result.name_column and not result.with_email and not look_first)
+    if wrong_file:
         look_first = ("This file has no Name or Email column, so it may not be your class list. If Canvas's download "
                       "became a folder, choose the file with “student” in its name.")
     message, tips = describe(result, source)
+    if wrong_file:
+        # Its "no email addresses" note (the one a list without emails gets) is no help with the wrong file.
+        tips = [t for t in tips if t not in describe(RosterResult())[1]]
     # Someone on the new list by email alone, already here: the name they have stays.
     result.students = sheets.adopt_known_names(sheet["id"], result.students)
     if not source:
         message = message.replace(" from “”", "")
     warn = bool(result.duplicates or result.bad_emails or result.suspicious or result.garbled
-                or result.email_only or result.skipped)
+                or result.email_only or result.skipped or getattr(result, "pin_twins", None))
     sections = dict(result.sections)
 
     current = [r for r in sheets.get_roster(sheet["id"]) if not r["is_test"]]
@@ -1522,26 +1538,54 @@ def _take_list(sheet, data, source, source_label, pasted=False, setup=False, par
         _apply_roster(sheet, result.students, "replace", message, tips, warn, source_label, sections)
         _tie_to_canvas(sheet, canvas, "replace")
         return _list_back(sheet, setup)
+    if current and not look_first:
+        # The same students, spelled the same, with the same emails: nothing to
+        # ask about (the weekly "Update from Canvas", most weeks).
+        diff = sheets.compare_rosters(current, result.students)
+        shown = {r["name_key"]: r["display_name"] for r in current}
+        if not (diff["adding"] or diff["dropping"] or diff["new_emails"]) and all(
+                shown[s["name_key"]] == s["display_name"] for s in diff["same"]):
+            _tie_to_canvas(sheet, canvas, "add")  # a sheet untied (its list from a file) learns its course
+            db.run("DELETE FROM pending_uploads WHERE sheet_id = :sid AND kind = 'roster'", sid=sheet["id"])
+            db.commit()
+            course = canvas["name"] if canvas else source[len("Canvas: "):] if source.startswith("Canvas: ") else ""
+            where = f"{course} in Canvas" if course else "your names" if pasted else f"“{source}”"
+            everyone = f"all {plural(len(current), 'student')}" if len(current) > 1 else "1 student"
+            said = f"Your class list already matches {where}: {everyone}, nobody new and nobody gone. Nothing changed."
+            if not course and not pasted:
+                said += (" Just downloaded a new file from Canvas? Choose the newest one in Downloads: its name may "
+                         "end in (1) or (2).")
+            flash(said, "success")
+            return _list_back(sheet, setup)
     pid = _store_pending(sheet, "roster", {
         "students": result.students, "message": message, "tips": tips, "warn": warn,
         "source": source, "source_label": source_label, "pasted": pasted, "sections": sections,
-        "setup": setup, "canvas": canvas, "look_first": look_first,
+        "setup": setup, "canvas": canvas, "look_first": look_first, "box": box, "replacing": replacing,
     })
     return redirect(url_for("teach.review_roster", sid=sheet["id"], pid=pid))
 
 
 def _take_canvas_list(sheet, data, setup=False, forget=None):
     """A class list from Canvas, read for this site's own page (by Scheduler
-    Helper, or Connect Canvas). One from a different Canvas course than the
-    sheet's last is shown for a second look before it goes in. Once in, the
-    sheet remembers its Canvas course, so next time needs no picking; and the
-    instructor's school's Canvas is the one it came from, if they hadn't
-    said."""
+    Helper, or Connect Canvas: data["via"] == "connect"). One from a
+    different Canvas course than the sheet's last is shown for a second look
+    before it goes in. Once in, the sheet remembers its Canvas course, so
+    next time needs no picking; and the instructor's school's Canvas is the
+    one it came from, if they hadn't said. `forget`: the sheet's course,
+    which Canvas no longer has (deleted, merged, or no longer theirs): the
+    sheet counts as tied to none, and the new course takes its place even
+    when the list is added rather than replaced."""
     course = data["course"]
-    canvas = {"id": data["course_id"], "name": course} if data.get("course_id") else None
+    canvas = {"id": data["course_id"], "name": course,
+              "via": "connect" if data.get("via") == "connect" else "helper"} if data.get("course_id") else None
+    tied = sheet.get("canvas_course_id")
+    if forget and forget == tied:
+        tied = None
+        if canvas:
+            canvas["forget"] = forget
     look_first = None
     has_list = db.scalar("SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sheet["id"])
-    if canvas and has_list and sheet.get("canvas_course_id") and sheet["canvas_course_id"] != canvas["id"]:
+    if canvas and has_list and tied and tied != canvas["id"]:
         before = sheet.get("canvas_course") or "another course"
         if before == course:  # two courses with one name: their numbers tell them apart
             look_first = (f"This sheet's class list came from Canvas course {sheet['canvas_course_id']}; this one is "
@@ -1561,13 +1605,15 @@ def _take_canvas_list(sheet, data, setup=False, forget=None):
 def _tie_to_canvas(sheet, canvas, mode):
     """Which Canvas course the sheet's class list is from, now: a list that
     replaces it brings its course (or none, from a file or a paste); one
-    added to it ties a sheet that wasn't tied to any."""
+    added to it ties a sheet that wasn't tied to any, or was tied to a
+    course Canvas no longer has (canvas["forget"])."""
     if mode == "replace":
         db.run("UPDATE sheets SET canvas_course_id = :cid, canvas_course = :name WHERE id = :sid",
                cid=canvas["id"] if canvas else None, name=canvas["name"] if canvas else None, sid=sheet["id"])
     elif canvas:
         db.run("UPDATE sheets SET canvas_course_id = :cid, canvas_course = :name "
-               "WHERE id = :sid AND canvas_course_id IS NULL", cid=canvas["id"], name=canvas["name"], sid=sheet["id"])
+               "WHERE id = :sid AND (canvas_course_id IS NULL OR canvas_course_id = :gone)",
+               cid=canvas["id"], name=canvas["name"], sid=sheet["id"], gone=canvas.get("forget") or "")
     db.commit()
 
 
@@ -1576,13 +1622,15 @@ def _tie_to_canvas(sheet, canvas, mode):
 def canvas_list_here(sid):
     """A class list Scheduler Helper brought this page from Canvas, which
     the instructor then added (the form is this page's own: it carries the
-    page's token)."""
+    page's token). `forget_course`: the sheet's course, when Canvas said it
+    no longer has it."""
     sheet = owned_sheet(sid)
     data = canvas_import.read(request.form.get("list"))
     if not data:
         flash("That class list from Canvas didn't come through. Press Get my class list from Canvas again.", "error")
         return _list_back(sheet)
-    return _take_canvas_list(sheet, data, setup=bool(request.form.get("setup")))
+    return _take_canvas_list(sheet, data, setup=bool(request.form.get("setup")),
+                             forget=request.form.get("forget_course") or None)
 
 
 # ---------------------------------------------------------------------------
@@ -1859,16 +1907,27 @@ def review_roster(sid, pid):
     if not pending:
         flash("That upload has expired — please drop the file again.", "error")
         return _back(sheet, "class-list")
+    from_canvas = bool(pending.get("canvas")) or (pending.get("source") or "").startswith("Canvas: ")
+    from_file = not pending.get("pasted") and not from_canvas
     if request.method == "POST":
         action = request.form.get("action")
         if action == "cancel":
             db.run("DELETE FROM pending_uploads WHERE id = :id", id=pid)
             db.commit()
-            flash("Kept your current class list. Nothing changed.", "success")
-            return _list_back(sheet, pending.get("setup"))
+            has_list = db.scalar("SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sheet["id"])
+            said = "Kept your current class list. Nothing changed." if has_list else "Nothing was added."
+            # A file: back to the box it came from, for the right one.
+            box = pending.get("box") if from_file else None
+            if from_file and pending.get("look_first"):
+                said += " Choose a different file in the box below." if box else " Choose a different file."
+            flash(said, "success")
+            return _list_back(sheet, pending.get("setup"), box)
         if action in ("replace", "add"):
-            _apply_roster(sheet, pending["students"], action, pending["message"], pending["tips"],
-                          pending["warn"], pending["source_label"], pending.get("sections"))
+            tips, warn = pending["tips"], pending["warn"]
+            if pending.get("look_first"):  # put in after all: why it was worth a look stays first, in yellow
+                tips, warn = [pending["look_first"]] + list(tips), True
+            _apply_roster(sheet, pending["students"], action, pending["message"], tips, warn,
+                          pending["source_label"], pending.get("sections"))
             _tie_to_canvas(sheet, pending.get("canvas"), action)
             return _list_back(sheet, pending.get("setup"))
     diff = sheets.compare_rosters(sheets.get_roster(sheet["id"]), pending["students"])
@@ -1900,9 +1959,26 @@ def review_roster(sid, pid):
             f"The new list has no email for {plural(len(diff['keeps_email']), 'student')} who already "
             "had one. If you replace, we'll keep the emails we have for them."
         )
+    # Which button to highlight. A file (or names pasted) that came to
+    # replace the list: Replace, unless it looks like the wrong file. Other
+    # pasted names are more names: Add. A list that may not be this class
+    # (another course's, the wrong file, few names in common): none, since
+    # adding would mix two classes and replacing would lose this one; but
+    # from Canvas in setup, before anyone has the link, it's fixing a wrong
+    # pick: Replace. With no list yet, its one button ("Add these").
+    doubtful = not pending.get("pasted") and bool(pending.get("look_first") or (diff["current"] >= 4 and overlap < 0.5))
+    if pending.get("replacing") and not pending.get("look_first"):
+        recommend = "replace"
+    elif pending.get("pasted"):
+        recommend = "add" if diff["current"] else "replace"
+    elif doubtful:
+        fixing_setup = from_canvas and pending.get("setup") and not sheet["shared_at"] and not ranked
+        recommend = "replace" if fixing_setup else ""
+    else:
+        recommend = "add" if warnings and diff["current"] else "replace"
     return render_template(
         "roster_review.html", sheet=sheet, pid=pid, pending=pending, diff=diff, warnings=warnings,
-        recommend="add" if pending.get("pasted") or warnings else "replace",
+        recommend=recommend, doubtful=doubtful, from_canvas=from_canvas, from_file=from_file,
     )
 
 
@@ -1917,15 +1993,24 @@ def dismiss_report(sid):
 @bp.route("/s/<sid>/roster/clear", methods=["POST"])
 @instructor_required
 def clear_roster(sid):
+    """Take the class list off (and forget its Canvas course), with a
+    restore point. From setup ("Wrong course? Start over"), back to the
+    students step to get the list again; there, no Undo, which would only
+    turn up later on the class page."""
     sheet = owned_sheet(sid)
+    setup = bool(request.form.get("setup"))
     snap_id = sheets.take_snapshot(sheet, "roster", "Before the class list was removed")
     removed = sheets.clear_roster(sheet["id"])
     db.run("UPDATE sheets SET canvas_course_id = NULL, canvas_course = NULL WHERE id = :sid", sid=sheet["id"])
     auth.end_student_sessions(sheet["id"], removed)
     db.commit()
     session.pop("roster_report", None)
-    _offer_undo(sheet, snap_id, f"Removed the class list ({plural(len(removed), 'student')}). Rankings stay.", ["roster"])
-    return _back(sheet, "class-list")
+    if setup:
+        flash(f"Took {plural(len(removed), 'student')} off your list. Get your class list again below.", "success")
+    else:
+        _offer_undo(sheet, snap_id, f"Removed the class list ({plural(len(removed), 'student')}). Rankings stay.",
+                    ["roster"])
+    return _list_back(sheet, setup)
 
 
 def _read_person(form):

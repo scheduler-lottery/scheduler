@@ -1312,7 +1312,10 @@ def test_pasting_into_an_existing_list_keeps_people_with_bad_emails(prof):
 def test_replacing_with_a_list_without_emails_keeps_the_emails_we_have(prof):
     sid = prof.create_sheet()
     prof.upload(sid)
-    r = prof.upload(sid, "Name\nAlex Johnson\nSam Lee\nRiya Patel\n", "gradebook.csv")
+    # The same names without emails: nothing would change, so nothing to ask.
+    same = prof.upload(sid, "Name\nAlex Johnson\nSam Lee\nRiya Patel\n", "gradebook.csv")
+    assert "already matches" in follow(prof, same)
+    r = prof.upload(sid, "Name\nAlex Johnson\nSam Lee\nRiya Patel\nNew Person\n", "gradebook.csv")
     assert "keep the emails we have" in text(prof.get(r.headers["Location"]))
     prof.post(r.headers["Location"], {"action": "replace"})
     assert q(prof.app, "SELECT email FROM roster WHERE sheet_id = :sid AND name_key = 'sam lee'", sid=sid) == "sam@school.edu"
@@ -3241,11 +3244,11 @@ def test_connect_canvas_reads_the_class_list_with_canvas_permission(prof, monkey
     assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :sid", sid=sid) == "101"
     assert "Who was added (57)" in text(prof.get(f"/teach/s/{sid}"))
     assert not fake.TOKENS  # Canvas's permission given back at once
-    # Next time, no picking: the sheet's course, straight away (a list in place: what changes, first; or, if
-    # nothing did, just back).
+    # Next time, no picking: the sheet's course, straight away (nothing changed in Canvas: just said so).
     back = _authorize(canvas, prof.get(f"/teach/s/{sid}/canvas/connect").headers["Location"])
-    where = prof.get(back.path + "?" + back.query).headers["Location"]
-    assert ("/roster/review/" in where or where.endswith(f"/teach/s/{sid}#class-list")) and not fake.TOKENS
+    r = prof.get(back.path + "?" + back.query)
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list") and not fake.TOKENS
+    assert "already matches 2026FA_BUSCOM_615_SEC1" in html(prof.get(r.headers["Location"]))
 
 
 def test_connect_canvas_takes_no_for_an_answer_and_nothing_forged(prof, monkeypatch):
@@ -3447,3 +3450,282 @@ def test_canvas_names_written_last_first_are_turned_round_not_cut(prof):
     with prof.app.app_context():
         got = sorted(r["display_name"] for r in db.rows("SELECT display_name FROM roster WHERE sheet_id = :s", s=sid))
     assert got == ["Alex Kim", "Jordan Kim", "Maria Diaz", "Sam Lee"]
+
+
+# -- Checking a new class list, and getting back from the wrong one ----------
+
+GRADES = "Assignment Name,Points Possible,Average\nEssay 1,10,8.5\nReading Response 2,5,4.1\nMidterm Paper,20,17\n"
+
+
+def _buttons(page):
+    """The review page's buttons, in order: (label, highlighted?)."""
+    form = page.split('class="choice-stack"')[1].split("</form>")[0]
+    found = re.findall(r'<button type="submit" name="action" value="\w+" class="([^"]*)"[^>]*>(.*?)</button>', form, re.S)
+    return [(text(label), "btn-primary" in cls) for cls, label in found]
+
+
+def _pending_id(app, sid):
+    return q(app, "SELECT id FROM pending_uploads WHERE sheet_id = :s", s=sid)
+
+
+def test_a_list_that_changes_nothing_just_says_so(prof):
+    sid = prof.create_sheet(title="LAW 310", allow_unlisted=False)
+    four = ["Ana Lima", "Bo Chen", "Cy Cole", "Di Dunn"]
+    prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=4, names=four, course_id="111", course="LAW 310")})
+    # The helper's list again, a week later: no review page, no restore point, the tie kept.
+    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=4, names=four, course_id="111", course="LAW 310")})
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")
+    assert ("Your class list already matches LAW 310 in Canvas: all 4 students, nobody new and nobody gone. "
+            "Nothing changed.") in follow(prof, r)
+    assert q(prof.app, "SELECT COUNT(*) FROM snapshots WHERE sheet_id = :s", s=sid) == 0
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=sid) == "111"
+    # From setup, back to setup; and a review left waiting is dropped.
+    prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=5, course_id="111", course="LAW 310")})
+    assert _pending_id(prof.app, sid)
+    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=4, names=four, course_id="111", course="LAW 310"),
+                                                  "setup": "1"})
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students") and not _pending_id(prof.app, sid)
+    # A spelling Canvas fixed (an accent) is a change: it's shown first.
+    fixed = ["Ana Límà", "Bo Chen", "Cy Cole", "Di Dunn"]
+    r = prof.post(f"/teach/s/{sid}/canvas-list",
+                  {"list": _canvas_list(n=4, names=fixed, course_id="111", course="LAW 310")})
+    assert "/roster/review/" in r.headers["Location"]
+    # Canvas's file, chosen again: the same, with a word about picking the newest download.
+    b = prof.create_sheet(title="Seminar")
+    prof.upload(b)
+    page = follow(prof, prof.upload(b, CANVAS_ROSTER, "course_analytics_students.csv"))
+    assert ("already matches “course_analytics_students.csv”: all 3 students, nobody new and nobody gone. Nothing "
+            "changed. Just downloaded a new file from Canvas? Choose the newest one in Downloads: its name may end in "
+            "(1) or (2).") in page
+    # A sheet whose list came from a file learns its Canvas course from a matching list.
+    same = json.dumps({"type": "scheduler-class-list", "v": 2, "courseId": "777", "course": "SEM", "students": [
+        {"name": "Alex Johnson", "email": "alex@school.edu"}, {"name": "Sam Lee", "email": "sam@school.edu"},
+        {"name": "Riya Patel", "email": "riya@school.edu"}]})
+    r = prof.post(f"/teach/s/{b}/canvas-list", {"list": same})
+    assert "already matches SEM in Canvas" in follow(prof, r)
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=b) == "777"
+    # Pasted names already on the list.
+    r = prof.post(f"/teach/s/{b}/roster", {"pasted": "Alex Johnson, alex@school.edu\nSam Lee, sam@school.edu\n"
+                                                      "Riya Patel, riya@school.edu"})
+    assert "already matches your names" in follow(prof, r)
+
+
+def test_a_list_that_may_not_be_this_class_has_no_highlighted_button(prof):
+    sid = prof.create_sheet(title="LAW 310", allow_unlisted=False)
+    four = ["Ana Lima", "Bo Chen", "Cy Cole", "Di Dunn"]
+    prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=4, names=four, course_id="111", course="LAW 310")})
+    # Another course's list on the class page: each answer says what it does, and none is pushed.
+    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=3, course_id="222", course="BIO 101")})
+    page = raw(prof.get(r.headers["Location"]))
+    assert _buttons(page) == [("It’s not my class: keep my current list (nothing changes)", False),
+                              ("It’s my class: replace my list with this one", False),
+                              ("Add them too: 7 students from both lists on one sheet", False)]
+    assert 'class="warn-box" id="review-warn"' in page and page.count('aria-describedby="review-warn"') == 3
+    assert "Before your list changes, a copy of it is saved" in text(page)
+    assert "Pick a different Canvas course" not in text(page)  # the helper has its own "Wrong course?"
+    # A file with none of the same names: the same.
+    other = "Name,Email\nZed Zane,zed@x.edu\nYu Yan,yu@x.edu\nXi Xu,xi@x.edu\nWes Wu,wes@x.edu\nVi Vo,vi@x.edu\n"
+    r = prof.upload(sid, other, "students.csv")
+    assert not any(primary for _label, primary in _buttons(raw(prof.get(r.headers["Location"]))))
+    # ...unless it came to replace the list: then Replace.
+    r = prof.post(f"/teach/s/{sid}/roster", {"roster": (io.BytesIO(other.encode()), "students.csv"), "replacing": "1"},
+                  content_type="multipart/form-data")
+    assert _buttons(raw(prof.get(r.headers["Location"])))[0] == ("It’s my class: replace my list with this one", True)
+    # Pasted names are more names: Add, as ever...
+    r = prof.post(f"/teach/s/{sid}/roster", {"pasted": "Late Comer, late@school.edu"})
+    assert ("Add the 1 new name to my list (keep everyone already on it)", True) in _buttons(
+        raw(prof.get(r.headers["Location"])))
+    # ...but pasted into a box for replacing the list (the same form as its file), they're the new list.
+    r = prof.post(f"/teach/s/{sid}/roster", {"pasted": "Late Comer, late@school.edu", "replacing": "1"})
+    assert _buttons(raw(prof.get(r.headers["Location"]))) == [
+        ("Add the 1 new name to my list (keep everyone already on it)", False),
+        ("Replace my list with this one", True), ("Cancel — keep my current list", False)]
+    # In setup, before anyone has the link, a second Canvas course is fixing a wrong pick: Replace.
+    c = prof.create_sheet(title="Torts", allow_unlisted=False)
+    prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=4, names=four, course_id="505", course="BUSCOM"),
+                                            "setup": "1"})
+    r = prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=3, course_id="202", course="TORTS"), "setup": "1"})
+    assert _buttons(raw(prof.get(r.headers["Location"])))[0] == ("It’s my class: replace my list with this one", True)
+    prof.post(r.headers["Location"], {"action": "replace"})
+    # Added anyway, the reason to look stays at the top of the report, in yellow.
+    r = prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=5, course_id="303", course="BIO"), "setup": "1"})
+    page = follow(prof, prof.post(r.headers["Location"], {"action": "add"}))
+    report = page.split('class="report report-warn"')[1]
+    assert report.index("this one is from BIO") < report.index("</ul>")
+
+
+def test_the_wrong_file_on_an_empty_list_offers_just_add_or_choose_another(prof):
+    import roster
+
+    sid = prof.create_sheet(allow_unlisted=False)
+    r = prof.post(f"/teach/s/{sid}/roster", {"roster": (io.BytesIO(GRADES.encode()), "course_grade.csv"), "setup": "1",
+                                             "box": f"canvas-file-{sid}"}, content_type="multipart/form-data")
+    page = raw(prof.get(r.headers["Location"]))
+    n = re.search(r"“course_grade.csv”: (\d+) names\. Your list now: 0 students", text(page)).group(1)
+    assert _buttons(page) == [("Cancel — choose a different file", False), (f"Add these {n} names", False)]
+    assert "keep everyone" not in page and "a copy of it is saved" not in page
+    assert roster.describe(roster.RosterResult())[1][0] not in html_lib.unescape(page)  # no "no email addresses" note
+    # Cancel: back to the box it came from, saying what to do there.
+    r = prof.post(r.headers["Location"], {"action": "cancel"})
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students#canvas-file-{sid}")
+    assert "Nothing was added. Choose a different file in the box below." in follow(prof, r)
+    # Put in anyway: the warning heads the report, in yellow.
+    r = prof.upload(sid, GRADES, "course_grade.csv")
+    page = follow(prof, prof.post(r.headers["Location"], {"action": "replace"}))
+    assert re.search(r'class="report report-warn">.*?<ul class="tips"><li>This file has no Name or Email column',
+                     page, re.S)
+    # The list taken off while another waited to be checked (even one with a note): its one button is the one.
+    b = prof.create_sheet(title="Meanwhile")
+    prof.upload(b)
+    r = prof.upload(b, "Name,Email,Section\nZed Zane,zed@x.edu,BIO 101\n", "other.csv")
+    prof.post(f"/teach/s/{b}/roster/clear")
+    page = raw(prof.get(r.headers["Location"]))
+    assert "BIO 101" in text(page)  # the note
+    assert _buttons(page) == [("Add this student", True), ("Cancel — choose a different file", False)]
+
+
+def test_cancel_and_upload_errors_go_back_to_the_box_the_file_came_from(prof):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    upload = lambda content, name, **form: prof.post(  # noqa: E731
+        f"/teach/s/{sid}/roster", {"roster": (io.BytesIO(content.encode()), name), **form},
+        content_type="multipart/form-data")
+    # A different list, then Cancel: the class page, at the box.
+    r = upload("Name,Email\nZed Zane,zed@x.edu\n", "other.csv", box="roster-file")
+    r = prof.post(r.headers["Location"], {"action": "cancel"})
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}#roster-file")
+    assert "Kept your current class list. Nothing changed." in follow(prof, r)
+    # The wrong file, with a list in place.
+    r = upload(GRADES, "course_grade.csv", box="roster-file")
+    page = follow(prof, prof.post(r.headers["Location"], {"action": "cancel"}))
+    assert "Kept your current class list. Nothing changed. Choose a different file in the box below." in page
+    # A file that can't be read, and no file at all: back at the box, from setup too.
+    r = upload("", "empty.csv", box=f"canvas-file-{sid}", setup="1")
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students#canvas-file-{sid}")
+    r = prof.post(f"/teach/s/{sid}/roster", {"box": "roster-file"})
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}#roster-file")
+    # Only a box's id is kept.
+    r = upload("", "empty.csv", box="x\" onload=\"y")
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")
+    # Pasted names or a list from Canvas: Cancel goes back where it went before.
+    r = prof.post(f"/teach/s/{sid}/roster", {"pasted": "Late Comer, late@school.edu", "box": "roster-file"})
+    r = prof.post(r.headers["Location"], {"action": "cancel"})
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")
+
+
+def test_two_files_dropped_at_once_use_the_student_one(prof):
+    sid = prof.create_sheet()
+    files = [(io.BytesIO(GRADES.encode()), "course_grade.csv"),
+             (io.BytesIO(CANVAS_ROSTER.encode()), "course_analytics_students.csv")]
+    page = follow(prof, prof.post(f"/teach/s/{sid}/roster", {"roster": files}, content_type="multipart/form-data"))
+    assert "Added 3 students from “course_analytics_students.csv”" in page
+
+
+def test_starting_over_in_setup_takes_the_list_off_and_asks_again(prof):
+    sid = prof.create_sheet(allow_unlisted=False)
+    prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=4, course_id="101", course="BUSCOM"), "setup": "1"})
+    page = text(prof.get(f"/teach/s/{sid}/setup?step=students"))
+    assert "Wrong course? Start over and pick another" in page and "Or replace it with a file" in page
+    assert "Use a different file" not in page
+    assert 'data-confirm="Take these 4 students off, and get your class list again?"' in raw(
+        prof.get(f"/teach/s/{sid}/setup?step=students"))
+    r = prof.post(f"/teach/s/{sid}/roster/clear", {"setup": "1"})
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students")
+    assert "Took 4 students off your list" in follow(prof, r)
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :s AND is_test = 0", s=sid) == 0
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=sid) is None
+    assert q(prof.app, "SELECT COUNT(*) FROM snapshots WHERE sheet_id = :s", s=sid) == 1  # still a restore point
+    assert "Removed the class list" not in text(prof.get(f"/teach/s/{sid}"))  # no stray Undo on the class page later
+    # The right course now goes straight in.
+    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=3, course_id="202", course="LAW"), "setup": "1"})
+    assert r.headers["Location"].endswith("/setup?step=students")
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=sid) == "202"
+    # A list from a file: "Wrong list? Start over". The class page's button still offers Undo.
+    b = prof.create_sheet(title="Other")
+    prof.upload(b)
+    assert "Wrong list? Start over" in text(prof.get(f"/teach/s/{b}/setup?step=students"))
+    assert "Removed the class list (3 students)" in follow(prof, prof.post(f"/teach/s/{b}/roster/clear"))
+
+
+def test_a_course_canvas_no_longer_has_gives_way_to_the_one_picked(prof):
+    sid = prof.create_sheet(title="LAW 310", allow_unlisted=False)
+    four = ["Ana Lima", "Bo Chen", "Cy Cole", "Di Dunn"]
+    prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=4, names=four, course_id="8823", course="LAW 310")})
+    # Canvas no longer has 8823: the course picked instead isn't "a different course", and Add ties the sheet to it.
+    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=5, names=four + ["Ed Ek"], course_id="202",
+                                                                       course="LAW 310 (new)"), "forget_course": "8823"})
+    page = text(prof.get(r.headers["Location"]))
+    assert "Is it the right course?" not in page
+    prof.post(r.headers["Location"], {"action": "add"})
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=sid) == "202"
+    # Nothing changed, and the old course gone: the new one is remembered.
+    with prof.app.app_context():
+        db.run("UPDATE sheets SET canvas_course_id = '9999' WHERE id = :s", s=sid)
+        db.commit()
+    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=5, names=four + ["Ed Ek"], course_id="202",
+                                                                       course="LAW 310 (new)"), "forget_course": "9999"})
+    assert "already matches" in follow(prof, r)
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=sid) == "202"
+    # Forgetting a course the sheet isn't tied to changes nothing: another course still gets a look first.
+    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=5, names=four + ["Ed Ek"], course_id="303",
+                                                                       course="BIO"), "forget_course": "8823"})
+    assert "Is it the right course?" in text(prof.get(r.headers["Location"]))
+
+
+def test_a_list_from_connect_canvas_offers_a_different_course(prof):
+    import sheets
+    import teach
+
+    sid = prof.create_sheet(allow_unlisted=False)
+    prof.upload(sid)
+    data = {"course": "LAW 310", "course_id": "101", "host": "canvas.test", "via": "connect", "key": "", "v": 2,
+            "students": [{"name": "Alex Johnson", "email": "alex@school.edu"}, {"name": "Ed Ek", "email": "ed@x.edu"}]}
+    with prof.app.test_request_context():
+        r = teach._take_canvas_list(sheets.get_sheet(sid), data, setup=True)
+    with prof.app.app_context():
+        pending = json.loads(db.scalar("SELECT data FROM pending_uploads WHERE sheet_id = :s", s=sid))
+    assert pending["canvas"] == {"id": "101", "name": "LAW 310", "via": "connect"}
+    page = raw(prof.get(r.headers["Location"]))
+    link = re.search(r'Wrong course\? <a href="([^"]+)">Pick a different Canvas course</a>', page).group(1)
+    assert html_lib.unescape(link) in (f"/teach/s/{sid}/canvas/connect?pick=1&setup=1",
+                                       f"/teach/s/{sid}/canvas/connect?setup=1&pick=1")
+    # From the helper: "helper", and no such link (the helper has its own).
+    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=2, course_id="101", course="LAW 310")})
+    with prof.app.app_context():
+        pending = json.loads(db.scalar("SELECT data FROM pending_uploads WHERE sheet_id = :s", s=sid))
+    assert pending["canvas"]["via"] == "helper"
+    assert "Pick a different Canvas course" not in text(prof.get(r.headers["Location"]))
+
+
+def test_same_name_students_numbered_without_email_make_the_report_yellow(prof):
+    import sheets
+    import teach
+    from roster import parse_roster
+
+    from flask import session
+
+    for twins, warned in ((["Pat Morgan (2)"], True), ([], False)):
+        sid = prof.create_sheet(title=f"Twins {warned}")
+        result = parse_roster(b"Name\nPat Morgan\nPat Morgan (2)\nAna Lima\n")
+        result.pin_twins = twins  # what roster.py reports for them
+        with prof.app.test_request_context():
+            teach._take_list(sheets.get_sheet(sid), None, "roster.csv", "uploaded “roster.csv”", parsed=result)
+            assert session["roster_report"]["warn"] is warned
+
+
+def test_the_share_step_counts_everyone_and_names_who_the_emails_miss(prof):
+    sid = prof.create_sheet()
+    prof.upload(sid, "Name,Email\nAna Lima,ana@school.edu\nBo Chen,bo@school.edu\n<b>Cy</b> Cole,\n")
+    page = raw(prof.get(f"/teach/s/{sid}/setup?step=share"))
+    said = text(page)
+    assert "How should your 3 students get the link?" in said
+    assert ("<b>Cy</b> Cole has no email address on your list, so the emails below reach only the other 2. Post the "
+            "message in Canvas too, or give it to that student yourself.") in said
+    assert "&lt;b&gt;Cy&lt;/b&gt; Cole has no email" in page  # escaped
+    assert "WorkOS, the sign-in service this site uses, emails each of your 2 students" in said
+    b = prof.create_sheet(title="Big")
+    prof.upload(b, "Name,Email\nAna Lima,ana@school.edu\nBo Chen,\nCy Cole,\nDi Dunn,\nEd Ek,\n")
+    assert "Bo Chen, Cy Cole, Di Dunn and 1 more have no email address" in text(prof.get(f"/teach/s/{b}/setup?step=share"))
+    c = prof.create_sheet(title="All")
+    prof.upload(c)
+    assert "no email address on your list" not in text(prof.get(f"/teach/s/{c}/setup?step=share"))
