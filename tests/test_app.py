@@ -2410,6 +2410,28 @@ def test_a_short_school_name_lists_the_university_first(prof, monkeypatch):
     assert prof.client.get("/teach/canvas/schools?q=C").get_json() == {"schools": [], "more": False}
 
 
+def test_a_schools_usual_name_comes_before_look_alikes_and_twins_show_once(prof, monkeypatch):
+    directory = {"Columbia": [  # (Columbia College is in Missouri; a Columbia professor means the university)
+        ("Allendale Columbia School", "ac.instructure.com"),
+        ("Columbia College", "columbiacollege.instructure.com"),
+        ("Columbia College", "columbiacollege.instructure.com"),  # (the directory lists some schools twice)
+        ("Columbia College Chicago", "canvas.colum.edu"),
+        ("Columbia University", "courseworks2.columbia.edu"),
+        ("Lower Columbia College", "lcc.instructure.com"),
+    ], "lake": [
+        ("Lake College", "canvas.lakecollege.edu"),
+        ("The University of Lake (UL)", "lake.instructure.com"),
+    ]}
+    monkeypatch.setattr(canvasdir, "_ask",
+                        lambda **p: [{"name": n, "domain": d} for n, d in directory.get(p.get("name"), [])])
+    found = prof.client.get("/teach/canvas/schools?q=Columbia").get_json()
+    names = [s["name"] for s in found["schools"]]
+    assert names[0] == "Columbia University" and names.count("Columbia College") == 1
+    assert len(names) == 5 and found["more"] is False
+    found = prof.client.get("/teach/canvas/schools?q=lake").get_json()
+    assert [s["name"] for s in found["schools"]] == ["The University of Lake (UL)", "Lake College"]
+
+
 def test_a_typed_canvas_address_is_saved_with_its_schools_name(prof, monkeypatch):
     directory = {("domain", "canvas.lake.edu"): [
         {"name": "Lake University - Parents", "domain": "canvas.lake.edu"},

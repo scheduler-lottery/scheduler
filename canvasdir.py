@@ -63,11 +63,16 @@ def search(query):
     query = " ".join((query or "").split())[:80]
     if len(query) < 2:
         return [], False
-    found = _ask(name=query, per_page=50) or []
+    found = []
+    for school in _ask(name=query, per_page=50) or []:
+        if school not in found:  # (the directory lists some schools twice or three times over)
+            found.append(school)
     typed = query.lower()
     word = re.compile(r"\b" + re.escape(typed))
+    usual = {f"university of {typed}", f"{typed} university"}
     found.sort(key=lambda s: (
         s["name"].lower() != typed,                       # exactly what was typed
+        re.sub(r"^the |\s*\(.*\)$", "", s["name"].lower()) not in usual,  # "Columbia University", not "...College"
         not word.search(s["name"].lower()),               # a word starts with it ("Penn": Pennsylvania)
         bool(SIDE_DOORS.search(s["name"])),               # parents', catalog, pre-college portals last
         not re.search(r"universit|college|\blaw\b", s["name"], re.I),
