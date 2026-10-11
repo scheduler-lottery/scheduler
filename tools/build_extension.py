@@ -100,7 +100,9 @@ def build(target):
             manifest["key"] = handle.read().strip()
         manifest["name"] += " (dev)"
         manifest["host_permissions"] += ["http://127.0.0.1:5077/*"]
-        manifest["externally_connectable"]["matches"] += ["http://127.0.0.1:5050/*", "http://localhost:5050/*"]
+        ports = os.environ.get("DEV_SITE_PORTS", "5050").split(",")  # (another local Scheduler: DEV_SITE_PORTS=5050,5066)
+        manifest["externally_connectable"]["matches"] += [f"http://{h}:{p.strip()}/*" for p in ports
+                                                          for h in ("127.0.0.1", "localhost")]
     files = ["background.js"]
     if target == "safari":
         manifest["background"]["scripts"] = ["background.js"]

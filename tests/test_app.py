@@ -3576,7 +3576,7 @@ def test_the_wrong_file_on_an_empty_list_offers_just_add_or_choose_another(prof)
     assert re.search(r'class="report report-warn"[^>]*>.*?<ul class="tips"><li>This file has no Name or Email column',
                      page, re.S)
     # The list taken off while another waited to be checked (even one with a note): its one button is the one.
-    b = prof.create_sheet(title="Meanwhile")
+    b = prof.create_sheet(title="LAW 310 Meanwhile")  # (BIO 101 below: a different course number, so a note)
     prof.upload(b)
     r = prof.upload(b, "Name,Email,Section\nZed Zane,zed@x.edu,BIO 101\n", "other.csv")
     prof.post(f"/teach/s/{b}/roster/clear")

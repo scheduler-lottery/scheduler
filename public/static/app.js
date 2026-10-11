@@ -789,6 +789,7 @@
         other.addEventListener("click", function () {
           arrivedBox.hidden = true;
           savedCourse = ""; // ask which, this time
+          askWhich = true;
           tidy(false);
           helperGo.click();
         });
@@ -1020,6 +1021,24 @@
         return (isNaN(from) || from <= today) && (isNaN(to) || to >= today);
       };
       var pickNote = ""; // said above the courses, the once
+      var askWhich = false; // "Wrong course?": the list of courses, even when one matches
+      // The course this sheet is for, when its name says: the same name, or
+      // the one current course with the same course number ("LAW 540" and
+      // "2026FA_LAW_540_SEC20"). Years aren't course numbers.
+      var numbers = function (text) {
+        return (String(text).match(/\d{3,}/g) || []).filter(function (n) { return !/^(19|20)\d\d$/.test(n); });
+      };
+      var matching = function (courses) {
+        var title = (guide.getAttribute("data-sheet-title") || "").trim().toLowerCase();
+        var same = courses.filter(function (c) { return String(c.name).trim().toLowerCase() === title; });
+        if (same.length === 1) return same[0];
+        var ours = numbers(title);
+        if (!ours.length) return null;
+        var hits = courses.filter(function (c) {
+          return current(c) && numbers(c.name).some(function (n) { return ours.indexOf(n) >= 0; });
+        });
+        return hits.length === 1 ? hits[0] : null;
+      };
       var getCourses = function () {
         setBusy(true);
         helperSay("Getting your courses from Canvas…");
@@ -1031,6 +1050,9 @@
           var courses = (msg.courses || []).slice().sort(function (a, b) { return (current(b) ? 1 : 0) - (current(a) ? 1 : 0); });
           if (!courses.length) { helperSay((note ? note + " " : "") + "Canvas doesn't list you as a teacher of any course."); return; }
           if (courses.length === 1) { getStudents(courses[0].id, courses[0].name); return; }
+          var match = askWhich ? null : matching(courses);
+          askWhich = false;
+          if (match) { getStudents(match.id, match.name); return; } // (and "Wrong course?" under the list)
           helperSay("");
           helperCourses.textContent = "";
           if (note) {
@@ -1078,6 +1100,7 @@
               savedCourse = "";
               pickNote = "Canvas no longer has the course this sheet's list came from (it may have been deleted or "
                 + "merged, or you're no longer on it).";
+              askWhich = true;
               getCourses();
               return;
             }

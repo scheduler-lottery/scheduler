@@ -187,7 +187,7 @@ try {
   // One click. Not signed in to Canvas: a Canvas tab comes up to sign in.
   const before = created.length;
   await evaluate(me.session, `document.querySelector("[data-helper-go]").click()`);
-  check(await until(me.session, `document.querySelector("[data-helper-said]").textContent.includes("Sign in to Canvas")`, 10000),
+  check(await until(me.session, `document.querySelector("[data-helper-said]").textContent.includes("sign-in page just came up")`, 10000),
     "signed out of Canvas: the page says to sign in, in the tab that opened");
   let canvasTab = null;
   for (let i = 0; i < 50 && !canvasTab; i++) {
@@ -248,6 +248,18 @@ try {
   check(refused, "a page on any other site can't even reach the helper");
   await send("Target.closeTarget", { targetId: stranger.targetId });
 
+  // A sheet named for its course: one click, and that course's list is here, with no question first.
+  check(!!(await canvasStep(me.session, "LAW 540 Evidence"))
+    && await until(me.session, `document.querySelector("[data-helper-go]").offsetParent !== null`), "a sheet named LAW 540 Evidence");
+  await evaluate(me.session, `document.querySelector("[data-helper-go]").click()`);
+  check(await until(me.session, `!document.querySelector("[data-canvas-arrived]").hidden`, 10000)
+    && (await evaluate(me.session, `document.querySelector("[data-canvas-arrived]").innerText`)).includes("8 students from 2026FA_LAW_540_SEC20")
+    && await evaluate(me.session, `document.querySelector("[data-helper-courses]").hidden`),
+    "one click: its course's list (LAW 540), no course question");
+  await evaluate(me.session, `document.querySelector(".arrived-other").click()`);
+  check(await until(me.session, `!document.querySelector("[data-helper-courses]").hidden`, 10000),
+    "and \"Wrong course?\" asks which course after all");
+
   // Canvas left open on a course page all day, and its sign-in ran out: the
   // helper leaves that tab alone and opens a new one to sign in.
   const old = await newPage(`${CANVAS}/courses/101`);
@@ -263,7 +275,7 @@ try {
   await send("Target.activateTarget", { targetId: me.targetId });
   const before2 = created.length;
   await evaluate(me.session, `document.querySelector("[data-helper-go]").click()`);
-  check(await until(me.session, `document.querySelector("[data-helper-said]").textContent.includes("Sign in to Canvas")`, 10000),
+  check(await until(me.session, `document.querySelector("[data-helper-said]").textContent.includes("sign-in page just came up")`, 10000),
     "the page says to sign in to Canvas, in the tab that opened");
   const fresh = await newCanvasTab(before2);
   check(!!fresh && fresh.targetId !== old.targetId, "a new Canvas tab opened for signing in, not the old one");
