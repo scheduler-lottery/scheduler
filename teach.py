@@ -2213,20 +2213,28 @@ def _link_email(sheet, name, token):
 def canvas_schools():
     """Schools whose name matches what was typed, with their Canvas
     addresses, from Instructure's public directory (for the class-list
-    questions)."""
-    return jsonify(schools=canvasdir.search(request.args.get("q", "")))
+    questions), likeliest first; `more` when more matched than are listed."""
+    schools, more = canvasdir.search(request.args.get("q", ""))
+    return jsonify(schools=schools, more=more)
 
 
 @bp.route("/canvas/school", methods=["POST"])
 @instructor_required
 def canvas_school():
     """Remember which school's Canvas this instructor uses, so its links go
-    to their school's own Canvas."""
+    to their school's own Canvas. An address typed on its own gets the
+    school's name from the directory, so the page shows a name, not the
+    address twice."""
     data = request.get_json(silent=True) or {}
-    host = canvasdir.clean_host(data.get("domain"))
+    sent = str(data.get("domain") or "").strip()
+    stand_in = bool(settings.CANVAS_DEV_HOST) and sent == settings.CANVAS_DEV_HOST  # (locally, tools/fake_canvas.py)
+    host = settings.CANVAS_DEV_HOST if stand_in else canvasdir.clean_host(sent)
     if not host:
         return jsonify(ok=False, error="That doesn't look like a Canvas address, like canvas.myschool.edu."), 400
-    name = " ".join(str(data.get("name") or "").split())[:120] or host
+    name = " ".join(str(data.get("name") or "").split())[:120]
+    if not name and not stand_in:
+        name = canvasdir.name_of(host)
+    name = name or host
     db.run("UPDATE instructors SET canvas_host = :host, canvas_school = :name WHERE id = :id",
            host=host, name=name, id=current_instructor()["id"])
     db.commit()

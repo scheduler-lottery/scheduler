@@ -20,6 +20,10 @@ from util import iso, now, parse_iso
 SEARCH_URL = "https://canvas.instructure.com/api/v1/accounts/search"
 HOST = re.compile(r"^(?=.{4,120}$)([a-z0-9-]+\.)+[a-z]{2,}$")
 REMEMBER_DAYS = 30
+SHOWN = 10  # schools listed for a typed name
+# A school's other ways into its Canvas, not the one its professors use.
+SIDE_DOORS = re.compile(r"parent|observer|catalog|pre-?college|professional development|executive education"
+                        r"|development instance|sandbox", re.I)
 
 
 def clean_host(value):
@@ -31,9 +35,9 @@ def clean_host(value):
 
 
 def _ask(**params):
-    """Schools matching a name or domain: [{name, domain}], or None if the
-    directory couldn't be asked."""
-    query = urllib.parse.urlencode({**params, "per_page": 8})
+    """Schools matching a name or domain (8, unless per_page says): [{name,
+    domain}], or None if the directory couldn't be asked."""
+    query = urllib.parse.urlencode({"per_page": 8, **params})
     try:
         ask = urllib.request.Request(f"{SEARCH_URL}?{query}", headers={"Accept": "application/json"})
         with urllib.request.urlopen(ask, timeout=5) as answer:
@@ -42,6 +46,8 @@ def _ask(**params):
         return None
     schools = []
     for school in found if isinstance(found, list) else []:
+        if not isinstance(school, dict):
+            continue
         host = clean_host(str(school.get("domain", "")))
         name = " ".join(str(school.get("name", "")).split())[:120]
         if host and name:
@@ -50,9 +56,45 @@ def _ask(**params):
 
 
 def search(query):
-    """Schools whose name matches what the professor typed."""
+    """Schools whose name matches what the professor typed, likeliest first,
+    and whether more matched than are shown. The directory answers in
+    alphabetical order, so "Chicago" would list Chicago Jesuit Academy and
+    leave out University of Chicago; ask for plenty, then rank."""
     query = " ".join((query or "").split())[:80]
-    return (_ask(name=query) or []) if len(query) >= 2 else []
+    if len(query) < 2:
+        return [], False
+    found = []
+    for school in _ask(name=query, per_page=50) or []:
+        if school not in found:  # (the directory lists some schools twice or three times over)
+            found.append(school)
+    typed = query.lower()
+    word = re.compile(r"\b" + re.escape(typed))
+    usual = {f"university of {typed}", f"{typed} university"}
+    found.sort(key=lambda s: (
+        s["name"].lower() != typed,                       # exactly what was typed
+        re.sub(r"^the |\s*\(.*\)$", "", s["name"].lower()) not in usual,  # "Columbia University", not "...College"
+        not word.search(s["name"].lower()),               # a word starts with it ("Penn": Pennsylvania)
+        bool(SIDE_DOORS.search(s["name"])),               # parents', catalog, pre-college portals last
+        not re.search(r"universit|college|\blaw\b", s["name"], re.I),
+        not s["domain"].startswith("canvas."),            # a school's own Canvas address
+        len(s["name"]),
+    ))
+    return found[:SHOWN], len(found) > SHOWN
+
+
+def name_of(host):
+    """The school whose Canvas is at exactly this address, by name, or ""
+    (for a professor who typed the address instead of picking the school).
+    The directory also answers with addresses that only contain this one
+    (iu.instructure.com: 13 others first), so ask for plenty. Several schools
+    can share one Canvas (umsystem.instructure.com: Mizzou, UMKC, Missouri
+    S&T...); no one name is right then, so "". One quick question to the
+    directory; never raises."""
+    ours = [s["name"] for s in _ask(domain=host, per_page=50) or [] if s["domain"] == host]
+    ours = sorted([n for n in ours if not SIDE_DOORS.search(n)] or ours, key=len)
+    if not ours or not all(n == ours[0] or n.startswith(ours[0] + " ") for n in ours):
+        return ""  # several schools (one school's entries all start with its name: "SW Law - Visitors")
+    return ours[0]
 
 
 def _best(schools, domain):
