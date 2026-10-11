@@ -6,7 +6,7 @@
 <div class="send-choices">
   <section class="send-choice" aria-labelledby="send-for-me-{{ send.back }}">
     <h3 class="send-title" id="send-for-me-{{ send.back }}">Send it for me</h3>
-    <p class="send-text">WorkOS emails {{ 'each of your ' ~ (send.count | plural('student')) if send.count > 1 else 'your student' }} an invitation{% if code_sender %}, from {{ code_sender }}{% endif %}. Its button signs them in to this class. WorkOS writes that email, so it won't include your message.</p>
+    <p class="send-text">WorkOS, the sign-in service this site uses, emails {{ 'each of your ' ~ (send.count | plural('student')) if send.count > 1 else 'your student' }} an invitation{% if code_sender %}, from {{ code_sender }}{% endif %}. Its button signs them in to this class. WorkOS writes that email, so it won't include your message.</p>
     {% if invites_ready %}
     <form method="post" action="{{ url_for('teach.invite', sid=sheet.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

@@ -36,9 +36,16 @@
       <a class="btn btn-secondary" href="{{ about_url }}"><span aria-hidden="true">←</span> Back</a>
       <a class="btn btn-primary btn-large" href="{{ url_for('teach.setup', sid=sheet.id, step='share') }}">Next: share the link <span aria-hidden="true">→</span></a>
     </div>
+    {# The wrong course or list: take it off and answer the same questions again (teach.clear_roster). #}
+    <form method="post" action="{{ url_for('teach.clear_roster', sid=sheet.id) }}" class="replace-list"
+          data-confirm="Take {{ 'this student' if counts.roster == 1 else 'these ' ~ counts.roster ~ ' students' }} off, and get your class list again?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="setup" value="1">
+      <button type="submit" class="btn-link">{{ 'Wrong course? Start over and pick another' if sheet.canvas_course_id else 'Wrong list? Start over' }}</button>
+    </form>
     <details class="replace-list">
-      <summary>Wrong list? Use a different file</summary>
-      {% include "_roster_upload.html" %}
+      <summary>Or replace it with a file</summary>
+      {% with replacing = True %}{% include "_roster_upload.html" %}{% endwith %}
     </details>
     {% elif sheet.allow_unlisted %}
     <p class="lead-line">You chose to let students sign themselves up: anyone with your link adds their own name and picks a PIN. So there's no list to add.</p>
@@ -73,7 +80,10 @@
     </div>
     {% else %}
     {% if invite %}
-    <p class="lead-line">How should your {{ invite.count | plural('student') }} get the link?</p>
+    <p class="lead-line">How should your {{ counts.roster | plural('student') }} get the link?</p>
+    {% if invite.no_email %}{% set n = invite.no_email | length %}
+    <p class="warn-line">{{ invite.no_email[:3] | join(', ') }}{% if n > 3 %} and {{ n - 3 }} more{% endif %} {{ 'has' if n == 1 else 'have' }} no email address on your list, so the emails below reach only the other {{ invite.count }}. Post the message in Canvas too, or give it to {{ 'that student' if n == 1 else 'them' }} yourself.</p>
+    {% endif %}
     {% with send = {'who': None, 'count': invite.count, 'back': 'setup', 'compose': invite, 'copy_from': 'announcement'} %}
     {% include "_send_link.html" %}
     {% endwith %}

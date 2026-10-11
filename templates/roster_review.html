@@ -1,16 +1,21 @@
 {% extends "base.html" %}
 {% block title %}Check the new class list — {{ sheet.title }}{% endblock %}
 {% block content %}
+{# What changes, and which to do: add, replace, or keep the current list
+   (teach.review_roster). `doubtful`: it may not be this class, so the
+   buttons answer that question, with Cancel first unless one is
+   recommended. With no list yet, just "Add these" or Cancel. #}
+{% set noun = 'name' if pending.look_first and not from_canvas else 'student' %}
 <div class="card">
   <p class="eyebrow"><a href="{{ url_for('teach.sheet', sid=sheet.id) }}#class-list" class="link-muted">← {{ sheet.title }}</a></p>
   <h1>Check the new class list</h1>
   <p class="subtitle">
     {% if pending.source %}“{{ pending.source }}”{% else %}The names you pasted{% endif %}:
-    {{ diff.incoming | plural('student') }}. Your list now: {{ diff.current | plural('student') }}. Nothing has changed yet.
+    {{ diff.incoming | plural(noun) }}. Your list now: {{ diff.current | plural('student') }}. Nothing has changed yet.
   </p>
 
   {% for w in warnings %}
-  <div class="warn-box"><p>{{ w }}</p></div>
+  <div class="warn-box"{% if loop.first %} id="review-warn"{% endif %}><p>{{ w }}</p></div>
   {% endfor %}
 
   <ul class="diff-list">
@@ -28,18 +33,35 @@
   </details>
   {% endif %}
 
+  {# The buttons, each written once, then put in order. #}
+  {% set add_button %}
+    <button type="submit" name="action" value="add" class="btn {{ 'btn-primary' if recommend == 'add' else 'btn-secondary' }} btn-block"{% if warnings %} aria-describedby="review-warn"{% endif %}>
+      {% if doubtful %}Add them too: {{ (diff.current + diff.adding | length) | plural('student') }} from both lists on one sheet{% else %}Add the {{ diff.adding | length }} new name{{ 's' if diff.adding | length != 1 }} to my list (keep everyone already on it){% endif %}
+    </button>
+  {% endset %}
+  {% set replace_button %}
+    <button type="submit" name="action" value="replace" class="btn {{ 'btn-primary' if recommend == 'replace' else 'btn-secondary' }} btn-block"{% if warnings %} aria-describedby="review-warn"{% endif %}>
+      {% if not diff.current %}Add these {{ diff.incoming | plural(noun) }}{% elif doubtful %}It’s my class: replace my list with this one{% else %}Replace my list with this one{% endif %}
+    </button>
+  {% endset %}
+  {% set cancel_button %}
+    <button type="submit" name="action" value="cancel" class="btn btn-ghost btn-block"{% if warnings %} aria-describedby="review-warn"{% endif %}>
+      {% if not diff.current %}{{ 'Cancel — choose a different file' if from_file else 'Cancel — don’t add these' }}{% elif doubtful %}It’s not my class: keep my current list (nothing changes){% else %}Cancel — keep my current list{% endif %}
+    </button>
+  {% endset %}
   <form method="post" class="choice-stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    {% if diff.adding %}
-    <button type="submit" name="action" value="add" class="btn {{ 'btn-primary' if recommend == 'add' else 'btn-secondary' }} btn-block">
-      Add the {{ diff.adding | length }} new name{{ 's' if diff.adding | length != 1 }} to my list (keep everyone already on it)
-    </button>
+    {% if doubtful and not recommend %}
+    {{ cancel_button }}{{ replace_button }}{% if diff.adding and diff.current %}{{ add_button }}{% endif %}
+    {% elif doubtful %}
+    {{ replace_button }}{% if diff.adding and diff.current %}{{ add_button }}{% endif %}{{ cancel_button }}
+    {% else %}
+    {% if diff.adding and diff.current %}{{ add_button }}{% endif %}{{ replace_button }}{{ cancel_button }}
     {% endif %}
-    <button type="submit" name="action" value="replace" class="btn {{ 'btn-primary' if recommend == 'replace' else 'btn-secondary' }} btn-block">
-      Replace my list with this one
-    </button>
-    <button type="submit" name="action" value="cancel" class="btn btn-ghost btn-block">Cancel — keep my current list</button>
   </form>
-  <p class="mini-hint">Either way, a copy of your current list is saved first, and you can put it back with one click.</p>
+  {% if diff.current %}<p class="mini-hint">Before your list changes, a copy of it is saved, so you can put it back with one click.</p>{% endif %}
+  {% if pending.canvas and pending.canvas.via == 'connect' %}
+  <p class="mini-hint">Wrong course? <a href="{{ url_for('teach.canvas_connect', sid=sheet.id, pick=1, setup=1 if pending.setup else None) }}">Pick a different Canvas course</a></p>
+  {% endif %}
 </div>
 {% endblock %}
