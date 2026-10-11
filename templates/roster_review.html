@@ -4,8 +4,24 @@
 {# What changes, and which to do: add, replace, or keep the current list
    (teach.review_roster). `doubtful`: it may not be this class, so the
    buttons answer that question, with Cancel first unless one is
-   recommended. With no list yet, just "Add these" or Cancel. #}
+   recommended. With no list yet, just "Add these" or Cancel. Otherwise
+   the buttons say who comes and who goes: "Update my list: add A, take
+   off B" (Replace) and "Only add A (keep B on my list)"; with nobody to
+   take off, one button, "Add A", which replaces (so a changed email is
+   updated, not added as a second student). #}
 {% set noun = 'name' if pending.look_first and not from_canvas else 'student' %}
+{# Names in a button: "A", "A and B", "A, B and C", "A, B and 3 more". #}
+{% macro who(people) -%}
+  {%- set shown = people if people | length <= 3 else people[:2] -%}
+  {%- for p in shown -%}
+    <bdi>{{ p.display_name }}</bdi>{% if not loop.last %}{{ ' and ' if loop.revindex == 2 and people | length <= 3 else ', ' }}{% endif %}
+  {%- endfor -%}
+  {%- if people | length > 3 %} and {{ people | length - 2 }} more{% endif -%}
+{%- endmacro %}
+{% macro emails(pairs) -%}
+  {%- set people = pairs | map('first') | list -%}
+  {%- if people | length == 1 %}{{ who(people) }}’s email{% else %}the emails of {{ who(people) }}{% endif -%}
+{%- endmacro %}
 <div class="card">
   <p class="eyebrow"><a href="{{ url_for('teach.sheet', sid=sheet.id) }}#class-list" class="link-muted">← {{ sheet.title }}</a></p>
   <h1>Check the new class list</h1>
@@ -33,15 +49,23 @@
   </details>
   {% endif %}
 
-  {# The buttons, each written once, then put in order. #}
+  {# The buttons, each written once, then put in order. With a list here
+     and nobody taken off, "Add A" is the replace button, and the only one. #}
+  {% set only_adding = diff.current and not doubtful and diff.adding and not diff.dropping %}
   {% set add_button %}
     <button type="submit" name="action" value="add" class="btn {{ 'btn-primary' if recommend == 'add' else 'btn-secondary' }} btn-block"{% if warnings %} aria-describedby="review-warn"{% endif %}>
-      {% if doubtful %}Add them too: {{ (diff.current + diff.adding | length) | plural('student') }} from both lists on one sheet{% else %}Add the {{ diff.adding | length }} new name{{ 's' if diff.adding | length != 1 }} to my list (keep everyone already on it){% endif %}
+      {% if doubtful %}Add them too: {{ (diff.current + diff.adding | length) | plural('student') }} from both lists on one sheet{% else %}Only add {{ who(diff.adding) }} ({% if diff.dropping | length > 3 %}keep everyone already on my list{% else %}keep {{ who(diff.dropping) }} on my list{% endif %}){% endif %}
     </button>
   {% endset %}
   {% set replace_button %}
-    <button type="submit" name="action" value="replace" class="btn {{ 'btn-primary' if recommend == 'replace' else 'btn-secondary' }} btn-block"{% if warnings %} aria-describedby="review-warn"{% endif %}>
-      {% if not diff.current %}{{ 'Add this ' ~ noun if diff.incoming == 1 else 'Add these ' ~ (diff.incoming | plural(noun)) }}{% elif doubtful %}It’s my class: replace my list with this one{% else %}Replace my list with this one{% endif %}
+    <button type="submit" name="action" value="replace" class="btn {{ 'btn-primary' if recommend == 'replace' or (only_adding and recommend) else 'btn-secondary' }} btn-block"{% if warnings %} aria-describedby="review-warn"{% endif %}>
+      {% if not diff.current %}{{ 'Add this ' ~ noun if diff.incoming == 1 else 'Add these ' ~ (diff.incoming | plural(noun)) }}
+      {%- elif doubtful %}It’s my class: replace my list with this one
+      {%- elif diff.adding and diff.dropping %}Update my list: add {{ who(diff.adding) }}, take off {{ who(diff.dropping) }}
+      {%- elif diff.adding %}Add {{ who(diff.adding) }}{% if diff.new_emails %}, and update {{ emails(diff.new_emails) }}{% endif %}
+      {%- elif diff.dropping %}Take {{ who(diff.dropping) }} off my list
+      {%- elif diff.new_emails %}Update {{ emails(diff.new_emails) }}
+      {%- else %}Update my list to match{% endif %}
     </button>
   {% endset %}
   {% set cancel_button %}
@@ -56,11 +80,17 @@
     {% elif doubtful %}
     {{ replace_button }}{% if diff.adding and diff.current %}{{ add_button }}{% endif %}{{ cancel_button }}
     {% else %}
-    {% if diff.adding and diff.current %}{{ add_button }}{% endif %}{{ replace_button }}{{ cancel_button }}
+    {% if diff.adding and diff.dropping %}{{ add_button }}{% endif %}{{ replace_button }}{{ cancel_button }}
     {% endif %}
   </form>
-  {% if diff.current %}<p class="mini-hint">Before your list changes, a copy of it is saved, so you can put it back with one click.</p>{% endif %}
-  {% if pending.canvas and pending.canvas.via == 'connect' %}
+  {% if diff.current %}<p class="mini-hint">Rankings are never deleted. Before your list changes, a copy of it is saved, so you can put it back with one click.</p>{% endif %}
+  {% if from_helper %}
+  {# Nothing changes; back to Get my class list, which then shows the list of courses (teach.review_roster). #}
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <p class="mini-hint">Wrong course? <button type="submit" name="action" value="pick" class="btn-link">Pick a different Canvas course</button></p>
+  </form>
+  {% elif pending.canvas and pending.canvas.via == 'connect' %}
   <p class="mini-hint">Wrong course? <a href="{{ url_for('teach.canvas_connect', sid=sheet.id, pick=1, setup=1 if pending.setup else None) }}">Pick a different Canvas course</a></p>
   {% endif %}
 </div>

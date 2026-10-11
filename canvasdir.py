@@ -20,6 +20,7 @@ from util import iso, now, parse_iso
 SEARCH_URL = "https://canvas.instructure.com/api/v1/accounts/search"
 HOST = re.compile(r"^(?=.{4,120}$)([a-z0-9-]+\.)+[a-z]{2,}$")
 REMEMBER_DAYS = 30
+RETRY_MINUTES = 5  # after the directory didn't answer
 SHOWN = 10  # schools listed for a typed name
 # A school's other ways into its Canvas, not the one its professors use.
 SIDE_DOORS = re.compile(r"parent|observer|catalog|pre-?college|professional development|executive education"
@@ -122,17 +123,20 @@ def guess(email):
                 return found.get("school")
     except Exception:  # noqa: BLE001
         pass
-    school, asked = None, False
+    school, failed = None, False
     for start in range(len(labels) - 1):
         candidate = ".".join(labels[start:])
         schools = _ask(domain=candidate)
         if schools is None:
+            failed = True
             break
-        asked = True
         school = _best(schools, candidate)
         if school:
             break
-    until = now() + (timedelta(days=REMEMBER_DAYS) if asked else timedelta(hours=1))
+    # A directory that didn't answer (even for school.edu after law.school.edu)
+    # says nothing about the school: asked again in a few minutes, not after a
+    # month, so one slow reply doesn't hide the guess from everyone there.
+    until = now() + (timedelta(minutes=RETRY_MINUTES) if failed else timedelta(days=REMEMBER_DAYS))
     try:
         with db.get_engine().begin() as connection:
             connection.execute(

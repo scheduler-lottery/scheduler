@@ -340,8 +340,8 @@ def test_pasting_more_names_adds_to_the_list(prof):
     sid = prof.create_sheet()
     prof.upload(sid)
     r = prof.post(f"/teach/s/{sid}/roster", {"pasted": "Late Comer, late@school.edu\nLee, Sam"})
-    page = html(prof.get(r.headers["Location"]))
-    assert "Add the 1 new name to my list" in page
+    page = text(prof.get(r.headers["Location"]))
+    assert "Only add Late Comer (keep Alex Johnson and Riya Patel on my list)" in page
     page = follow(prof, prof.post(r.headers["Location"], {"action": "add"}))
     assert "Added 1 new student" in page
     assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 4
@@ -3463,7 +3463,7 @@ def _buttons(page):
     """The review page's buttons, in order: (label, highlighted?)."""
     form = page.split('class="choice-stack"')[1].split("</form>")[0]
     found = re.findall(r'<button type="submit" name="action" value="\w+" class="([^"]*)"[^>]*>(.*?)</button>', form, re.S)
-    return [(text(label), "btn-primary" in cls) for cls, label in found]
+    return [(text(re.sub(r"<[^>]+>", "", label)), "btn-primary" in cls) for cls, label in found]  # (names in <bdi>)
 
 
 def _pending_id(app, sid):
@@ -3523,7 +3523,7 @@ def test_a_list_that_may_not_be_this_class_has_no_highlighted_button(prof):
                               ("Add them too: 7 students from both lists on one sheet", False)]
     assert 'class="warn-box" id="review-warn"' in page and page.count('aria-describedby="review-warn"') == 3
     assert "Before your list changes, a copy of it is saved" in text(page)
-    assert "Pick a different Canvas course" not in text(page)  # the helper has its own "Wrong course?"
+    assert 'value="pick" class="btn-link">Pick a different Canvas course' in page  # the helper's own: see the list
     # A file with none of the same names: the same.
     other = "Name,Email\nZed Zane,zed@x.edu\nYu Yan,yu@x.edu\nXi Xu,xi@x.edu\nWes Wu,wes@x.edu\nVi Vo,vi@x.edu\n"
     r = prof.upload(sid, other, "students.csv")
@@ -3534,13 +3534,14 @@ def test_a_list_that_may_not_be_this_class_has_no_highlighted_button(prof):
     assert _buttons(raw(prof.get(r.headers["Location"])))[0] == ("It’s my class: replace my list with this one", True)
     # Pasted names are more names: Add, as ever...
     r = prof.post(f"/teach/s/{sid}/roster", {"pasted": "Late Comer, late@school.edu"})
-    assert ("Add the 1 new name to my list (keep everyone already on it)", True) in _buttons(
+    assert ("Only add Late Comer (keep everyone already on my list)", True) in _buttons(
         raw(prof.get(r.headers["Location"])))
     # ...but pasted into a box for replacing the list (the same form as its file), they're the new list.
     r = prof.post(f"/teach/s/{sid}/roster", {"pasted": "Late Comer, late@school.edu", "replacing": "1"})
     assert _buttons(raw(prof.get(r.headers["Location"]))) == [
-        ("Add the 1 new name to my list (keep everyone already on it)", False),
-        ("Replace my list with this one", True), ("Cancel — keep my current list", False)]
+        ("Only add Late Comer (keep everyone already on my list)", False),
+        ("Update my list: add Late Comer, take off Ana Lima, Bo Chen and 2 more", True),
+        ("Cancel — keep my current list", False)]
     # In setup, before anyone has the link, a second Canvas course is fixing a wrong pick: Replace.
     c = prof.create_sheet(title="Torts", allow_unlisted=False)
     prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=4, names=four, course_id="505", course="BUSCOM"),
@@ -3631,7 +3632,7 @@ def test_starting_over_in_setup_takes_the_list_off_and_asks_again(prof):
     assert 'data-confirm="Take these 4 students off, and get your class list again?"' in raw(
         prof.get(f"/teach/s/{sid}/setup?step=students"))
     r = prof.post(f"/teach/s/{sid}/roster/clear", {"setup": "1"})
-    assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students")
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students&pick=1")  # next time, it asks which
     assert "Took 4 students off your list" in follow(prof, r)
     assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :s AND is_test = 0", s=sid) == 0
     assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=sid) is None
@@ -3690,12 +3691,13 @@ def test_a_list_from_connect_canvas_offers_a_different_course(prof):
     link = re.search(r'Wrong course\? <a href="([^"]+)">Pick a different Canvas course</a>', page).group(1)
     assert html_lib.unescape(link) in (f"/teach/s/{sid}/canvas/connect?pick=1&setup=1",
                                        f"/teach/s/{sid}/canvas/connect?setup=1&pick=1")
-    # From the helper: "helper", and no such link (the helper has its own).
+    # From the helper: "helper", and no such link: its own is a button, back to its list of courses.
     r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=2, course_id="101", course="LAW 310")})
     with prof.app.app_context():
         pending = json.loads(db.scalar("SELECT data FROM pending_uploads WHERE sheet_id = :s", s=sid))
     assert pending["canvas"]["via"] == "helper"
-    assert "Pick a different Canvas course" not in text(prof.get(r.headers["Location"]))
+    page = raw(prof.get(r.headers["Location"]))
+    assert "/canvas/connect" not in page and 'value="pick" class="btn-link">Pick a different Canvas course' in page
 
 
 def test_same_name_students_numbered_without_email_make_the_report_yellow(prof):
