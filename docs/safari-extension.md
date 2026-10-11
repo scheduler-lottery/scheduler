@@ -67,3 +67,8 @@ From then on, Safari users see **Add Scheduler Helper to Safari** with these ste
 
 Raise `version` in `extension/manifest.json`, then rebuild and upload. Apple requires a
 higher version each time.
+
+The version to upload now is **1.0.1**. What changed since 1.0.0: when Canvas is left
+open in a tab and has signed the professor out, the helper opens a new Canvas tab to
+sign in (1.0.0 brought up the old tab, which had nowhere to sign in), and Scheduler's
+page can ask it to bring that page back to the front.

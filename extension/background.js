@@ -7,16 +7,20 @@
 // courses, then one course's students; the helper reads them from Canvas's
 // own API, signed in as the professor, exactly as Canvas's pages do, and
 // sends back names and emails, nothing else. It never changes anything in
-// Canvas, never sees a password, and keeps nothing.
+// Canvas, never sees a password, and keeps nothing. The page can also ask
+// it to bring the page's own tab back to the front.
 //
 // How it reads Canvas:
 //   1. straight from here (Chrome sends the professor's Canvas session with
 //      requests to a site the helper may read), or, if that doesn't work
 //      (third-party cookies blocked, say),
-//   2. from inside a Canvas tab: an open one, or one it opens in the
-//      background and closes after. Not signed in? That tab comes to the
-//      front for the professor to sign in, the usual way, and the helper
-//      carries on once Canvas is back.
+//   2. from inside a Canvas tab: an open one, if Canvas is signed in there,
+//      or else one it opens in the background and closes after. Not signed
+//      in? That new tab comes to the front for the professor to sign in,
+//      the usual way, and the helper carries on once Canvas is back. An
+//      open tab whose sign-in ran out is left alone: it still shows its old
+//      page, with nowhere to sign in, and reloading it could lose the
+//      professor's work there.
 
 const VERSION = chrome.runtime.getManifest().version;
 const CANVAS_HOSTS = (chrome.runtime.getManifest().host_permissions || [])
@@ -29,6 +33,7 @@ const COURSES = "/api/v1/courses?per_page=100&include[]=term&include[]=total_stu
 const IN_SAFARI = chrome.runtime.getURL("").indexOf("safari-web-extension:") === 0;
 const KEEP_AWAKE_MS = 25 * 1000; // Safari stops a quiet helper after about 30 seconds
 const SIGN_IN_WAIT_MS = 10 * 60 * 1000;
+const LOOK_MS = 3 * 1000; // a Canvas tab stuck (behind a "Leave site?" question, say) can't hold things up
 
 function fromScheduler(sender) {
   let origin = sender && sender.origin;
@@ -85,6 +90,10 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, reply) => {
   if (msg.type === "courses" || msg.type === "students") { // (Safari: no ports from pages)
     handle(msg, () => {}, sender.tab).then(reply);
     return true; // the answer comes later
+  }
+  if (msg.type === "front") { // the page's own tab, to the front
+    toFront(sender.tab).then(() => reply({ ok: true }));
+    return true;
   }
   return undefined;
 });
@@ -167,7 +176,7 @@ async function direct(origin, path) {
 
 // Inside a Canvas tab: the same request, made by Canvas's own page.
 async function inTab(origin, paths, say, schedulerTab) {
-  let tab = (await chrome.tabs.query({ url: origin + "/*" })).find((t) => t.status === "complete");
+  let tab = await openSignedIn(origin);
   let opened = false;
   if (!tab) {
     tab = await chrome.tabs.create({ url: origin + "/", active: false });
@@ -181,11 +190,34 @@ async function inTab(origin, paths, say, schedulerTab) {
     return answer.data;
   } finally {
     if (opened) chrome.tabs.remove(tab.id).catch(() => {});
-    if (schedulerTab) {
-      chrome.tabs.update(schedulerTab.id, { active: true }).catch(() => {});
-      chrome.windows.update(schedulerTab.windowId, { focused: true }).catch(() => {});
-    }
+    toFront(schedulerTab);
   }
+}
+
+// An open Canvas tab where the professor is signed in, if there is one
+// (all looked at together, so a few seconds at most).
+async function openSignedIn(origin) {
+  const tabs = (await chrome.tabs.query({ url: origin + "/*" })).filter((t) => t.status === "complete");
+  const said = await Promise.all(tabs.map((t) => whoIn(t.id)));
+  return tabs[said.indexOf(200)] || null;
+}
+
+// What Canvas says, inside this tab, to "who am I?": 200 when signed in.
+async function whoIn(tabId) {
+  const results = await Promise.race([
+    chrome.scripting.executeScript({ target: { tabId }, func: whoAmI }).catch(() => null),
+    sleep(LOOK_MS).then(() => null),
+  ]);
+  return (results && results[0] && results[0].result) || 0;
+}
+
+// Bring a tab to the front, in a window that has the focus.
+function toFront(tab) {
+  if (!tab) return Promise.resolve();
+  return Promise.all([
+    chrome.tabs.update(tab.id, { active: true }).catch(() => {}),
+    chrome.windows.update(tab.windowId, { focused: true }).catch(() => {}),
+  ]);
 }
 
 // Wait until the tab is a loaded Canvas page with the professor signed in;
@@ -202,8 +234,7 @@ async function signedIn(tab, origin, say) {
     const now = await chrome.tabs.get(tab.id).catch(() => null);
     if (!now) throw new Error("closed");
     if (now.status === "complete" && now.url && now.url.indexOf(origin + "/") === 0 && !/\/login\b/.test(now.url)) {
-      const [check] = await chrome.scripting.executeScript({ target: { tabId: now.id }, func: whoAmI }).catch(() => [null]);
-      if (check && check.result === 200) return now;
+      if (await whoIn(now.id) === 200) return now;
     }
     if (!asked && now.status === "complete") {
       asked = true;
