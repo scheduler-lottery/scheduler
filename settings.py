@@ -42,7 +42,7 @@ SECRET_KEY = _env("SECRET_KEY")
 # Postgres connection string — in Supabase: Connect -> Transaction pooler.
 # Leave it unset locally and the app uses a SQLite file next to app.py.
 DATABASE_URL = _env("DATABASE_URL")
-SQLITE_PATH = os.path.join(BASE_DIR, "local.db")
+SQLITE_PATH = _env("SQLITE_PATH", os.path.join(BASE_DIR, "local.db"))  # (a second local copy: its own file)
 
 # Sign-in codes are emailed by WorkOS (its free "Magic Auth" service) when
 # it has an API key: WORKOS_API_KEY here, or the key the owner saves on

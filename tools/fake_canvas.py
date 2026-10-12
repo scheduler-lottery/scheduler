@@ -275,4 +275,4 @@ def api_profile(uid):
 
 
 if __name__ == "__main__":
-    app.run(port=5077, debug=False)
+    app.run(port=int(os.environ.get("FAKE_CANVAS_PORT", "5077")), debug=False)  # (another: FAKE_CANVAS_PORT)
