@@ -3007,6 +3007,9 @@ input[type="date"] {
 details.guide:not([open]) { padding-bottom: 20px; }
 .card[id], .fold-card { scroll-margin-top: 92px; }  /* a link to a card lands below the top bar */
 .canvas-update { scroll-margin-top: 92px; }
+.helper-remove { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.helper-remove-buttons { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; margin-top: 8px; }
+.helper-remove[hidden], .helper-remove-buttons[hidden], [data-helper-chrome][hidden] { display: none; }
 
 /* Canvas: steps with pictures of where to click (drawn like Canvas, in this
    site's colors). */

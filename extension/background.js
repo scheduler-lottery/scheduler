@@ -2,13 +2,13 @@
 // Canvas into Scheduler, when (and only when) Scheduler's page asks.
 //
 // Scheduler's page talks to it through externally_connectable (only the
-// Scheduler site listed in the manifest can): over a port in Chrome and
-// Edge, by single messages in Safari. It asks for the professor's
-// courses, then one course's students; the helper reads them from Canvas's
-// own API, signed in as the professor, exactly as Canvas's pages do, and
-// sends back names and emails, nothing else. It never changes anything in
-// Canvas, never sees a password, and keeps nothing. The page can also ask
-// it to bring the page's own tab back to the front.
+// Scheduler site listed in the manifest can), over a port. It asks for the
+// professor's courses, then one course's students; the helper reads them
+// from Canvas's own API, signed in as the professor, exactly as Canvas's
+// pages do, and sends back names and emails, nothing else. It never changes
+// anything in Canvas, never sees a password, and keeps nothing. The page can
+// also ask it to bring the page's own tab back to the front, and, once the
+// class list is in and the professor says so, to remove itself.
 //
 // How it reads Canvas:
 //   1. straight from here (Chrome sends the professor's Canvas session with
@@ -23,17 +23,16 @@
 //      professor's work there.
 
 const VERSION = chrome.runtime.getManifest().version;
+// What this helper can do beyond reading Canvas, for the page to know (1.0.0 said none of this).
+const CAN = ["front", "show-signin", "remove"];
 const SCHEDULER_ORIGINS = ((chrome.runtime.getManifest().externally_connectable || {}).matches || [])
   .map((pattern) => (pattern.match(/^(https?:\/\/[^/]+)\//) || [])[1])
   .filter(Boolean);
-// (Safari's build also names Scheduler's own site among its websites, so
-// Safari asks the professor about it too: that one isn't a Canvas.)
 const CANVAS_HOSTS = (chrome.runtime.getManifest().host_permissions || [])
   .map((pattern) => (pattern.match(/^https?:\/\/([^/]+)\/\*$/) || [])[1])
-  .filter((host) => host && !SCHEDULER_ORIGINS.some((origin) => origin.replace(/^https?:\/\//, "") === host));
+  .filter(Boolean);
 const COURSES = "/api/v1/courses?per_page=100&include[]=term&include[]=total_students";
-const IN_SAFARI = chrome.runtime.getURL("").indexOf("safari-web-extension:") === 0;
-const KEEP_AWAKE_MS = 25 * 1000; // Safari stops a quiet helper after about 30 seconds
+const KEEP_AWAKE_MS = 25 * 1000; // a word to the page while Canvas's sign-in waits, so it knows the helper is still there
 const SIGN_IN_WAIT_MS = 10 * 60 * 1000;
 const LOOK_MS = 3 * 1000; // an open Canvas tab stuck (behind a "Leave site?" question, say) can't hold things up
 const SLOW_MS = 20 * 1000; // but a Canvas that's only slow to answer isn't signed out
@@ -53,23 +52,6 @@ const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 // The Canvas sign-in tab a page is waiting on, by Canvas: a second press of
 // the page's button brings it forward again ("show-signin").
 const signInTabs = new Map();
-
-// Safari asks the professor to allow each site; the page to do it in, opened
-// (in front, over Safari's Settings window) when the helper is first turned
-// on there and access is still missing, and whenever it's needed.
-const ALL_SITES = (chrome.runtime.getManifest().host_permissions || [])
-  .concat((chrome.runtime.getManifest().externally_connectable || {}).matches || []);
-function openAllowPage() {
-  const url = chrome.runtime.getURL("allow.html");
-  return chrome.tabs.query({ url }).catch(() => []).then((open) => open[0] // (one already open: that one, asking afresh)
-    ? chrome.tabs.reload(open[0].id).then(() => chrome.tabs.update(open[0].id, { active: true })).then(() => open[0])
-    : chrome.tabs.create({ url, active: true }))
-    .then((tab) => tab && focusWindow(tab.windowId)).catch(() => {});
-}
-chrome.runtime.onInstalled.addListener((details) => {
-  if (!IN_SAFARI || details.reason !== "install") return;
-  chrome.permissions.contains({ origins: ALL_SITES }).then((ok) => { if (!ok) openAllowPage(); }, openAllowPage);
-});
 
 // One request from the page: the courses, or one course's students. `say`
 // carries word along the way (a sign-in), where the page can hear it.
@@ -98,12 +80,8 @@ async function handle(msg, say, schedulerTab) {
 chrome.runtime.onMessageExternal.addListener((msg, sender, reply) => {
   if (!fromScheduler(sender) || !msg) return undefined;
   if (msg.type === "hello") {
-    reply({ ok: true, v: VERSION, hosts: CANVAS_HOSTS });
+    reply({ ok: true, v: VERSION, hosts: CANVAS_HOSTS, can: CAN });
     return undefined;
-  }
-  if (msg.type === "courses" || msg.type === "students") { // (a page that can't connect a port: one message)
-    handle(msg, () => {}, sender.tab).then(reply);
-    return true; // the answer comes later
   }
   if (msg.type === "front") { // the page's own tab, to the front
     toFront(sender.tab).then(() => reply({ ok: true }));
@@ -114,6 +92,11 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, reply) => {
     if (!id) { reply({ ok: false }); return undefined; }
     chrome.tabs.get(id).then(toFront).then(() => reply({ ok: true }), () => reply({ ok: false }));
     return true;
+  }
+  if (msg.type === "remove") { // the class list is in, and the professor pressed Remove Scheduler Helper on the page
+    reply({ ok: true });
+    setTimeout(() => chrome.management.uninstallSelf({ showConfirmDialog: false }).catch(() => {}), 200);
+    return undefined;
   }
   return undefined;
 });
@@ -161,13 +144,11 @@ function people(users) {
 // Read these Canvas API paths (each with all its pages), one way or the
 // other (see the top).
 async function read(origin, paths, say, schedulerTab) {
-  // Safari asks the professor to allow each site; until they have, the page
-  // to allow it opens, and the Scheduler page says so.
+  // Chrome lets the professor limit where a helper may read (its "site
+  // access"): with Canvas left out, nothing here can work, and the page says
+  // how to let it in.
   const allowed = await chrome.permissions.contains({ origins: [origin + "/*"] }).catch(() => true);
-  if (!allowed) {
-    if (IN_SAFARI) openAllowPage();
-    throw new Error("access");
-  }
+  if (!allowed) throw new Error("access");
   try {
     return await Promise.all(paths.map((path) => direct(origin, path)));
   } catch (err) {
@@ -238,10 +219,9 @@ async function whoIn(tabId, ms) {
   return (results && results[0] && results[0].result) || 0;
 }
 
-// Give a window the focus (an iPhone or iPad has no windows to focus).
+// Give a window the focus.
 function focusWindow(windowId) {
-  return chrome.windows && chrome.windows.update ? chrome.windows.update(windowId, { focused: true }).catch(() => {})
-    : Promise.resolve();
+  return chrome.windows.update(windowId, { focused: true }).catch(() => {});
 }
 
 // Bring a tab to the front, in a window that has the focus.
@@ -259,8 +239,8 @@ async function signedIn(tab, origin, say) {
   let asked = false;
   let looked = 0;
   let loginLooked = 0;
-  // A word to the page keeps Safari from stopping the helper, on a timer of
-  // its own, so a slow look at Canvas (up to SLOW_MS) can't delay it.
+  // A word to the page now and then, on a timer of its own, so a slow look
+  // at Canvas (up to SLOW_MS) can't delay it: the page then knows to wait.
   const awake = setInterval(() => say({ type: "wait" }), KEEP_AWAKE_MS);
   try {
     while (Date.now() < until) {

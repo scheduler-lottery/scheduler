@@ -25,6 +25,7 @@
       <p class="report-main">{{ report.message }}</p>
       {% include "_report_dropped.html" %}
       {% if report.tips %}<ul class="tips">{% for tip in report.tips %}<li>{{ tip }}</li>{% endfor %}</ul>{% endif %}
+      {% include "_helper_remove.html" %}
     </div>
     {% endif %}
 

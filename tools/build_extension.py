@@ -1,8 +1,7 @@
 """
-Builds the Scheduler Helper browser extension (extension/) for
+Builds the Scheduler Helper Chrome extension (extension/) for
 
     .venv/bin/python tools/build_extension.py store   # dist/scheduler-helper.zip, for the Chrome Web Store
-    .venv/bin/python tools/build_extension.py safari  # dist/scheduler-helper-safari.zip, for Apple (docs/safari-extension.md)
     .venv/bin/python tools/build_extension.py dev     # dist/scheduler-helper-dev/, for trying it locally
 
 The dev build also reads the stand-in Canvas (tools/fake_canvas.py, on
@@ -12,10 +11,9 @@ public half of a throwaway key), so a local Scheduler can be told its id:
 
     CANVAS_HELPER_IDS=<that id> .venv/bin/python app.py
 
-The Safari build adds what Safari needs: the Allow page (allow.html, where
-the professor lets the helper use Canvas and Scheduler, since Safari asks
-per site), a toolbar button that opens it, and a background page as well as
-the service worker (Safari keeps cookies more reliably for a page).
+An earlier helper, to check the site still works with it (the store's
+copy, until an update is approved): EXTENSION_SOURCE=<its extension/
+folder> DEV_NAME=<a folder name in dist/> ... dev.
 
 The icons are drawn here, so there are no image files to keep.
 """
@@ -31,7 +29,7 @@ import zipfile
 import zlib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SOURCE = os.path.join(ROOT, "extension")
+SOURCE = os.environ.get("EXTENSION_SOURCE") or os.path.join(ROOT, "extension")
 DIST = os.path.join(ROOT, "dist")
 DEV_KEY = os.path.join(ROOT, "tools", "extension_dev_key.txt")
 
@@ -92,7 +90,7 @@ def _png(size):
 def build(target):
     with open(os.path.join(SOURCE, "manifest.json"), encoding="utf-8") as handle:
         manifest = json.load(handle)
-    name = {"store": "scheduler-helper", "safari": "scheduler-helper-safari"}.get(target, "scheduler-helper-dev")
+    name = "scheduler-helper" if target == "store" else os.environ.get("DEV_NAME") or "scheduler-helper-dev"
     out = os.path.join(DIST, name)
     shutil.rmtree(out, ignore_errors=True)
     os.makedirs(out)
@@ -105,19 +103,6 @@ def build(target):
         manifest["externally_connectable"]["matches"] += [f"http://{h}:{p.strip()}/*" for p in ports
                                                           for h in ("127.0.0.1", "localhost")]
     files = ["background.js"]
-    if target == "safari":
-        manifest["background"]["scripts"] = ["background.js"]
-        manifest["action"] = {"default_title": "Scheduler Helper", "default_popup": "allow.html",
-                              "default_icon": {k: v for k, v in manifest["icons"].items() if k in ("16", "32", "48")}}
-        files += ["allow.html", "allow.js"]
-        # Safari asks the professor about each website the helper touches,
-        # Scheduler's own included (its page talks to the helper), and lets
-        # the Allow page ask only for sites the helper names here.
-        manifest["host_permissions"] += [m for m in manifest["externally_connectable"]["matches"]
-                                         if m not in manifest["host_permissions"]]
-        # Apple's packager makes the Mac (and iPhone/iPad) app around the
-        # helper, and its App Store icon, from the largest icon.
-        manifest["icons"].update({"512": "icon-512.png", "1024": "icon-1024.png"})
     with open(os.path.join(out, "manifest.json"), "w", encoding="utf-8") as handle:
         json.dump(manifest, handle, indent=2)
     for file in files:
@@ -125,7 +110,7 @@ def build(target):
     for size in sorted(int(k) for k in manifest["icons"]):
         with open(os.path.join(out, f"icon-{size}.png"), "wb") as handle:
             handle.write(_png(size))
-    if target in ("store", "safari"):
+    if target == "store":
         archive = os.path.join(DIST, name + ".zip")
         with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
             for file in sorted(os.listdir(out)):

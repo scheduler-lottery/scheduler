@@ -7,8 +7,9 @@
 //     node tools/e2e_canvas_step.mjs
 //
 // Chrome and Edge: "Add Scheduler Helper", with their own steps, and the file
-// folded under it. Safari and Firefox (no helper to add yet): the file, open,
-// first; an iPhone: a phone's words. The file: Canvas opens in a tab of its own,
+// folded under it. Safari and Firefox (the helper is Chrome's): how to open
+// this page in Chrome, with the file folded under it; an iPhone: a phone's
+// words. The file: Canvas opens in a tab of its own,
 // both files from Safari's folder dropped at once send the student file, and
 // the file goes in. Then the class page: its links open what they point at,
 // and messages come up where screen readers read them.
@@ -119,6 +120,8 @@ try {
   };
   const shown = (sel) => evaluate(me, `(() => { const el = document.querySelector(${JSON.stringify(sel)}); return !!el && el.offsetParent !== null; })()`);
   const visibleText = () => evaluate(me, `document.querySelector("[data-canvas-guide]").innerText`);
+  // Canvas's file, opened (folded under the helper, or under the way to Chrome).
+  const openFile = () => evaluate(me, `document.querySelector("[data-canvas-download]").open = true`);
 
   // Chrome, no helper yet: add it (its store page), with the file folded under.
   await as("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36");
@@ -140,16 +143,24 @@ try {
     "Edge: Edge's own steps");
   await shot("edge-add-helper.png");
 
-  // Safari and Firefox, with no helper to add: the file, open, first. (Neither
-  // has Chrome's way to open the file window in Downloads.)
+  // Safari and Firefox: the helper is Chrome's, so how to open this page in
+  // Chrome (its link, copied in one click), or Canvas's file, folded under it.
+  // (Neither has Chrome's way to open the file window in Downloads.)
   const { identifier: noPicker } = await send("Page.addScriptToEvaluateOnNewDocument", { source: "delete window.showOpenFilePicker;" }, me);
   for (const [name, agent] of [["Safari", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"],
                                ["Firefox", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:140.0) Gecko/20100101 Firefox/140.0"]]) {
     await as(agent);
-    check(!(await shown("[data-helper-add]")) && await evaluate(me, `document.querySelector("[data-canvas-download]").open`)
-      && (await visibleText()).includes("Get Canvas's file of your students"), `${name}: no helper to add yet, so the file, first`);
-    check(await shown("[data-canvas-download] form[data-dropzone]"), `${name}: and the box for it, in the last step`);
-    await shot(`${name.toLowerCase()}-upload-first.png`);
+    words = await visibleText();
+    check(!(await shown("[data-helper-add]")) && await shown("[data-helper-chrome]") && words.includes("let Google Chrome do it")
+      && words.includes("Copy this page's link") && words.includes("Paste and Go") && words.includes("Get Chrome"),
+      `${name}: how to open this page in Chrome, where the helper does it`);
+    check((await evaluate(me, `document.querySelector("[data-page-link]").value`)).indexOf(step + "&b=") === 0,
+      `${name}: the link to copy is this page's`);
+    check(await evaluate(me, `!document.querySelector("[data-canvas-download]").open`) && words.includes("Or use Canvas's file of your students instead"),
+      `${name}: or Canvas's file, folded under it`);
+    await evaluate(me, `document.querySelector("[data-canvas-download] summary").click()`);
+    check(await shown("[data-canvas-download] form[data-dropzone]"), `${name}: and opened, the box for it, in the last step`);
+    await shot(`${name.toLowerCase()}-use-chrome.png`);
   }
   check(await evaluate(me, `[...document.querySelectorAll("[data-safari-only]")].every((el) => el.hidden)`),
     "Firefox: no Safari folder lines");
@@ -182,6 +193,7 @@ try {
   await send("Emulation.setTouchEmulationEnabled", { enabled: false }, me);
   await send("Emulation.clearDeviceMetricsOverride", {}, me);
   await as("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15");
+  await openFile();
   words = await visibleText();
   check(words.includes("Double-click the newest folder there") && words.includes("opens Canvas's file into a folder")
     && !words.includes("its name ends in .zip"), "Safari on a Mac: the folder Safari makes is the usual case");
@@ -189,9 +201,11 @@ try {
 
   // Windows: it hides the .zip ending, so the steps don't mention it.
   await as("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0");
+  await openFile();
   words = await visibleText();
   check(words.includes("zipped folder") && !words.includes("ends in .zip"), "Windows: a zipped folder, no .zip ending");
   await as("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15");
+  await openFile();
 
   // The file: Canvas opens in a tab of its own (the browser's usual top, where downloads show), and the file goes in.
   await evaluate(me, `(() => { window.__opened = []; window.open = (u, n, f) => { window.__opened.push([u, f]); return null; }; })()`);

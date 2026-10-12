@@ -239,11 +239,13 @@ try {
   const tabsAfter = (await send("Target.getTargets")).targetInfos.filter((t) => t.type === "page").length;
   check(tabsAfter === tabsBefore, "with no Canvas tab at all (read directly, signed in)");
 
-  // Safari's way of asking (single messages, no ports): the same answers.
+  // Canvas is read only over a port (single messages are for "hello" and the like), and "hello" says what else it can do.
   const viaMessage = await evaluate(me.session, `new Promise((done) => chrome.runtime.sendMessage(${JSON.stringify(DEV_ID)},
-    { type: "students", host: "127.0.0.1:5077", courseId: "202" }, (answer) => done(answer)))`);
-  check(viaMessage && viaMessage.type === "students" && viaMessage.students.length === 8
-    && !JSON.stringify(viaMessage).includes("login_id"), "asked by single message (as Safari does), the helper answers the same");
+    { type: "students", host: "127.0.0.1:5077", courseId: "202" }, (answer) => { void chrome.runtime.lastError; done(answer || null); }))`);
+  const hello = await evaluate(me.session, `new Promise((done) => chrome.runtime.sendMessage(${JSON.stringify(DEV_ID)},
+    { type: "hello" }, (answer) => done(answer || null)))`);
+  check(viaMessage === null && hello && hello.ok && hello.can.includes("remove") && hello.can.includes("front"),
+    "a single message reads nothing; hello says it can bring the page forward and remove itself");
   const stranger = await newPage(`${CANVAS}/login`);
   const refused = await evaluate(stranger.session, `typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.sendMessage`);
   check(refused, "a page on any other site can't even reach the helper");
@@ -349,9 +351,17 @@ try {
   helperSession = (await send("Target.attachToTarget", { targetId: worker.targetId, flatten: true })).sessionId;
   await send("Network.enable", {}, helperSession);
   await send("Network.setBlockedURLs", { urls: [CANVAS + "/api/*"] }, helperSession);
-  const courses = (ms) => evaluate(me.session, `Promise.race([
-    new Promise((done) => chrome.runtime.sendMessage(${JSON.stringify(DEV_ID)}, { type: "courses", host: "127.0.0.1:5077" }, done)),
-    new Promise((done) => setTimeout(() => done({ type: "no answer" }), ${ms}))])`);
+  const courses = (ms) => evaluate(me.session, `new Promise((done) => { // (over a port, as the page asks)
+    const port = chrome.runtime.connect(${JSON.stringify(DEV_ID)});
+    const late = setTimeout(() => { done({ type: "no answer" }); port.disconnect(); }, ${ms});
+    port.onMessage.addListener((m) => {
+      if (m.type === "signin" || m.type === "wait") return;
+      clearTimeout(late);
+      done(m);
+      port.disconnect();
+    });
+    port.postMessage({ type: "courses", host: "127.0.0.1:5077" });
+  })`);
   const opened = (since) => created.slice(since).filter((t) => t.type === "page");
   let since = created.length, turnedAway = refusedHere, asked = requests.length;
   let answer = await courses(10000);
@@ -398,7 +408,7 @@ try {
 
   // Canvas so slow to say who's signed in that each look gives up (after 20
   // seconds) and a sign-in is asked for: the helper still sends the page a
-  // word every 25 seconds (Safari stops a quiet helper after about 30), and
+  // word every 25 seconds (so the page knows it's still waiting), and
   // carries on once Canvas answers.
   slowMs = null;
   since = created.length;
@@ -432,6 +442,28 @@ try {
   check(await until(me.session, `document.querySelector("[data-helper-said]").textContent.includes("isn't turned on")
     && document.querySelector("[data-helper-add]").offsetParent !== null`, 15000),
     "the helper removed: the page says so, and offers to add it again");
+
+  // Added again: a list it brings, added, and then the offer to remove it
+  // from Chrome, which does just that, in one press.
+  await send("Extensions.loadUnpacked", { path: HELPER });
+  check(await until(me.session, `document.querySelector("[data-helper-said]").textContent.includes("Scheduler Helper is added")`, 15000),
+    "added again: the page notices by itself");
+  check(!!(await canvasStep(me.session, "LAW 540 Remove Seminar"))
+    && await until(me.session, `document.querySelector("[data-helper-go]").offsetParent !== null`, 15000), "a new sheet's one button");
+  await evaluate(me.session, `document.querySelector("[data-helper-go]").click()`);
+  check(await until(me.session, `!document.querySelector("[data-canvas-arrived]").hidden`, 15000), "its course's list, here");
+  await evaluate(me.session, `document.querySelector("[data-canvas-arrived] button[type=submit]").click()`);
+  check(await until(me.session, `document.readyState === "complete" && !!document.querySelector("[data-helper-remove]")
+    && !document.querySelector("[data-helper-remove]").hidden`, 15000),
+    "added: the report offers to remove Scheduler Helper from Chrome");
+  await evaluate(me.session, `document.querySelector("[data-helper-remove-go]").click()`);
+  check(await until(me.session, `document.querySelector("[data-helper-remove-said]").textContent.includes("is removed from Chrome")`, 10000),
+    "one press, and it's removed (" + await evaluate(me.session, `document.querySelector("[data-helper-remove-said]").textContent`) + ")");
+  const after = await evaluate(me.session, `new Promise((done) => {
+    if (!window.chrome || !chrome.runtime || !chrome.runtime.sendMessage) { done(null); return; }
+    chrome.runtime.sendMessage(${JSON.stringify(DEV_ID)}, { type: "hello" }, (a) => { void chrome.runtime.lastError; done(a || null); });
+  })`);
+  check(after === null, "and it no longer answers");
 } catch (err) {
   console.log("FAIL " + err.message);
   failures++;

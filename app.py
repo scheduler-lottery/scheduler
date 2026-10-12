@@ -242,7 +242,6 @@ def template_globals():
         "canvas_connect": canvas_oauth.ready(),
         "canvas_connect_host": settings.CANVAS_OAUTH_HOST,
         "helper_store_url": settings.CANVAS_HELPER_STORE_URL,
-        "helper_safari_url": settings.CANVAS_HELPER_SAFARI_URL,
         "mail_by_gmail": signin.smtp_ready(),
         # On the general pages a student might wander to (Privacy, How it
         # works), a way back to their class.

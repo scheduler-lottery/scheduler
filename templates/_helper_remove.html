@@ -1,0 +1,13 @@
+{# After a class list Scheduler Helper brought (report.helper): an offer to
+   remove it from Chrome. app.js shows it only once the helper answers this
+   page, and not on a computer where "Keep it" was pressed. #}
+{% if report and report.helper and helper_ids %}
+<div class="helper-remove" data-helper-remove data-helper-ids="{{ helper_ids }}" hidden>
+  <p><strong>Done with Scheduler Helper?</strong> You can remove it from Chrome now. To update this list from Canvas later, you'd add it again (two clicks), so keep it if you'll do that.</p>
+  <div class="helper-remove-buttons">
+    <button type="button" class="btn btn-secondary btn-small" data-helper-remove-go>Remove Scheduler Helper from Chrome</button>
+    <button type="button" class="btn-link" data-helper-remove-keep>Keep it</button>
+  </div>
+  <p class="mini-hint" data-helper-remove-said role="status"></p>
+</div>
+{% endif %}

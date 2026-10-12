@@ -71,8 +71,8 @@ def instructor_required(view):
         if not current_instructor():
             if g.get("instructor_switched_off"):
                 flash(switched_off_message(), "error")
-            elif request.method == "GET":
-                session["teach_next"] = request.path
+            elif request.method == "GET":  # (its query too: a link to a sheet's step opens on that step)
+                session["teach_next"] = request.full_path if request.query_string else request.path
             elif "csrf_token" in request.form:  # a form pressed on a page (not a fetch)
                 _signed_out_mid_page()
             return redirect(url_for("teach.login"))

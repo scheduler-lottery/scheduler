@@ -3159,11 +3159,9 @@ def test_scheduler_helper_is_offered_only_once_it_exists(prof, monkeypatch):
     assert "data-helper-go" not in raw(prof.get(f"/teach/s/{sid}"))  # none: not offered
     monkeypatch.setattr(settings, "CANVAS_HELPER_IDS", ["abcdefghijklmnopabcdefghijklmnop"])
     monkeypatch.setattr(settings, "CANVAS_HELPER_STORE_URL", "https://chromewebstore.google.com/detail/x")
-    monkeypatch.setattr(settings, "CANVAS_HELPER_SAFARI_URL", "https://apps.apple.com/app/id1")
     page = raw(prof.get(f"/teach/s/{sid}"))
     assert 'data-helper-ids="abcdefghijklmnopabcdefghijklmnop"' in page and "Get my class list from Canvas" in page
     assert 'data-helper-store="https://chromewebstore.google.com/detail/x"' in page
-    assert 'data-helper-safari="https://apps.apple.com/app/id1"' in page
     assert "Add Scheduler Helper to Chrome" in text(prof.get(f"/teach/s/{sid}"))
     assert "use Canvas's file of your students" in text(prof.get(f"/teach/s/{sid}"))
     # A list the helper fetched for this page goes in like one copied here.

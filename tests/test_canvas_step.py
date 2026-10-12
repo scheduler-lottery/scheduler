@@ -95,30 +95,6 @@ def test_a_list_from_canvas_without_emails_is_not_taken_for_the_wrong_file(prof)
     assert "no Name or Email column" not in page
 
 
-def test_the_safari_build_names_every_site_safari_asks_about(tmp_path, monkeypatch):
-    """Safari asks the professor about each website the helper touches, and
-    its Allow page may only ask for sites the helper names: Canvas, and
-    Scheduler's own (whose page talks to it). Apple's packager makes the app
-    and its icon from the largest icon."""
-    import importlib.util
-    import json
-    import zipfile
-
-    spec = importlib.util.spec_from_file_location("build_extension", "tools/build_extension.py")
-    build = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(build)
-    monkeypatch.setattr(build, "DIST", str(tmp_path))
-    build.build("safari")
-    with zipfile.ZipFile(tmp_path / "scheduler-helper-safari.zip") as z:
-        manifest = json.loads(z.read("manifest.json"))
-        assert {"allow.html", "allow.js", "background.js", "icon-1024.png"} <= set(z.namelist())
-    assert manifest["host_permissions"] == ["https://canvas.northwestern.edu/*", "https://scheduler-lottery.vercel.app/*"]
-    assert manifest["icons"]["1024"] == "icon-1024.png" and manifest["action"]["default_popup"] == "allow.html"
-    build.build("store")  # Chrome's: Canvas only (Chrome lets the page talk to it without asking)
-    with zipfile.ZipFile(tmp_path / "scheduler-helper.zip") as z:
-        assert json.loads(z.read("manifest.json"))["host_permissions"] == ["https://canvas.northwestern.edu/*"]
-
-
 def test_signed_out_in_another_tab_says_so_and_comes_back_to_the_sheet(prof):
     import json
 
@@ -142,3 +118,54 @@ def test_signed_out_in_another_tab_says_so_and_comes_back_to_the_sheet(prof):
     prof.post("/teach/login", {"email": "prof@school.edu"})
     r = prof.post("/teach/verify", {"code": prof.last_code("prof@school.edu")})
     assert r.headers["Location"].endswith("/teach/")
+
+
+def test_after_a_list_the_helper_brought_the_report_offers_to_remove_it(prof):
+    import json
+
+    sid = prof.create_sheet(allow_unlisted=False)
+    listed = json.dumps({"type": "scheduler-class-list", "v": 2, "courseId": "202", "course": "LAW 540",
+                         "students": [{"name": "Ana Lima", "email": "ana@school.edu"}]})
+    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": listed, "how": "helper", "setup": "1"})
+    page = raw(prof.get(r.headers["Location"]))
+    assert "data-helper-remove" in page and "Remove Scheduler Helper from Chrome" in page and "Keep it" in page
+    assert "data-helper-remove" not in raw(prof.get(r.headers["Location"]))  # (said once, with its report)
+    # A list from Canvas's file: nothing to remove.
+    other = prof.create_sheet(allow_unlisted=False)
+    page = raw(follow(prof, prof.upload(other, "Name,Email\nBo Chen,bo@school.edu\n")) and prof.get(f"/teach/s/{other}"))
+    assert "data-helper-remove" not in page
+
+
+def test_in_safari_or_firefox_the_step_says_how_to_open_it_in_chrome(prof):
+    sid = prof.create_sheet(allow_unlisted=False)
+    page = raw(prof.get(f"/teach/s/{sid}/setup?step=students"))
+    assert "data-helper-chrome" in page and "Copy this page's link" in text(page) and "Paste and Go" in text(page)
+    assert "https://www.google.com/chrome/" in page
+    for gone in ("App Store", "Always Allow", "data-helper-safari", "data-helper-reload", "Add Scheduler Helper to Safari"):
+        assert gone not in page  # (no Safari helper: Safari's words are only about Canvas's file)
+    # The link, pasted into Chrome before signing in there: back on this very step once signed in.
+    prof.post("/teach/logout")
+    assert prof.get(f"/teach/s/{sid}/setup?step=students").headers["Location"].endswith("/teach/login")
+    prof.post("/teach/login", {"email": "prof@school.edu"})
+    r = prof.post("/teach/verify", {"code": prof.last_code("prof@school.edu")})
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students")
+
+
+def test_the_store_build_is_chromes_alone_and_asks_for_nothing_new(tmp_path, monkeypatch):
+    import importlib.util
+    import json
+    import zipfile
+
+    spec = importlib.util.spec_from_file_location("build_extension", "tools/build_extension.py")
+    build = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(build)
+    monkeypatch.setattr(build, "DIST", str(tmp_path))
+    build.build("store")
+    with zipfile.ZipFile(tmp_path / "scheduler-helper.zip") as z:
+        manifest = json.loads(z.read("manifest.json"))
+        code = z.read("background.js").decode()
+    assert manifest["version"] == "1.0.3" and manifest["permissions"] == ["scripting"]
+    assert manifest["host_permissions"] == ["https://canvas.northwestern.edu/*"]
+    assert "background" in manifest and list(manifest["background"]) == ["service_worker"]
+    assert "safari" not in code.lower() and "allow.html" not in code
+    assert "uninstallSelf" in code  # (needs no permission of its own)

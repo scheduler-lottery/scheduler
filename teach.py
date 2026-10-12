@@ -1643,6 +1643,7 @@ def _take_list(sheet, data, source, source_label, pasted=False, setup=False, par
     whole = None if pasted else result.students  # (a whole class list: Canvas's, or its file)
     if not current and not look_first:
         _apply_roster(sheet, result.students, "replace", message, tips, warn, source_label, sections)
+        _by_helper(canvas)
         sheets.removed_by_hand(sheet["id"], whole)
         _tie_to_canvas(sheet, canvas, "replace")
         return _list_back(sheet, setup)
@@ -1682,6 +1683,14 @@ def _take_list(sheet, data, source, source_label, pasted=False, setup=False, par
         "setup": setup, "canvas": canvas, "look_first": look_first, "box": box, "replacing": replacing,
     })
     return redirect(url_for("teach.review_roster", sid=sheet["id"], pid=pid))
+
+
+def _by_helper(canvas):
+    """A class list just put in that Scheduler Helper brought: its report
+    offers to remove the helper from Chrome (_helper_remove.html)."""
+    report = session.get("roster_report")
+    if report and canvas and canvas.get("via", "helper") == "helper":
+        session["roster_report"] = {**report, "helper": True}
 
 
 def _take_canvas_list(sheet, data, setup=False, forget=None):
@@ -2062,6 +2071,7 @@ def review_roster(sid, pid):
                 students = sheets.without_removed(students, off)
             _apply_roster(sheet, students, action, pending["message"], tips, warn,
                           pending["source_label"], pending.get("sections"), setup=bool(pending.get("setup")))
+            _by_helper(pending.get("canvas"))
             sheets.removed_by_hand(sheet["id"], whole)
             _tie_to_canvas(sheet, pending.get("canvas"), action)
             return _list_back(sheet, pending.get("setup"))

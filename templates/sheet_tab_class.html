@@ -50,6 +50,7 @@
     {% if report.tips %}
     <ul class="tips">{% for tip in report.tips %}<li>{{ tip }}</li>{% endfor %}</ul>
     {% endif %}
+    {% include "_helper_remove.html" %}
     <div class="report-foot">
       {% if report.undo %}
       <form method="post" action="{{ url_for('teach.undo', sid=sheet.id, snap_id=report.undo) }}">

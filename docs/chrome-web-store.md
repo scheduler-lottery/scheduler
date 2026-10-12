@@ -1,9 +1,11 @@
 # Publishing Scheduler Helper on the Chrome Web Store
 
-Scheduler Helper (the `extension/` folder) is the browser extension behind the
-class-list step's **Get my class list from Canvas** button. Scheduler doesn't
-offer it until it's published and the site is told its id. Edge users can
-install it from the Chrome Web Store too.
+Scheduler Helper (the `extension/` folder) is the Chrome extension behind the
+class-list step's **Get my class list from Canvas** button. It's published:
+<https://chromewebstore.google.com/detail/scheduler-helper/hafmidgmpikkkjphmcbnggidbaeoiapd>,
+and the site knows that id (`settings.CHROME_HELPER_ID`). Edge users can install it from
+the Chrome Web Store too. In other browsers (Safari, Firefox), the step says how to open
+the page in Chrome, or to use Canvas's file of students instead.
 
 You'll need about 45 minutes, plus Google's review, which usually takes a few
 days and can take a couple of weeks for a new developer.
@@ -14,12 +16,13 @@ days and can take a couple of weeks for a new developer.
 .venv/bin/python tools/build_extension.py store
 ```
 
-The upload is `dist/scheduler-helper.zip`. It is version **1.0.2**, the one to upload
+The upload is `dist/scheduler-helper.zip`. It is version **1.0.3**, the one to upload
 now (in place of any earlier one still waiting for review). What changed since 1.0.0:
-the helper signs in from a fresh Canvas tab when an open one has signed the professor
-out; signing in on the professor's own Canvas tab works too; pressing the page's button
-again brings Canvas's sign-in page back to the front; and Scheduler's page can ask it to
-bring that page back to the front.
+the helper notices a Canvas sign-in made in any tab, and signs in from a fresh Canvas tab
+when an open one has signed the professor out; pressing the page's button again brings
+Canvas's sign-in page back to the front; Scheduler's page can ask it to bring that page
+back to the front, and, once the class list is in and the professor presses **Remove
+Scheduler Helper from Chrome**, to remove itself. It asks for no new permissions.
 
 The screenshots are in `dist/store/`; the browser test makes them:
 
@@ -99,16 +102,11 @@ Then click **Submit for review**.
 
 ## 4. Turn it on in Scheduler
 
-Once it's published, the item's page shows its **id**: 32 letters, in the address
-after `/detail/…/`. In Vercel, open **Project → Settings → Environment Variables**,
-add these two, and redeploy:
+Nothing to do: the site has the item's id and page built in (`settings.py`). Vercel's
+`CANVAS_HELPER_IDS` can add another id (a copy for testing, say), and
+`CANVAS_HELPER_STORE_URL` can point elsewhere, but neither is needed.
 
-| Name | Value |
-| --- | --- |
-| `CANVAS_HELPER_IDS` | the item's id |
-| `CANVAS_HELPER_STORE_URL` | the item's page, `https://chromewebstore.google.com/detail/…` |
-
-From then on, in Chrome and Edge (Edge installs from Chrome's store after an "Allow
+In Chrome and Edge (Edge installs from Chrome's store after an "Allow
 extensions from other stores" click, and the page says so):
 
 - The class-list step offers **Add Scheduler Helper to Chrome**.
@@ -118,10 +116,11 @@ extensions from other stores" click, and the page says so):
 ## Updates
 
 Bump `version` in `extension/manifest.json`, run `tools/build_extension.py store`
-again, upload the new zip under **Package**, and submit. If 1.0.0 or 1.0.1 is in the
-store, upload 1.0.2 now: it is already the version in `extension/manifest.json`, so skip
-the bump this once. It asks for no new permissions, so Chrome updates professors
-who have the helper without asking them anything.
+again, upload the new zip under **Package**, and submit. The store has 1.0.0: upload
+1.0.3 now (it is already the version in `extension/manifest.json`, so skip the bump this
+once). It asks for no new permissions, so Chrome updates professors who have the helper
+without asking them anything. Until it's approved, the site works with 1.0.0 too (its
+Remove button then shows the steps to remove it in Chrome's menu).
 
 Keep the permissions exactly as they are. An update that adds a permission Chrome
 warns about turns the helper off until each professor approves it again.
