@@ -22,6 +22,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import shutil
 import struct
 import sys
@@ -29,7 +30,7 @@ import zipfile
 import zlib
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SOURCE = os.environ.get("EXTENSION_SOURCE") or os.path.join(ROOT, "extension")
+SOURCE = os.path.join(ROOT, "extension")
 DIST = os.path.join(ROOT, "dist")
 DEV_KEY = os.path.join(ROOT, "tools", "extension_dev_key.txt")
 
@@ -88,10 +89,17 @@ def _png(size):
 
 
 def build(target):
-    with open(os.path.join(SOURCE, "manifest.json"), encoding="utf-8") as handle:
+    if target not in ("store", "dev"):
+        sys.exit("build_extension.py: store or dev")
+    # (The store's zip is always the repo's own extension/.)
+    source = os.environ.get("EXTENSION_SOURCE") or SOURCE if target == "dev" else SOURCE
+    with open(os.path.join(source, "manifest.json"), encoding="utf-8") as handle:
         manifest = json.load(handle)
     name = "scheduler-helper" if target == "store" else os.environ.get("DEV_NAME") or "scheduler-helper-dev"
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,60}", name) or ".." in name:
+        sys.exit("build_extension.py: DEV_NAME is a plain folder name, like helper-mine")
     out = os.path.join(DIST, name)
+    assert os.path.dirname(os.path.abspath(out)) == os.path.abspath(DIST)
     shutil.rmtree(out, ignore_errors=True)
     os.makedirs(out)
     if target == "dev":
@@ -107,7 +115,7 @@ def build(target):
     with open(os.path.join(out, "manifest.json"), "w", encoding="utf-8") as handle:
         json.dump(manifest, handle, indent=2)
     for file in files:
-        shutil.copy(os.path.join(SOURCE, file), out)
+        shutil.copy(os.path.join(source, file), out)
     for size in sorted(int(k) for k in manifest["icons"]):
         with open(os.path.join(out, f"icon-{size}.png"), "wb") as handle:
             handle.write(_png(size))
