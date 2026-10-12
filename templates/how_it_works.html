@@ -3,12 +3,22 @@
 {% block content %}
 <div class="card prose">
   <h1>How days are assigned</h1>
+  {% if algorithm == 'first_come' %}
+  <p class="subtitle">In this class, whoever ranks first gets first pick: each student, in the order they first ranked, is placed on the best day still open on their list.</p>
+  {% elif algorithm == 'rank_max' %}
+  <p class="subtitle">In this class, the schedule gives as many students as it can their first choice, then their second, and so on; a fixed random draw breaks ties.</p>
+  {% else %}
   <p class="subtitle">Every student is placed as high on their own list as the available seats allow, and ties are broken by a fixed random draw.</p>
+  {% endif %}
 
   <div class="note-box">
     <p class="note-box-label">Summary for students</p>
     <p>Rank the days in your true order of preference, with your first choice at the top.</p>
+    {% if algorithm == 'first_come' %}
+    <p>When sign-ups close, each student receives the highest-ranked day that still has room. When more students want a day than it has seats, whoever ranked first gets it.</p>
+    {% else %}
     <p>When sign-ups close, each student receives the highest-ranked day that still has room. When more students want a day than it has seats, a random draw decides.</p>
+    {% endif %}
     {% if algorithm == 'first_come' %}
     <p>In this class, ranking early helps: when more students want a day than it has seats, whoever ranked first gets it, and changing your ranking later keeps your place.</p>
     {% elif algorithm == 'rank_max' %}
@@ -33,7 +43,7 @@
     {% else %}
     <li><strong>Not first-come, first-served.</strong> The time a ranking was submitted is never used{% if not algorithm %}, unless an instructor chooses “First come, first served” for their class{% endif %}.</li>
     {% endif %}
-    <li><strong>A fixed random draw breaks ties.</strong> Each sheet has its own draw, and each student's place in it
+    <li><strong>A fixed random draw breaks ties{% if algorithm == 'first_come' %} between rankings saved at the same moment{% endif %}.</strong> Each sheet has its own draw, and each student's place in it
       is fixed: it does not change when classmates rank, revise their choices, or mark days. The same rankings always
       produce the same schedule, so the draw cannot be repeated until a preferred result appears. The instructor
       chooses how days are matched before making the schedule and may adjust assignments by hand afterwards;
@@ -51,14 +61,32 @@
   <h2>Frequently asked questions</h2>
   <p>
     <strong>Why didn't I receive my first choice?</strong><br>
+    {% if algorithm == 'first_come' %}
+    Seats are limited. When more students choose a day than it has seats, the students who ranked first receive
+    it, and everyone else receives their next choice that still has room.
+    {% elif algorithm == 'rank_max' %}
+    Seats are limited. The schedule gives as many students as it can their first choice; when that can't include
+    you, you receive the best day it can, and the random draw breaks ties.
+    {% else %}
     Seats are limited. When more students choose a day than it has seats, the random draw determines who receives
     it, and everyone else receives their next choice that still has room.
+    {% endif %}
   </p>
   <p>
     <strong>Could ranking strategically help me?</strong><br>
+    {% if algorithm == 'rank_max' %}
+    Rarely, and it can backfire. With this class's option, ranking in your true order of preference is the safe choice.
+    {% else %}
     No. Ranking in your true order of preference is always at least as good as any other order, regardless of how
-    others rank.
+    others rank{% if not algorithm %} (with every option but “Most first choices”, where it is the safe choice){% endif %}.
+    {% endif %}
   </p>
+  {% if algorithm == 'first_come' %}
+  <p>
+    <strong>Does ranking early help?</strong><br>
+    Yes, in this class. Your place in line is when you first saved a ranking; changing it later keeps that place.
+  </p>
+  {% endif %}
   <p>
     <strong>When will I know my day?</strong><br>
     When your instructor publishes the schedule, your day appears on your class's sign-up page.

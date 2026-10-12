@@ -91,6 +91,9 @@ CONTACT_EMAIL = _env("CONTACT_EMAIL").lower()
 # Where the site's code is published, linked from the privacy notes so anyone
 # can check what it does with a class list.
 SOURCE_URL = _env("SOURCE_URL", "https://github.com/scheduler-lottery/scheduler")
+# The commit of that code this copy runs (Vercel provides it), shown in the
+# footer and at /healthz, so anyone can see exactly which code is live.
+COMMIT = _env("VERCEL_GIT_COMMIT_SHA")[:40]
 
 # Scheduler Helper, the Chrome extension that fetches a class list from
 # Canvas when the class-list step asks (extension/): its id in the Chrome Web

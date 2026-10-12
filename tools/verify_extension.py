@@ -3,6 +3,11 @@ Checks that a copy of Scheduler Helper (the Chrome Web Store's, or any zip)
 holds exactly what this repo builds: every file the same, nothing added.
 
     .venv/bin/python tools/verify_extension.py scheduler-helper.crx
+    .venv/bin/python tools/verify_extension.py scheduler-helper.crx --ref helper-v1.0.6
+
+(--ref: build that tagged version, whatever is checked out; each version
+uploaded to the store has a tag, helper-v<version>, and a GitHub Release
+with its zip and fingerprint.)
 
 To get the store's copy (Chrome's own update address for the helper):
 
@@ -11,14 +16,16 @@ To get the store's copy (Chrome's own update address for the helper):
 A .crx is a zip with a signature in front, which Python's zipfile reads
 as it is. The store adds two things of its own, which are left out of the
 comparison: its signature folder (_metadata/) and the manifest's
-"update_url" (and "key"). Check out the commit of the version you're
-comparing (git log -- extension/manifest.json) before running this.
+"update_url" (and "key"). Without --ref, the checkout as it is is built.
 """
 
 import importlib.util
+import io
 import json
 import os
+import subprocess
 import sys
+import tarfile
 import tempfile
 import zipfile
 
@@ -26,8 +33,16 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STORE_ONLY_KEYS = ("update_url", "key")
 
 
-def _build(into):
-    spec = importlib.util.spec_from_file_location("build_extension", os.path.join(ROOT, "tools", "build_extension.py"))
+def _build(into, ref=None):
+    root = ROOT
+    if ref:  # (that version's own code and build script, from git)
+        root = os.path.join(into, "src")
+        os.makedirs(root)
+        archive = subprocess.run(["git", "-C", ROOT, "archive", ref, "extension", "tools"],
+                                 check=True, capture_output=True).stdout
+        with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+            tar.extractall(root, filter="data")
+    spec = importlib.util.spec_from_file_location("build_extension", os.path.join(root, "tools", "build_extension.py"))
     build = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(build)
     build.DIST = into
@@ -58,12 +73,12 @@ def _manifest(data):
     return manifest
 
 
-def main(path):
+def main(path, ref=None):
     with zipfile.ZipFile(path) as z:
         theirs = {name: z.read(name) for name in z.namelist()
                   if not name.startswith("_metadata/") and not name.endswith("/")}
     with tempfile.TemporaryDirectory() as into:
-        ours = _build(into)
+        ours = _build(into, ref)
     same = True
     for name in sorted(set(ours) | set(theirs)):
         if name not in theirs:
@@ -86,6 +101,9 @@ def main(path):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
+    args = sys.argv[1:]
+    if len(args) == 3 and args[1] == "--ref":
+        sys.exit(main(args[0], args[2]))
+    if len(args) != 1:
         sys.exit(__doc__)
-    sys.exit(main(sys.argv[1]))
+    sys.exit(main(args[0]))

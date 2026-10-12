@@ -13,18 +13,20 @@ permissions:
 
 jobs:
   tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
       - run: pip install -r requirements-dev.txt
-      - name: Tests (SQLite; the Postgres runs need a local Postgres, see README)
+      - name: Use the runner's own PostgreSQL for the Postgres half of the tests (production runs on Postgres)
+        run: echo "TEST_PG_BIN=$(ls -d /usr/lib/postgresql/*/bin | sort -V | tail -1)" >> "$GITHUB_ENV"
+      - name: Tests, on SQLite and on Postgres
         run: python -m pytest -q -p no:cacheprovider
 
   helper:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

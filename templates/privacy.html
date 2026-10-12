@@ -97,6 +97,13 @@
         Instructors can also get a backup of a sheet by email (for example, when they close sign-ups); a backup holds
         the class list, rankings and notes, and goes only to that instructor's own address.
       </p>
+      <p>
+        While sign-ups are open, an instructor gets a few short emails about how they're going: when half the class
+        has ranked, when nine in ten have, if a week passes with nobody ranking, and two days before the deadline.
+        Each says how many have ranked and names up to 12 students who haven't yet (never their rankings or notes),
+        and goes only to that instructor's own address. Any reminder to those students is sent by the instructor,
+        from their own email. One switch on the sheet's Settings turns these emails off.
+      </p>
     </div>
   </section>
 
@@ -149,7 +156,7 @@
     <div class="policy-body">
       <p>
         The site runs on Vercel, the data is stored in a Supabase (Postgres) database, and
-        {% if codes_by_workos %}sign-in codes are emailed by WorkOS{% if mail_by_gmail %} (backups go through Gmail){% endif %}{% else %}email is sent through Gmail{% endif %}.
+        {% if codes_by_workos %}sign-in codes are emailed by WorkOS{% if mail_by_gmail %} (backups and other emails to instructors go through Gmail){% endif %}{% else %}email is sent through Gmail{% endif %}.
         Everything travels encrypted (HTTPS).
       </p>
       <p>

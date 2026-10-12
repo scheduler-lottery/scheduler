@@ -309,3 +309,18 @@ def test_how_it_works_tells_a_first_come_class_that_ranking_early_helps(prof, br
     page = text(student.get("/how-it-works"))
     assert "In this class, ranking early helps" in page and "Submitting early confers no advantage" not in page
     assert "Submitting early confers no advantage" in text(browser().get("/how-it-works"))
+
+
+def test_how_it_works_headline_and_answers_follow_the_class_option(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    prof.post(f"/teach/s/{sid}/algorithm", {"algorithm": "first_come"})
+    page = text(browser().sign_in_student(sid, "Sam Lee").get("/how-it-works"))
+    assert "whoever ranks first gets first pick" in page and "the students who ranked first receive it" in page
+    assert "Does ranking early help?" in page and "than it has seats, a random draw decides." not in page
+    prof.post(f"/teach/s/{sid}/algorithm", {"algorithm": "rank_max"})
+    page = text(browser().sign_in_student(sid, "Sam Lee").get("/how-it-works"))
+    assert "as many students as it can their first choice, then their second" in page
+    assert "Rarely, and it can backfire" in page and "Does ranking early help?" not in page
+    page = text(browser().get("/how-it-works"))  # (no class: the standard lottery's wording)
+    assert "ties are broken by a fixed random draw" in page and "Rarely, and it can backfire" not in page

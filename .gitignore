@@ -7,8 +7,21 @@
 # Local data — real student information never goes in the repository
 local.db
 local.db-*
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
 *.zip
+*.crx
 roster*.csv
+*Grades*.csv
+students*.csv
+class*.csv
+*.xlsx
+
+# Private keys (Chrome's "Pack extension" writes one)
+*.pem
+*.key
 
 # Tooling
 __pycache__/
@@ -22,9 +35,12 @@ __pycache__/
 
 # Licensed web fonts are uploaded on /owner, never committed
 roslindale-web-fonts/
+fonts/
 *.woff2
+*.woff
 *.ttf
 *.otf
+*.eot
 
 # Built browser extension (tools/build_extension.py)
 dist/

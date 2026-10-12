@@ -134,6 +134,12 @@ def build(target):
         json.dump(manifest, handle, indent=2)
     for file in files:
         shutil.copy(os.path.join(source, file), out)
+    popup = os.path.join(out, "popup.html")
+    if os.path.exists(popup):  # (its code link: this version's tag, helper-v<version>)
+        with open(popup, encoding="utf-8") as handle:
+            page = handle.read().replace("/tree/main/extension", f"/tree/helper-v{manifest['version']}/extension")
+        with open(popup, "w", encoding="utf-8") as handle:
+            handle.write(page)
     for size in sorted(int(k) for k in manifest["icons"]):
         with open(os.path.join(out, f"icon-{size}.png"), "wb") as handle:
             handle.write(_png(size))

@@ -106,7 +106,7 @@ def local_times(text):
     return Markup(TIME_MARKER.sub(swap, str(escape(text or ""))))
 
 
-# The "Send to Scheduler" bookmark, made for the address this site is on.
+# Template filters.
 app.add_template_filter(initials, "initials")
 app.add_template_filter(local_times, "local_times")
 app.add_template_filter(autolink, "autolink")
@@ -247,6 +247,7 @@ def template_globals():
         "dock_share": _dock_share(instructor),
         "contact_email": settings.CONTACT_EMAIL,
         "source_url": settings.SOURCE_URL,
+        "commit": settings.COMMIT,
         "built_by": "" if settings.BUILT_BY == "-" else settings.BUILT_BY,
         "built_by_email": settings.BUILT_BY_EMAIL,
         "built_by_url": settings.BUILT_BY_URL,
@@ -526,11 +527,13 @@ def helper():
 
 @app.route("/healthz")
 def healthz():
+    """Up? And which commit of the public code it's running (Vercel says)."""
+    commit = settings.COMMIT or None
     try:
         db.scalar("SELECT 1")
-        return jsonify(ok=True)
+        return jsonify(ok=True, commit=commit)
     except Exception:
-        return jsonify(ok=False), 503
+        return jsonify(ok=False, commit=commit), 503
 
 
 @app.route("/cron/daily")

@@ -87,8 +87,18 @@ def test_public_pages_and_headers(browser):
         # No inline scripts or inline event handlers anywhere.
         assert not re.search(r"<script(?![^>]*\bsrc=)(?![^>]*application/json)[^>]*>", raw(r))
         assert not re.search(r"\son[a-z]+\s*=", raw(r))
-    assert b.get("/healthz").get_json() == {"ok": True}
+    assert b.get("/healthz").get_json() == {"ok": True, "commit": None}  # (Vercel names the commit it runs)
     assert "algorithm" not in html(b.get("/")).lower()
+
+
+def test_the_live_commit_is_named_on_every_page_and_at_healthz(browser, monkeypatch):
+    import settings
+
+    monkeypatch.setattr(settings, "COMMIT", "0123456789abcdef0123456789abcdef01234567")
+    b = browser()
+    assert b.get("/healthz").get_json()["commit"] == "0123456789abcdef0123456789abcdef01234567"
+    page = raw(b.get("/privacy"))
+    assert "/tree/0123456789abcdef0123456789abcdef01234567" in page and "this version: 0123456" in page
 
 
 def test_posts_without_the_csrf_token_are_refused(browser):

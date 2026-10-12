@@ -51,7 +51,8 @@ CREATE TABLE IF NOT EXISTS sheets (
     tested_at          TEXT,
     shared_at          TEXT,
     backup_emailed_at  TEXT,
-    short_url          TEXT,  -- an outside service's short link, from before (no longer made or shown)
+    short_url          TEXT,  -- its short link at spoo.me (shortlink.py), checked daily
+    short_url_at       TEXT,  -- when spoo.me was last asked for it, or it was checked
     short_code         TEXT,  -- its short link on this site: example.com/<short_code>
     archived_at        TEXT,  -- tucked away on the dashboard (still works for students)
     theme              TEXT,  -- the class's look, set by its instructor (NULL = the standard look)
@@ -66,6 +67,13 @@ CREATE TABLE IF NOT EXISTS sheets (
     auto_closed_at     TEXT,  -- when the deadline closed sign-ups
     deadline_asked_at  TEXT,  -- when the instructor was asked what to do
     all_ranked_at      TEXT,  -- when the instructor was told everyone had ranked
+    -- Emails to the instructor about how sign-ups are going (deadlines.py),
+    -- each sent once; progress_emails = 0 turns them off.
+    progress_emails    INTEGER NOT NULL DEFAULT 1,
+    half_ranked_at     TEXT,  -- told half the class has ranked
+    most_ranked_at     TEXT,  -- told 90% have
+    quiet_told_at      TEXT,  -- told a week passed with nobody ranking
+    reminder_told_at   TEXT,  -- told the deadline is near, with who hasn't ranked
     created_at         TEXT NOT NULL,
     updated_at         TEXT NOT NULL
 );
@@ -106,6 +114,7 @@ CREATE TABLE IF NOT EXISTS submissions (
     excluded_days TEXT NOT NULL,
     comments      TEXT NOT NULL,
     updated_at    TEXT NOT NULL,
+    first_at      TEXT,  -- when first saved (for "first come, first served")
     PRIMARY KEY (sheet_id, name_key)
 );
 

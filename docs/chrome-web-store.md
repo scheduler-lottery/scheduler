@@ -123,7 +123,16 @@ extensions from other stores" click, and the page says so):
 ## Updates
 
 Bump `version` in `extension/manifest.json`, run `tools/build_extension.py store`
-again, upload the new zip under **Package**, and submit. The store has 1.0.0: upload
+again, upload the new zip under **Package**, and submit. Then tag that version, so the
+public build keeps its zip under the repository's Releases for good:
+
+```bash
+git tag helper-v1.0.6 && git push origin helper-v1.0.6
+```
+
+(`.github/workflows/helper-release.yml` builds the zip from the tag, checks the tag
+matches the manifest's version, and attaches it with its sha256. Anyone can then check the
+store's copy against the code with `tools/verify_extension.py <file> --ref helper-v1.0.6`.) The store has 1.0.0: upload
 1.0.6 now (it is already the version in `extension/manifest.json`, so skip the bump this
 once). It asks for no new permissions, so Chrome updates professors who have the helper
 without asking them anything. Until it's approved, the site works with 1.0.0 too (its

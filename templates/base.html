@@ -173,7 +173,7 @@
   <a href="{{ url_for('privacy') }}">Privacy</a>
   {% if source_url %}
   <span aria-hidden="true">·</span>
-  <a href="{{ source_url }}" target="_blank" rel="noopener">Open source</a>
+  <a href="{{ source_url }}{% if commit %}/tree/{{ commit }}{% endif %}" target="_blank" rel="noopener">Open source{% if commit %} (this version: {{ commit[:7] }}){% endif %}</a>
   {% endif %}
   {% if not instructor and not nav_sheet %}
   <span aria-hidden="true">·</span>

@@ -13,22 +13,36 @@
   <a href="https://github.com/scheduler-lottery/scheduler/actions/workflows/ci.yml"><img src="https://github.com/scheduler-lottery/scheduler/actions/workflows/ci.yml/badge.svg" alt="Tests and the helper's build"></a>
 </p>
 
-Fair presentation-day sign-ups for any class. Students rank the days they'd prefer, and
-everyone gets a day as high on their own list as possible. When more students want a day
-than it has seats, a fair random draw decides — not who clicked first. Under the hood it's
-deferred acceptance (the kind of matching school-choice systems use), via the peer-reviewed
+Students rank the days they'd prefer, and everyone gets a day as high on their own list as
+possible. When more students want a day than it has seats, a fair random draw decides — not
+who clicked first. Under the hood it's deferred acceptance (the kind of matching
+school-choice systems use), via the peer-reviewed
 [`matching`](https://github.com/daffidwilde/matching) package.
+
+That lottery is the standard, and most professors never change it. Under **Schedule →
+How the schedule is made** there are three others: a fresh draw for each day, *most first
+choices* (as many students as possible get their first choice), and *first come, first
+served* (by when each student first ranked). Each one's page for students says how it works,
+including whether ranking early helps.
 
 Any professor with a school email can use it — no setup on their end:
 
 1. **Sign in** with their school email (a 6-digit code, no password).
 2. **Create a sign-up sheet**: a title, the days, seats per day, and an optional "rank by" date.
-3. **Bring in the class list** from Canvas (a step-by-step Canvas guide is built in), drop an
-   Excel file, or paste names.
+   Three pretend students (Test Student 1–3, each with the professor's own email) come with
+   it, so the professor can sign in as a student and try it.
+3. **Bring in the class list.** Option 1: Scheduler Helper, a Chrome extension, brings it
+   straight from Canvas: add it from the page, sign in to Canvas if asked, pick the course,
+   and then delete the helper with one click. Option 2: by hand, either Canvas's own file of
+   students (step by step, with pictures) or a list pasted from anywhere (or an Excel file).
 4. **See it as a student** with one click.
-5. **Share the link** (a ready-to-paste Canvas announcement is provided).
-6. **Close sign-ups and make the schedule** — one button. Check it, move anyone by hand.
-7. **Publish it**: each student sees their own day on the class page. Download it for your records.
+5. **Share the link**: a short link (spoo.me, no ads) and a ready-to-paste Canvas announcement.
+6. **Hear how it's going**: emails when half the class has ranked, when 90% have, if a week
+   goes by with nobody ranking, and two days before the deadline, each naming who hasn't
+   ranked, with a ready-made reminder to send them from the professor's own email. (One
+   switch in Settings turns these off.)
+7. **Close sign-ups and make the schedule** — one button. Check it, move anyone by hand.
+8. **Publish it**: each student sees their own day on the class page. Download it for your records.
 
 Each professor sees only their own sheets. Nothing is lost by accident: a new class list is
 shown for review before it replaces the old one, every delete offers an Undo, every sheet
@@ -52,13 +66,18 @@ Everything the site and its Chrome extension do is in this repository:
 - **Scheduler Helper**, the Chrome extension that brings a class list from Canvas, in
   [`extension/`](extension/) (Chrome Web Store id `hafmidgmpikkkjphmcbnggidbaeoiapd`). Its build
   is reproducible: `tools/build_extension.py store` makes the same zip, byte for byte, from the
-  same code, and every change is built in public by
-  [GitHub Actions](https://github.com/scheduler-lottery/scheduler/actions/workflows/ci.yml), which
-  prints each file's fingerprint and keeps the zip. To check the copy in the Chrome Web Store
-  against this code yourself, see `tools/verify_extension.py`.
-- **The tests**: `tests/` (run on every change, above) and the browser walk-throughs in
-  `tools/e2e_*.mjs`, which drive a real Chrome with the extension against a stand-in Canvas
-  (`tools/fake_canvas.py`).
+  same code. Every change is built in public by
+  [GitHub Actions](https://github.com/scheduler-lottery/scheduler/actions/workflows/ci.yml),
+  which prints each file's fingerprint (the zip is kept with that run for 90 days). Each
+  version uploaded to the store is tagged `helper-v<version>`, and its zip, built from that
+  tag, is kept for good under
+  [Releases](https://github.com/scheduler-lottery/scheduler/releases) with its sha256. To
+  check any copy, the store's included, against the code:
+  `python tools/verify_extension.py <the .zip or .crx> --ref helper-v1.0.6`.
+- **What's live**: every page's footer links to the exact commit the site is running
+  (also at [`/healthz`](https://scheduler-lottery.vercel.app/healthz)).
+- **The tests**: `tests/`, run on every change (above) against both SQLite and Postgres,
+  and the browser walk-throughs below.
 
 ---
 
@@ -155,15 +174,22 @@ WorkOS can't. Without it, professors download backups instead.
    Optional: `INSTRUCTOR_EMAIL_DOMAINS` (who can make accounts; default `.edu`),
    `EMAIL_DAILY_LIMIT` (default `1000` with WorkOS, `90` with Gmail alone), `APP_NAME`
    (default `Scheduler`), `CONTACT_EMAIL`
-   (an address for questions about the site, shown on the Privacy page), and
+   (an address for questions about the site, shown on the Privacy page),
    `DEFAULT_TIMEZONE` (default `America/Chicago`; each professor's own time zone is picked up
-   from their browser when they sign in), and `BUILT_BY` / `BUILT_BY_EMAIL` (the credit at the
-   foot of every page; set `BUILT_BY` to `-` to hide it).
+   from their browser when they sign in), `BUILT_BY` / `BUILT_BY_EMAIL` / `BUILT_BY_URL` (the
+   credit at the foot of every page; set `BUILT_BY` to `-` to hide it), `SOURCE_URL` (where
+   the footer says the code is), `SHORT_LINKS` (`0` turns off the spoo.me short links),
+   `CANVAS_HELPER_IDS` / `CANVAS_HELPER_STORE_URL` (another copy of Scheduler Helper, for
+   testing), and `CANVAS_OAUTH_HOST` / `CANVAS_OAUTH_CLIENT_ID` / `CANVAS_OAUTH_CLIENT_SECRET`
+   ("Connect Canvas", once a school issues a developer key). `.env.example` lists them all.
+
+   The emails to professors about how sign-ups are going, and backups by email, need the
+   optional Gmail account (`SMTP_*`); without it they aren't sent.
 5. Click **Deploy**.
 
 ### 5. Check it
 
-- Open `https://<your-address>/healthz` — it should say `{"ok": true}`.
+- Open `https://<your-address>/healthz` — it should say `"ok": true` (and the commit it runs).
 - Sign in with your school email, make a sheet, and press **See it as a student**.
 - `https://<your-address>/owner` shows the site's status (totals only — see Privacy below).
 - In Vercel → your project → **Settings → Cron Jobs**, you should see `/cron/daily`.
@@ -262,10 +288,27 @@ Then open <http://127.0.0.1:5050>. With no settings, it uses a local SQLite file
 to `.env` to try real settings locally.
 
 Run the tests (they also run against Postgres if `TEST_PG_BIN` points at a folder with
-`initdb` and `pg_ctl`):
+`initdb` and `pg_ctl`, as they do on GitHub):
 
 ```bash
 .venv/bin/python -m pytest
+```
+
+### Browser walk-throughs
+
+`tools/e2e_*.mjs` drive a real Chrome, with Scheduler Helper loaded, through the Canvas
+step against a stand-in Canvas: adding the helper from the page, signing in to Canvas,
+picking a course, and deleting the helper after. They need Node, Chrome, the stand-in
+Canvas, and a local Scheduler that knows it (each file's top says how to start them):
+
+```bash
+.venv/bin/python tools/fake_canvas.py
+```
+```bash
+CANVAS_DEV_HOST=127.0.0.1:5077 .venv/bin/python -m flask --app app run --port 5070
+```
+```bash
+node tools/e2e_canvas_helper.mjs
 ```
 
 | File | What it does |
@@ -284,5 +327,13 @@ Run the tests (they also run against Postgres if `TEST_PG_BIN` points at a folde
 | `settings.py` | Every setting, read from environment variables |
 | `deadlines.py` | Deadlines, and the emails to professors about how sign-ups are going |
 | `shortlink.py` | A class's short link (spoo.me, no ads), checked daily |
-| `extension/` | Scheduler Helper, the Chrome extension (`tools/build_extension.py`, `tools/verify_extension.py`) |
-| `.github/workflows/ci.yml` | The public build: tests, and the extension's zip with its fingerprints |
+| `extension/` | Scheduler Helper, the Chrome extension |
+| `tools/build_extension.py`, `tools/verify_extension.py` | Build the helper's zip (reproducibly), and check any copy against the code |
+| `tools/fake_canvas.py`, `tools/e2e_*.mjs` | The stand-in Canvas and the browser walk-throughs |
+| `canvas_import.py`, `canvasdir.py`, `canvas_oauth.py` | Taking a class list from the helper; which school's Canvas a professor uses; "Connect Canvas" |
+| `compose.py`, `usage.py`, `util.py` | Emails opened in the professor's own mail app; usage totals for `/owner`; small helpers |
+| `sitesecrets.py` | Keys pasted on `/owner`, stored encrypted |
+| `templates/`, `public/static/` | The pages, styles, and scripts (no inline scripts, per the CSP) |
+| `.github/workflows/ci.yml` | The public build: tests on SQLite and Postgres, and the helper's zip with its fingerprints |
+| `.github/workflows/helper-release.yml` | Each helper version's zip, built from its tag, kept under Releases |
+| `docs/` | Publishing the helper on the Chrome Web Store; asking a school for Canvas access |

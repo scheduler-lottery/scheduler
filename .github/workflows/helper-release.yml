@@ -1,0 +1,37 @@
+# Each version of Scheduler Helper uploaded to the Chrome Web Store gets a
+# tag, helper-v<version>. This builds that tag's zip in public and attaches
+# it, with its fingerprint, to a GitHub Release, so the store's copy can be
+# checked against it (tools/verify_extension.py <file> --ref helper-v<version>).
+name: Helper release
+
+on:
+  push:
+    tags: ["helper-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: The tag names the manifest's version
+        run: |
+          version=$(python -c 'import json; print(json.load(open("extension/manifest.json"))["version"])')
+          test "helper-v$version" = "$GITHUB_REF_NAME"
+      - name: Build it as uploaded to the Chrome Web Store
+        run: python tools/build_extension.py store
+      - name: Each file's fingerprint
+        run: cd dist/scheduler-helper && sha256sum *
+      - name: Release it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(sha256sum dist/scheduler-helper.zip | cut -d' ' -f1)
+          gh release create "$GITHUB_REF_NAME" dist/scheduler-helper.zip \
+            --title "Scheduler Helper ${GITHUB_REF_NAME#helper-v}" \
+            --notes "The zip uploaded to the Chrome Web Store, built from this tag by this workflow. sha256 of the zip: $sha. To check any copy (the store's included) against it: python tools/verify_extension.py <file> --ref $GITHUB_REF_NAME"
