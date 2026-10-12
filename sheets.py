@@ -281,12 +281,6 @@ def note_removed(sid, name_key, email, display_name):
            sid=sid, key=name_key, email=email or "", name=display_name, at=iso())
 
 
-def forget_removed(sid):
-    """No one is taken off by hand any more (the list itself was taken off,
-    to start over). Not committed."""
-    db.run("DELETE FROM removed_by_hand WHERE sheet_id = :sid", sid=sid)
-
-
 def removed_by_hand(sid, listed=None):
     """Students taken off the list by hand who aren't back on it. The records
     of anyone back (added again, an undo, a restore) go here. `listed`: a
@@ -301,8 +295,9 @@ def removed_by_hand(sid, listed=None):
     stale = [r for r in rows if r["name_key"] in keys or (r["email"] and r["email"] in emails)]
     if listed is not None:
         listed_keys, listed_emails = {s["name_key"] for s in listed}, {s["email"] for s in listed if s["email"]}
-        stale += [r for r in rows if r not in stale
-                  and not (r["email"] in listed_emails if r["email"] else r["name_key"] in listed_keys)]
+        bare = {s["name_key"] for s in listed if not s["email"]}  # (a list with no email for them still has them)
+        stale += [r for r in rows if r not in stale and not (
+            (r["email"] in listed_emails or r["name_key"] in bare) if r["email"] else r["name_key"] in listed_keys)]
     for r in stale:
         db.run("DELETE FROM removed_by_hand WHERE sheet_id = :sid AND name_key = :key", sid=sid, key=r["name_key"])
     return [r for r in rows if r not in stale]
@@ -316,6 +311,44 @@ def without_removed(students, took_off):
     return [s for s in students if not (s["email"] in emails if s["email"] else s["name_key"] in keys)]
 
 
+def renamed_by_email(current_rows, incoming):
+    """Students a new list calls by another name, with the email the list
+    already has for them (a preferred name, a new surname, in Canvas): the
+    same email is the same student. (row, student) pairs."""
+    by_email = {r["email"].lower(): r for r in current_rows if r["email"] and not r["is_test"]}
+    out = []
+    for s in incoming:
+        row = by_email.pop((s["email"] or "").lower(), None)
+        if row and not s.get("name_pending") and _same_name(row["display_name"]) != _same_name(s["display_name"]):
+            out.append((row, s))
+    return out
+
+
+def as_known(students, renames):
+    """A new list with each renamed student (renamed_by_email) under the name
+    the list has for them."""
+    old = {id(s): row for row, s in renames}
+    return [{**s, "name_key": old[id(s)]["name_key"], "display_name": old[id(s)]["display_name"]}
+            if id(s) in old else s for s in students]
+
+
+def rename_students(sid, renames):
+    """Give renamed students (renamed_by_email) their new name, moving their
+    ranking, seat and PIN with them (rekey_student), unless the new name is
+    someone else's already. Returns the pairs renamed. Not committed."""
+    taken = {r["name_key"] for r in get_roster(sid)} | {r["name_key"] for r in get_submissions(sid)}
+    done = []
+    for row, s in renames:
+        if s["name_key"] in taken or s["name_key"] == row["name_key"]:
+            continue
+        db.run("UPDATE roster SET name_key = :new, display_name = :name WHERE sheet_id = :sid AND name_key = :old",
+               new=s["name_key"], name=s["display_name"], sid=sid, old=row["name_key"])
+        rekey_student(sid, row["name_key"], s["name_key"], s["display_name"])
+        taken.add(s["name_key"])
+        done.append((row, s))
+    return done
+
+
 def compare_rosters(current_rows, new_students, removed=()):
     """How a new class list differs from the current one, for the review
     page shown before anything is replaced. Students are matched up by
@@ -327,9 +360,12 @@ def compare_rosters(current_rows, new_students, removed=()):
     current = {r["name_key"]: r for r in current_rows if not r["is_test"]}
     tests = {r["name_key"] for r in current_rows if r["is_test"]}
     new_students = [s for s in new_students if s["name_key"] not in tests]
+    # Renamed in Canvas (the same email): the same student, under the name
+    # they have here until the list is updated (_apply_roster renames them).
+    renames = renamed_by_email(current_rows, new_students)
+    new_students = as_known(new_students, renames)
     carried, unsure = carry_over(current_rows, new_students)
     incoming = {s["name_key"]: s for s in carried}
-    by_email = {r["email"]: r for r in current.values() if r["email"]}
     adding = [s for k, s in incoming.items() if k not in current]
     gone_emails = {r["email"] for r in removed if r["email"]}
     gone_keys = {r["name_key"]: r for r in removed}
@@ -342,10 +378,8 @@ def compare_rosters(current_rows, new_students, removed=()):
     took_off = [s for s in adding if current and was_removed(s)]
     adding = [s for s in adding if s not in took_off]
     dropping = [r for k, r in current.items() if k not in incoming]
-    same_person = [
-        (by_email[s["email"]], s) for s in adding
-        if s["email"] and s["email"] in by_email and by_email[s["email"]]["name_key"] not in incoming
-    ]
+    taken = set(current) | tests
+    same_person = [(row, s) for row, s in renames if s["name_key"] not in taken]
     # Already on the list: as many of each name as the new list has (an
     # unsure name keeps more of them than that).
     room = Counter(_same_name(s["display_name"]) for s in new_students)

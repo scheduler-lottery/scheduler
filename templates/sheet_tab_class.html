@@ -105,7 +105,7 @@
       <button class="btn btn-secondary" type="submit">Add them</button>
     </div>
   </form>
-  <details class="replace-list canvas-update" id="canvas-update">
+  <details class="replace-list canvas-update" id="canvas-update"{% if request.args.get('at') == 'canvas' %} open{% endif %}>
     <summary>Class changed in Canvas? Update from Canvas</summary>
     {% set canvas_host = canvas.domain if canvas else 'canvas.instructure.com' %}
     {% with guide_hl = 'h3' %}{% include "_canvas_guide.html" %}{% endwith %}

@@ -893,7 +893,8 @@ def describe(result, source="", known=frozenset()):
     from signin import PIN_MAX_DIGITS, PIN_MIN_DIGITS
 
     n = len(result.students)
-    origin = f" from “{source}”" if source else ""
+    # (A course in Canvas by its name; a file by its name, quoted.)
+    origin = f" from {source[8:]} in Canvas" if source.startswith("Canvas: ") else f" from “{source}”" if source else ""
     message = f"Added {n} student{'s' if n != 1 else ''}{origin}"
     if result.with_email == n:
         message += ", all with email addresses."

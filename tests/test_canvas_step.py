@@ -128,7 +128,7 @@ def test_after_a_list_the_helper_brought_the_report_offers_to_remove_it(prof):
                          "students": [{"name": "Ana Lima", "email": "ana@school.edu"}]})
     r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": listed, "how": "helper", "setup": "1"})
     page = raw(prof.get(r.headers["Location"]))
-    assert "data-helper-remove" in page and "Remove Scheduler Helper from Chrome" in page and "Keep it" in page
+    assert "data-helper-remove" in page and "Remove it from Chrome" in text(page) and "Keep Scheduler Helper" in page
     assert "data-helper-remove" not in raw(prof.get(r.headers["Location"]))  # (said once, with its report)
     # A list from Canvas's file: nothing to remove.
     other = prof.create_sheet(allow_unlisted=False)
@@ -139,7 +139,9 @@ def test_after_a_list_the_helper_brought_the_report_offers_to_remove_it(prof):
 def test_in_safari_or_firefox_the_step_says_how_to_open_it_in_chrome(prof):
     sid = prof.create_sheet(allow_unlisted=False)
     page = raw(prof.get(f"/teach/s/{sid}/setup?step=students"))
-    assert "data-helper-chrome" in page and "Copy this page's link" in text(page) and "Paste and Go" in text(page)
+    words = text(page)
+    assert "data-helper-chrome" in page and "Copy this page's link" in words and "it emails you a new code" in words
+    assert "Paste and go" in words and "click Edit" in words  # (Windows, and a Mac: shown by app.js)
     assert "https://www.google.com/chrome/" in page
     for gone in ("App Store", "Always Allow", "data-helper-safari", "data-helper-reload", "Add Scheduler Helper to Safari"):
         assert gone not in page  # (no Safari helper: Safari's words are only about Canvas's file)

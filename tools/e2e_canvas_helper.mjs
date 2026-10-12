@@ -180,15 +180,17 @@ try {
   check(!!sid, "made a sheet");
   check(await until(me.session, `document.querySelector("[data-helper-go]").offsetParent !== null`),
     "with the helper installed, the step offers one button: Get my class list from Canvas");
-  check(await evaluate(me.session, `!document.querySelector("[data-canvas-download]").open && document.querySelectorAll(".canvas-guide details").length === 1`),
+  check(await evaluate(me.session, `!document.querySelector("[data-canvas-download]").open
+    && [...document.querySelectorAll(".canvas-guide details")].filter((d) => !d.closest("[hidden]")).length === 1`),
     "with only one other way, folded: upload Canvas's student file");
   await shot(me.session, "1-one-button.png", "[data-helper]");
 
   // One click. Not signed in to Canvas: a Canvas tab comes up to sign in.
   const before = created.length;
   await evaluate(me.session, `document.querySelector("[data-helper-go]").click()`);
-  check(await until(me.session, `document.querySelector("[data-helper-said]").textContent.includes("sign-in page just came up")`, 10000),
-    "signed out of Canvas: the page says to sign in, in the tab that opened");
+  check(await until(me.session, `document.querySelector("[data-helper-said]").textContent.includes("Canvas wants you to sign in")
+    && document.querySelector("[data-helper-go]").textContent === "Show me Canvas's sign-in page"`, 10000),
+    "signed out of Canvas: the page says to sign in, in the tab that opened, and its button can show it again");
   let canvasTab = null;
   for (let i = 0; i < 50 && !canvasTab; i++) {
     canvasTab = created.slice(before).find((t) => t.type === "page" && (t.url || "").startsWith(CANVAS));
@@ -286,7 +288,7 @@ try {
   await send("Target.activateTarget", { targetId: me.targetId });
   const before2 = created.length;
   await evaluate(me.session, `document.querySelector("[data-helper-go]").click()`);
-  check(await until(me.session, `document.querySelector("[data-helper-said]").textContent.includes("sign-in page just came up")`, 10000),
+  check(await until(me.session, `document.querySelector("[data-helper-said]").textContent.includes("Canvas wants you to sign in")`, 10000),
     "the page says to sign in to Canvas, in the tab that opened");
   const fresh = await newCanvasTab(before2);
   check(!!fresh && fresh.targetId !== old.targetId, "a new Canvas tab opened for signing in, not the old one");
@@ -439,7 +441,7 @@ try {
     && await until(me.session, `document.querySelector("[data-helper-go]").offsetParent !== null`), "a sheet, with the helper ready");
   await send("Extensions.uninstall", { id: DEV_ID });
   await evaluate(me.session, `document.querySelector("[data-helper-go]").click()`);
-  check(await until(me.session, `document.querySelector("[data-helper-said]").textContent.includes("isn't turned on")
+  check(await until(me.session, `document.querySelector("[data-helper-said]").textContent.includes("is no longer in Chrome")
     && document.querySelector("[data-helper-add]").offsetParent !== null`, 15000),
     "the helper removed: the page says so, and offers to add it again");
 

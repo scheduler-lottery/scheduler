@@ -186,8 +186,9 @@ try {
     && document.activeElement === document.querySelector("[data-helper-go]")`, 5000),
     "saying it's added, with the one button ready to press");
   await sleep(1500);
-  check((await pages()).length === tabs && !(await pages()).some((t) => t.url.startsWith(CANVAS)),
-    "and nothing read from Canvas until it's pressed (no Canvas tab)");
+  check((await pages()).length === tabs - 1 && !(await pages()).some((t) => t.targetId === store.targetId),
+    "and the store's tab, done with, closed");
+  check(!(await pages()).some((t) => t.url.startsWith(CANVAS)), "and nothing read from Canvas until it's pressed (no Canvas tab)");
   // One press: signed out of Canvas, so Canvas's sign-in; then this course's list, no question.
   const was = created.length;
   await evaluate(me.session, `document.querySelector("[data-helper-go]").click()`);

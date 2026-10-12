@@ -3519,7 +3519,9 @@ def test_a_list_that_may_not_be_this_class_has_no_highlighted_button(prof):
     four = ["Ana Lima", "Bo Chen", "Cy Cole", "Di Dunn"]
     prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=4, names=four, course_id="111", course="LAW 310")})
     # Another course's list on the class page: each answer says what it does, and none is pushed.
-    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=3, course_id="222", course="BIO 101")})
+    bio = json.loads(_canvas_list(n=3, course_id="222", course="BIO 101"))  # (other students: other emails)
+    bio["students"] = [{**p, "email": "bio." + p["email"]} for p in bio["students"]]
+    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": json.dumps(bio)})
     page = raw(prof.get(r.headers["Location"]))
     assert _buttons(page) == [("It’s not my class: keep my current list (nothing changes)", False),
                               ("It’s my class: replace my list with this one", False),
@@ -3549,7 +3551,9 @@ def test_a_list_that_may_not_be_this_class_has_no_highlighted_button(prof):
     c = prof.create_sheet(title="Torts", allow_unlisted=False)
     prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=4, names=four, course_id="505", course="BUSCOM"),
                                             "setup": "1"})
-    r = prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=3, course_id="202", course="TORTS"), "setup": "1"})
+    torts = json.loads(_canvas_list(n=3, course_id="202", course="TORTS"))  # (other students: other emails)
+    torts["students"] = [{**p, "email": "torts." + p["email"]} for p in torts["students"]]
+    r = prof.post(f"/teach/s/{c}/canvas-list", {"list": json.dumps(torts), "setup": "1"})
     assert _buttons(raw(prof.get(r.headers["Location"])))[0] == ("It’s my class: replace my list with this one", True)
     prof.post(r.headers["Location"], {"action": "replace"})
     # Added anyway, the reason to look stays at the top of the report, in yellow.
@@ -3635,7 +3639,7 @@ def test_starting_over_in_setup_takes_the_list_off_and_asks_again(prof):
     assert 'data-confirm="Take these 4 students off, and get your class list again?"' in raw(
         prof.get(f"/teach/s/{sid}/setup?step=students"))
     r = prof.post(f"/teach/s/{sid}/roster/clear", {"setup": "1"})
-    assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students&pick=1")  # next time, it asks which
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students&pick=go")  # the courses, at once
     assert "Took 4 students off your list" in follow(prof, r)
     assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :s AND is_test = 0", s=sid) == 0
     assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=sid) is None

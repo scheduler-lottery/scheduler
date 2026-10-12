@@ -7,10 +7,11 @@
   <p class="lead">A small, free Chrome extension that brings your class list from Canvas into {{ app_name }} with one
     button, so there's nothing to download, copy, or drag. All you do is sign in to Canvas.</p>
   {% if helper_ids and helper_store_url %}
-  <p><a class="btn btn-primary" href="{{ helper_store_url }}" target="_blank" rel="noopener">Add Scheduler Helper to Chrome</a></p>
-  <p class="mini-hint">It works in Google Chrome (and Microsoft Edge). Using Safari or Firefox? Open {{ app_name }} in
-    Chrome to use it, or download Canvas's file of your students instead: the <strong>Your students</strong> step
-    shows you how, click by click.</p>
+  <p data-chromium-only><a class="btn btn-primary" href="{{ helper_store_url }}" target="_blank" rel="noopener">Add Scheduler Helper to Chrome</a></p>
+  <p class="mini-hint" data-chromium-only>It works in Google Chrome (and Microsoft Edge), on a computer.</p>
+  <div class="note-box" data-not-chromium hidden><p>Scheduler Helper works in Google Chrome, on a computer. To use it,
+    open {{ app_name }} in Chrome there. Or download Canvas's file of your students instead: a sign-up sheet's
+    <strong>Your students</strong> step shows you how, click by click.</p></div>
   {% endif %}
   {% if not helper_ids %}
   <div class="note-box"><p>Scheduler Helper isn't offered on this site yet. For now, the <strong>Your students</strong>
@@ -45,9 +46,10 @@
     <a href="{{ source_url }}/tree/main/extension" rel="noopener">see exactly what it does</a>.</p>
 
   <h2>Removing it</h2>
-  <p>Once your class list is in, {{ app_name }} offers to remove it for you: press <strong>Remove Scheduler Helper
-    from Chrome</strong>. Or, any time, click the puzzle piece at the top right of Chrome, then the three dots next to
-    Scheduler Helper, then <strong>Remove from Chrome</strong>. Without it, you can still use Canvas's file of your
+  <p>Once your class list is in, {{ app_name }} offers to remove it for you (or shows you the clicks): press
+    <strong>Remove it from Chrome</strong>. Or, any time, click the puzzle piece at the top right of Chrome, then the
+    three dots next to Scheduler Helper, then <strong>Remove from Chrome</strong> (in Edge, <strong>Remove from
+    Microsoft Edge</strong>). Without it, you can still use Canvas's file of your
     students (the <strong>Your students</strong> step shows where to click), or add the helper again later.</p>
 
   <p><a href="{{ url_for('privacy') }}#canvas">Privacy: class lists from Canvas</a></p>

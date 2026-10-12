@@ -24,7 +24,7 @@
 
 const VERSION = chrome.runtime.getManifest().version;
 // What this helper can do beyond reading Canvas, for the page to know (1.0.0 said none of this).
-const CAN = ["front", "show-signin", "remove"];
+const CAN = ["front", "show-signin", "remove", "settings"];
 const SCHEDULER_ORIGINS = ((chrome.runtime.getManifest().externally_connectable || {}).matches || [])
   .map((pattern) => (pattern.match(/^(https?:\/\/[^/]+)\//) || [])[1])
   .filter(Boolean);
@@ -83,14 +83,26 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, reply) => {
     reply({ ok: true, v: VERSION, hosts: CANVAS_HOSTS, can: CAN });
     return undefined;
   }
-  if (msg.type === "front") { // the page's own tab, to the front
-    toFront(sender.tab).then(() => reply({ ok: true }));
+  if (msg.type === "front") { // the page's own tab, to the front (just added: the store's tab it opened, closed)
+    const tab = sender.tab;
+    chrome.tabs.query({ active: true, windowId: tab.windowId }).catch(() => [])
+      .then(([now]) => toFront(tab).then(() => {
+        // (A tab the page opened, in front of it, that isn't Canvas: the web store, whose address the helper can't see.)
+        if (now && now.id !== tab.id && now.openerTabId === tab.id && !now.url) return chrome.tabs.remove(now.id).catch(() => {});
+        return undefined;
+      }))
+      .then(() => reply({ ok: true }), () => reply({ ok: true }));
     return true;
   }
   if (msg.type === "show-signin") { // pressed again while Canvas's sign-in waits: that tab, in front again
     const id = signInTabs.get(canvasOrigin(String(msg.host || "")));
     if (!id) { reply({ ok: false }); return undefined; }
     chrome.tabs.get(id).then(toFront).then(() => reply({ ok: true }), () => reply({ ok: false }));
+    return true;
+  }
+  if (msg.type === "settings") { // Chrome's page for the helper (its site access), next to the page's tab
+    chrome.tabs.create({ url: "chrome://extensions/?id=" + chrome.runtime.id, index: sender.tab.index + 1, openerTabId: sender.tab.id })
+      .then(() => reply({ ok: true }), () => reply({ ok: false }));
     return true;
   }
   if (msg.type === "remove") { // the class list is in, and the professor pressed Remove Scheduler Helper on the page
@@ -152,16 +164,34 @@ async function read(origin, paths, say, schedulerTab) {
   try {
     return await Promise.all(paths.map((path) => direct(origin, path)));
   } catch (err) {
-    if (err.message === "forbidden" || err.message === "missing") throw err;
+    if (/^(forbidden|missing|offline|down)$/.test(err.message)) throw err;
   }
   return inTab(origin, paths, say, schedulerTab);
+}
+
+// One Canvas request from here. No connection at all: "offline"; Canvas
+// failing (5xx) twice: "down" (neither is a sign-in to ask for). Any other
+// failure (a sign-in page, cookies kept from the helper) goes on to a tab.
+async function fetchCanvas(url) {
+  for (let tries = 0; ; tries++) {
+    let r;
+    try {
+      r = await fetch(url, { credentials: "include", headers: { Accept: "application/json" } });
+    } catch (err) {
+      if (navigator.onLine === false) throw new Error("offline");
+      throw err;
+    }
+    if (r.status < 500) return r;
+    if (tries) throw new Error("down");
+    await sleep(2000);
+  }
 }
 
 async function direct(origin, path) {
   let url = origin + path;
   let all = [];
   for (let page = 0; url && page < 40; page++) {
-    const r = await fetch(url, { credentials: "include", headers: { Accept: "application/json" } });
+    const r = await fetchCanvas(url);
     if (r.status === 401) {
       const text = await r.text();
       throw new Error(/not authorized|unauthorized/i.test(text) ? "forbidden" : "signin");
@@ -188,14 +218,47 @@ async function inTab(origin, paths, say, schedulerTab) {
     openedId = tab.id;
   }
   try {
-    tab = await signedIn(tab, origin, say);
-    const [result] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: readHere, args: [paths] });
-    const answer = result && result.result;
-    if (!answer || answer.error) throw new Error((answer && answer.error) || "canvas");
-    return answer.data;
+    const signed = await signedIn(tab, origin, say);
+    tab = signed.tab;
+    if (signed.asked) {
+      // Signed in just now: Canvas's cookies are there now, so straight from
+      // here, with Scheduler back in front at once; else in the tab, with
+      // Scheduler in front all the same.
+      say({ type: "wait", signedIn: true });
+      toFront(schedulerTab);
+      try {
+        return await Promise.all(paths.map((path) => direct(origin, path)));
+      } catch (err) {
+        if (/^(forbidden|missing|offline|down)$/.test(err.message)) throw err;
+      }
+    }
+    return await readInTab(tab.id, paths);
   } finally {
     if (openedId !== null) chrome.tabs.remove(openedId).catch(() => {});
     toFront(schedulerTab);
+  }
+}
+
+// Read inside a Canvas tab, giving up (as "canvas") if the tab goes away
+// or starts loading another page meanwhile, or after a minute.
+async function readInTab(tabId, paths) {
+  let stop = () => {};
+  const cut = new Promise((done) => {
+    const timer = setTimeout(done, 60 * 1000, null);
+    const moved = (id, change) => { if (id === tabId && change.status === "loading") done(null); };
+    const gone = (id) => { if (id === tabId) done(null); };
+    chrome.tabs.onUpdated.addListener(moved);
+    chrome.tabs.onRemoved.addListener(gone);
+    stop = () => { clearTimeout(timer); chrome.tabs.onUpdated.removeListener(moved); chrome.tabs.onRemoved.removeListener(gone); };
+  });
+  try {
+    const results = await Promise.race([
+      chrome.scripting.executeScript({ target: { tabId }, func: readHere, args: [paths] }), cut]);
+    const answer = results && results[0] && results[0].result;
+    if (!answer || answer.error) throw new Error((answer && answer.error) || "canvas");
+    return answer.data;
+  } finally {
+    stop();
   }
 }
 
@@ -207,12 +270,14 @@ async function openSignedIn(origin) {
   return tabs[said.indexOf(200)] || null;
 }
 
-// What Canvas says, inside this tab, to "who am I?": 200 when signed in, or
-// 0 if the tab can't be asked or doesn't answer within `ms`.
+// What Canvas says, inside this tab, to "who am I?": 200 when signed in;
+// -1 if the tab shows Chrome's error page (Canvas couldn't be reached); 0 if
+// the tab can't be asked or doesn't answer within `ms`.
 async function whoIn(tabId, ms) {
   let timer;
   const results = await Promise.race([
-    chrome.scripting.executeScript({ target: { tabId }, func: whoAmI }).catch(() => null),
+    chrome.scripting.executeScript({ target: { tabId }, func: whoAmI })
+      .catch((err) => (/error page/i.test(String(err && err.message)) ? [{ result: -1 }] : null)),
     new Promise((done) => { timer = setTimeout(done, ms, null); }),
   ]);
   clearTimeout(timer);
@@ -233,12 +298,15 @@ function toFront(tab) {
 // Wait until the tab is a loaded Canvas page with the professor signed in;
 // if it isn't, bring it forward for them to sign in. Signing in on another
 // Canvas tab counts too (it's looked at every few seconds), and a page that
-// went away stops the wait.
+// went away stops the wait. A tab showing Chrome's error page, or a Canvas
+// that's failing, is no sign-in: it's tried again, then said ("offline",
+// "down"). Returns { tab, asked } (asked: the professor was asked to sign in).
 async function signedIn(tab, origin, say) {
   const until = Date.now() + SIGN_IN_WAIT_MS;
   let asked = false;
   let looked = 0;
   let loginLooked = 0;
+  let bad = 0; // looks at an error page, or a failing Canvas
   // A word to the page now and then, on a timer of its own, so a slow look
   // at Canvas (up to SLOW_MS) can't delay it: the page then knows to wait.
   const awake = setInterval(() => say({ type: "wait" }), KEEP_AWAKE_MS);
@@ -248,21 +316,29 @@ async function signedIn(tab, origin, say) {
       const now = await chrome.tabs.get(tab.id).catch(() => null);
       if (!now) {
         const other = await openSignedIn(origin); // (signed in on their own tab, then closed this one)
-        if (other) return other;
+        if (other) return { tab: other, asked };
         throw new Error("closed");
       }
+      let said = 0;
       if (now.status === "complete" && now.url && now.url.indexOf(origin + "/") === 0) {
         // Its sign-in page too, every few seconds: signed in in another tab, Canvas says so there.
         const login = /\/login\b/.test(now.url);
         if (!login || Date.now() - loginLooked > 3000) {
           if (login) loginLooked = Date.now();
-          if (await whoIn(now.id, login ? LOOK_MS : SLOW_MS) === 200) return now;
+          said = await whoIn(now.id, login ? LOOK_MS : SLOW_MS);
+          if (said === 200) return { tab: now, asked };
         }
+      }
+      if (said === -1 || said >= 500) { // no sign-in to ask for: Canvas can't be reached, or is failing
+        if (++bad >= 3) throw new Error(said === -1 ? "offline" : "down");
+        chrome.tabs.reload(now.id).catch(() => {});
+        await sleep(4000);
+        continue;
       }
       if (asked && Date.now() - looked > 3000) {
         looked = Date.now();
         const other = await openSignedIn(origin);
-        if (other && other.id !== now.id) return other;
+        if (other && other.id !== now.id) return { tab: other, asked };
       }
       if (!asked && now.status === "complete") {
         asked = true;

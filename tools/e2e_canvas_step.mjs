@@ -152,7 +152,8 @@ try {
     await as(agent);
     words = await visibleText();
     check(!(await shown("[data-helper-add]")) && await shown("[data-helper-chrome]") && words.includes("let Google Chrome do it")
-      && words.includes("Copy this page's link") && words.includes("Paste and Go") && words.includes("Get Chrome"),
+      && words.includes("Copy this page's link") && words.includes("Paste") && words.includes("Get Chrome")
+      && words.includes("it emails you a new code"),
       `${name}: how to open this page in Chrome, where the helper does it`);
     check((await evaluate(me, `document.querySelector("[data-page-link]").value`)).indexOf(step + "&b=") === 0,
       `${name}: the link to copy is this page's`);

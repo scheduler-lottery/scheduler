@@ -104,7 +104,7 @@
   --surface-strong: #262b52;
 
   --text: #edeffb;
-  --muted: #9498ba;
+  --muted: #a0a4c6; /* (4.5:1 and more on the tinted boxes too) */
   --border: #2a2e56;
   --border-strong: #3a3f70;
 
@@ -266,6 +266,8 @@ select,
    --------------------------------------------------------------- */
 .icon-dock {
   display: flex;
+  flex-wrap: wrap; /* (large text on a narrow window: wraps, never scrolls sideways) */
+  max-width: 100%;
   align-items: center;
   gap: 2px;
   padding: 3px;
@@ -1557,6 +1559,7 @@ section[id], main[id] { scroll-margin-top: 80px; }
 }
 .preview-banner a { color: inherit; font-weight: 700; margin-left: 6px; }
 .footer-contact { margin: 0 0 8px; }
+.footer-contact a, .footer-credit a { overflow-wrap: anywhere; }
 
 .field-label { display: block; font-weight: 650; text-align: left; }
 .hint-tight { margin: 0; text-align: left; }
@@ -3009,7 +3012,15 @@ details.guide:not([open]) { padding-bottom: 20px; }
 .canvas-update { scroll-margin-top: 92px; }
 .helper-remove { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
 .helper-remove-buttons { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; margin-top: 8px; }
-.helper-remove[hidden], .helper-remove-buttons[hidden], [data-helper-chrome][hidden] { display: none; }
+.helper-remove-steps { margin: 8px 0 0; padding-left: 1.4em; }
+.helper-remove-steps li + li { margin-top: 4px; }
+.helper-trouble { margin-top: 10px; }
+.helper-trouble summary { cursor: pointer; font-weight: 600; }
+.helper-trouble p { margin: 8px 0 0; }
+.copy-said { display: inline-block; margin-left: 10px; }
+.quiz-step { scroll-margin-top: 92px; }
+.helper-remove[hidden], .helper-remove-buttons[hidden], .helper-remove-steps[hidden], [data-helper-chrome][hidden],
+[data-helper-settings][hidden], .helper-remove p[hidden], [data-chromium-only][hidden], [data-not-chromium][hidden] { display: none; }
 
 /* Canvas: steps with pictures of where to click (drawn like Canvas, in this
    site's colors). */
@@ -3080,6 +3091,7 @@ details.guide:not([open]) { padding-bottom: 20px; }
 .canvas-by-hand[open] > summary { margin-bottom: 12px; }
 .canvas-arrived .arrived-form .field { margin: 6px 0 14px; }
 .canvas-copy-courses { display: grid; gap: 8px; margin-top: 8px; }
+.canvas-copy-courses .quiz-choice, .helper-courses-q, .canvas-arrived-title, .arrived-list li { overflow-wrap: anywhere; }
 .canvas-copy-courses[hidden] { display: none; }
 .canvas-copy-courses > p { margin: 0; font-weight: 650; }
 .pic-box.is-dashed { stroke: var(--accent); stroke-dasharray: 4 3; }
@@ -3118,7 +3130,7 @@ details.guide:not([open]) { padding-bottom: 20px; }
 /* The Canvas step, after review: status lines that are always there (so
    screen readers hear them), a busy button, and the list's other way. */
 .helper-said:empty, .canvas-welcome:empty { margin: 0; padding: 0; border: 0; }
-[data-helper-go][aria-disabled] { opacity: 0.55; cursor: progress; }
+[data-helper-go].is-busy { cursor: progress; } /* (still works: a second press brings Canvas's sign-in back) */
 .helper-courses-q { margin: 0; font-weight: 650; }
 .helper-courses-q:focus { outline: none; }
 .arrived-other { display: inline-block; margin: 10px 0 0; }

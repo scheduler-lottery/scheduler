@@ -235,15 +235,16 @@ def test_wrong_course_on_a_helper_list_goes_back_to_ask_which_course(prof):
     review = r.headers["Location"]
     assert 'name="action" value="pick" class="btn-link">Pick a different Canvas course</button>' in raw(prof.get(review))
     r = prof.post(review, {"action": "pick"})
-    assert r.headers["Location"].endswith(f"/teach/s/{sid}?pick=1#canvas-update")
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}?pick=go#canvas-update")  # (the courses, at once)
     assert "Kept your current class list. Nothing changed." in follow(prof, r)
+    assert "data-ask-now" in raw(prof.get(r.headers["Location"]))
     assert not _pending_id(prof.app, sid) and len(_roster(prof.app, sid)) == 4
     assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=sid) == "111"
     # From setup: back to setup, asking.
     r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=5, course_id="111", course="LAW 310"),
                                                   "setup": "1"})
     r = prof.post(r.headers["Location"], {"action": "pick"})
-    assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students&pick=1")
+    assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students&pick=go")
 
 
 def test_only_a_helper_list_can_be_turned_down_for_its_course(prof, listed):
