@@ -59,7 +59,7 @@
         <p class="mini-hint">{{ by_day[d.key] | length }} of {{ sheet.capacity_per_day | plural('seat') }} taken</p>
         {% endif %}
         {% if mode == 'draft' and d.key in oversubscribed %}
-        <p class="mini-hint">More people want this day than it has seats. A fair random draw decides, so nothing is reserved yet.</p>
+        <p class="mini-hint">More people want this day than it has seats. {% if sheet.algorithm == 'first_come' %}Whoever ranked first keeps their place, so a later ranking can't take it.{% else %}A fair random draw decides, so nothing is reserved yet.{% endif %}</p>
         {% endif %}
         <ul class="assign-list">
           {% for a in by_day[d.key] %}

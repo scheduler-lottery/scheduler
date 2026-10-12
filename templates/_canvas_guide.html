@@ -53,7 +53,7 @@
       <p class="canvas-easy-lead">Scheduler Helper isn't in <span data-browser-name>Chrome</span> on this computer right now (if you removed it after your last update, that's why). Adding it takes three clicks; then it brings the changes from Canvas.</p>
       {% else %}
       <{{ hl }} class="canvas-easy-title">First, add Scheduler Helper to <span data-browser-name>Chrome</span></{{ hl }}>
-      <p class="canvas-easy-lead">Scheduler Helper is a small, free add-on for <span data-browser-name>Chrome</span> (an “extension”) that copies your class list from Canvas into this page when you ask. Add it once on this computer; after that, one button here brings your class list over, and all you do is sign in to Canvas.</p>
+      <p class="canvas-easy-lead">Scheduler Helper is a small, free add-on for <span data-browser-name>Chrome</span> (an “extension”). Add it here, and it brings your class list from Canvas by itself: all you do is sign in to Canvas. Afterwards, you can delete it in one click, or keep it for updating the list later.</p>
       {% endif %}
       <a class="btn btn-primary btn-large" href="#" target="_blank" rel="noopener" data-helper-add>Add Scheduler Helper to <span data-browser-name>Chrome</span></a>
       <ol class="helper-install-steps" data-steps-for="chrome">
@@ -69,13 +69,14 @@
       <details class="mini-hint helper-trouble">
         <summary>Trouble adding it?</summary>
         <p><strong>Added it already, and this still shows?</strong> <span data-browser-name>Chrome</span> turns add-ons off in private (Incognito) windows, and each <span data-browser-name>Chrome</span> profile has its own: open this page in the <span data-browser-name>Chrome</span> window where you added it.</p>
-        <p><strong><span data-browser-name>Chrome</span> won't add it?</strong> If it says it's blocked, or warns you off it, you don't need it: use <strong>Option 2</strong>, below: Canvas's file brings the same names and emails.</p>
+        <p><strong><span data-browser-name>Chrome</span> won't add it?</strong> If it says it's blocked, or warns you off it, you don't need it. Use <strong>Option 2</strong> below instead: Canvas's file brings the same names and emails.</p>
       </details>
-      <p class="mini-hint">It reads only your list of courses and one course's student names and email addresses, only when you ask on this page (adding it here asks, too), and it never sees your password. <a href="{{ url_for('helper') }}" target="_blank" rel="noopener">What it does, and how to remove it</a></p>
+      <p class="mini-hint">Rather not add anything? See Option 2, just below.</p>
+      <p class="mini-hint">It reads only your list of courses and one course's student names and email addresses, and only for this page: right after you add it here, or when you press its button. It never sees your password. <a href="{{ url_for('helper') }}" target="_blank" rel="noopener">What it does, and how to remove it</a></p>
     </div>
     <div data-helper-chrome hidden>
-      <{{ hl }} class="canvas-easy-title">Easiest: let Google Chrome do it</{{ hl }}>
-      <p class="canvas-easy-lead">In Chrome, a free add-on called Scheduler Helper brings your class list from Canvas with one button: all you do is sign in to Canvas. It works only in Chrome, so open this page there:</p>
+      <{{ hl }} class="canvas-easy-title">Open this page in Google Chrome</{{ hl }}>
+      <p class="canvas-easy-lead">Scheduler Helper works only in Chrome. There, it brings your class list from Canvas by itself: all you do is sign in to Canvas. To open this page in Chrome:</p>
       <ol class="helper-install-steps">
         <li><button type="button" class="btn btn-primary" data-copy="#page-link-{{ sheet.id }}">Copy this page's link</button>
           <span class="mini-hint copy-said" role="status" data-copy-said="Link copied. Now open Google Chrome (step 2)."></span>
@@ -95,10 +96,9 @@
 
   <details class="canvas-by-hand canvas-upload" data-canvas-download>
     <summary><span data-upload-title="Get Canvas's file of your students (or paste your own list)">Option 2 · Do it yourself: Canvas's file, or paste your own list</span></summary>
-    <p class="mini-hint">Download Canvas's file of your students (the steps below), or, if you have your own list, <a href="#canvas-paste-{{ sheet.id }}" data-open-paste>paste it in</a>.</p>
     <p class="canvas-welcome" data-file-said role="status" id="file-said-{{ sheet.id }}"></p>
     <p class="canvas-phone-note" data-phone-only hidden><strong>This part is easiest on a computer.</strong> Everything so far is saved, so you can stop here: on your computer, sign in to {{ app_name }}, click <strong>My sheets</strong>, then “{{ sheet.title }}”{% if has_list %}, then <strong>Class changed in Canvas? Update from Canvas</strong>{% else %}, and add your students from there{% endif %}. Or, on this phone or tablet, {% if has_list %}add anyone new in the <a href="#add-students">Add students</a> box above{% else %}<button type="button" class="btn-link" data-go="paste">type or paste your students</button> instead{% endif %}.</p>
-    <p class="mini-hint">Canvas can give you a file listing your students. You save it from Canvas (steps 1 to 3), then choose it here (step 4). It also has grades in it: {{ app_name }} keeps only the names and email addresses, and throws everything else away as it reads the file, never saving it.</p>
+    <p class="mini-hint">Canvas can give you a file of your students: save it from Canvas (steps 1 to 3), then choose it here (step 4). It has grades in it too: {{ app_name }} keeps only names and emails, and never saves the rest. Have your own list? <a href="#canvas-paste-{{ sheet.id }}" data-open-paste>Paste it in</a>.</p>
     <div class="canvas-guide-top">
       <button type="button" class="btn btn-secondary" data-canvas-open data-canvas-went="signin" aria-describedby="file-said-{{ sheet.id }}">Open Canvas</button>
       <button type="button" class="btn-link" data-canvas-choose>Already saved Canvas's file? Choose it now</button>

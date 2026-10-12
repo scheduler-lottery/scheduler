@@ -151,7 +151,7 @@ try {
                                ["Firefox", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:140.0) Gecko/20100101 Firefox/140.0"]]) {
     await as(agent);
     words = await visibleText();
-    check(!(await shown("[data-helper-add]")) && await shown("[data-helper-chrome]") && words.includes("let Google Chrome do it")
+    check(!(await shown("[data-helper-add]")) && await shown("[data-helper-chrome]") && words.includes("Open this page in Google Chrome")
       && words.includes("Copy this page's link") && words.includes("Paste") && words.includes("Get Chrome")
       && words.includes("it emails you a new code"),
       `${name}: how to open this page in Chrome, where the helper does it`);

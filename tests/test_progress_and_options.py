@@ -9,7 +9,7 @@ import db
 import deadlines
 from conftest import day_keys
 from matching_engine import ALGORITHMS, _rank_max, build_student_prefs, compute_assignment
-from test_app import follow, q, raw, text
+from test_app import follow, html, q, raw, text
 
 NAMES = ["Ana Lima", "Bo Chen", "Cy Diaz", "Di Eng", "Ed Fox", "Flo Gray"]
 SIX = "Name,Email\n" + "".join(f"{n},s{i}@school.edu\n" for i, n in enumerate(NAMES))
@@ -37,7 +37,7 @@ def test_half_then_nine_in_ten_are_each_said_once(prof, browser):
     browser().sign_in_student(sid, "Cy Diaz", email="s2@school.edu").rank(sid, keys)  # 3 of 6: half
     mails = progress_mail(prof)
     assert len(mails) == 1 and "3 of 6 students have ranked" in mails[0].subject
-    assert "half of your class" in mails[0].body and "Still to rank (3): Di Eng, Ed Fox, Flo Gray" in mails[0].body
+    assert "half of your students have ranked" in mails[0].body and "Still to rank (3): Di Eng, Ed Fox, Flo Gray" in mails[0].body
     assert "\n\n" in mails[0].body
     browser().sign_in_student(sid, "Di Eng", email="s3@school.edu").rank(sid, keys)
     assert len(progress_mail(prof)) == 1  # (4 of 6: nothing new to say)
@@ -65,10 +65,17 @@ def test_a_quiet_week_and_a_near_deadline_are_each_said_once(prof, browser):
     sid = prof.create_sheet(allow_unlisted=False)
     prof.upload(sid, SIX)
     with prof.app.test_request_context():
-        db.run("UPDATE sheets SET created_at = '2020-01-01T00:00:00Z', shared_at = '2020-01-02T00:00:00Z' "
-               "WHERE id = :sid", sid=sid)
+        from datetime import timedelta
+
+        from util import iso, now
+        db.run("UPDATE sheets SET shared_at = :at WHERE id = :sid", at=iso(now() - timedelta(days=8)), sid=sid)
         db.commit()
         assert deadlines.quiet_weeks() == 1 and deadlines.quiet_weeks() == 0
+        # (a sheet left idle for months, or archived: nothing)
+        other = prof.create_sheet(title="Old one")
+        db.run("UPDATE sheets SET shared_at = '2020-01-02T00:00:00Z' WHERE id = :sid", sid=other)
+        db.commit()
+        assert deadlines.quiet_weeks() == 0
     mail = progress_mail(prof)[-1]
     assert "nobody has ranked yet" in mail.subject and "a week since you shared the link" in mail.body
     # Two days before the deadline, with who still hasn't ranked.
@@ -216,3 +223,89 @@ def _roster_rows(prof, sid):
     with prof.app.app_context():
         return [(r["display_name"], r["is_test"], r["email"]) for r in db.rows(
             "SELECT display_name, is_test, email FROM roster WHERE sheet_id = :sid", sid=sid)]
+
+
+# ---------------------------------------------------------------------------
+# From the third test round
+# ---------------------------------------------------------------------------
+def test_a_progress_email_that_cant_go_out_is_sent_once_it_can(prof, browser, monkeypatch):
+    sid = prof.create_sheet(allow_unlisted=False)
+    prof.upload(sid, SIX)
+    mailbox = {"open": False}  # (no mailbox for notes yet, or the day's limit)
+    real = deadlines._can_tell
+    monkeypatch.setattr(deadlines, "_can_tell", lambda: mailbox["open"] and real())
+    rank(browser, sid, 3, day_keys(sid))
+    assert not progress_mail(prof)
+    assert q(prof.app, "SELECT half_ranked_at FROM sheets WHERE id = :sid", sid=sid) is None
+    mailbox["open"] = True
+    browser().sign_in_student(sid, "Di Eng", email="s3@school.edu").rank(sid, day_keys(sid))
+    assert len(progress_mail(prof)) == 1
+
+
+def test_a_moved_deadline_gets_its_own_two_day_email(prof, browser):
+    from datetime import timedelta
+
+    from util import iso, now
+
+    sid = prof.create_sheet(allow_unlisted=False)
+    prof.upload(sid, SIX)
+    with prof.app.test_request_context():
+        db.run("UPDATE sheets SET closes_at = :at WHERE id = :sid", at=iso(now() + timedelta(hours=30)), sid=sid)
+        db.commit()
+        assert deadlines.deadline_soon() == 1 and deadlines.deadline_soon() == 0
+        db.run("UPDATE sheets SET closes_at = :at, reminder_told_at = :told WHERE id = :sid",
+               at=iso(now() + timedelta(hours=40)), told=iso(now() - timedelta(days=5)), sid=sid)
+        db.commit()
+        assert deadlines.deadline_soon() == 1 and deadlines.deadline_soon() == 0
+
+
+def test_last_call_only_before_a_future_deadline_and_with_the_right_promise(prof, browser):
+    from datetime import timedelta
+
+    from util import iso, now
+
+    sid = prof.create_sheet(allow_unlisted=False)
+    prof.upload(sid, SIX)
+    with prof.app.app_context():
+        db.run("UPDATE sheets SET closes_at = :at, include_unranked = 0 WHERE id = :sid",
+               at=iso(now() + timedelta(days=3)), sid=sid)
+        db.commit()
+    page = raw(prof.get(f"/teach/s/{sid}"))
+    assert "Last call before the deadline" in page and "you won&#39;t get a day on the schedule" in page
+    with prof.app.app_context():
+        db.run("UPDATE sheets SET closes_at = :at WHERE id = :sid", at=iso(now() - timedelta(days=1)), sid=sid)
+        db.commit()
+    page = html(prof.get(f"/teach/s/{sid}"))  # (passed, the instructor deciding: no date that's gone by)
+    assert "are about to close" in page and "close Mon" not in page and "close Tue" not in page
+
+
+def test_an_older_ranking_keeps_its_place_when_edited_under_first_come(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    keys = day_keys(sid)
+    student = browser().sign_in_student(sid, "Sam Lee")
+    student.rank(sid, keys)
+    with prof.app.app_context():  # (saved before first_at existed)
+        db.run("UPDATE submissions SET first_at = NULL, updated_at = '2026-09-01T10:00:00Z' WHERE sheet_id = :sid",
+               sid=sid)
+        db.commit()
+    student.rank(sid, keys[::-1])
+    assert q(prof.app, "SELECT first_at FROM submissions WHERE sheet_id = :sid", sid=sid) == "2026-09-01T10:00:00Z"
+
+
+def test_the_progress_email_choice_comes_along_on_a_copy(prof):
+    sid = prof.create_sheet()
+    prof.post(f"/teach/s/{sid}/progress-emails", {})
+    prof.post(f"/teach/s/{sid}/duplicate")
+    copy = q(prof.app, "SELECT id FROM sheets WHERE id <> :sid ORDER BY created_at DESC LIMIT 1", sid=sid)
+    assert q(prof.app, "SELECT progress_emails FROM sheets WHERE id = :sid", sid=copy) == 0
+
+
+def test_how_it_works_tells_a_first_come_class_that_ranking_early_helps(prof, browser):
+    sid = prof.create_sheet()
+    prof.upload(sid)
+    prof.post(f"/teach/s/{sid}/algorithm", {"algorithm": "first_come"})
+    student = browser().sign_in_student(sid, "Sam Lee")
+    page = text(student.get("/how-it-works"))
+    assert "In this class, ranking early helps" in page and "Submitting early confers no advantage" not in page
+    assert "Submitting early confers no advantage" in text(browser().get("/how-it-works"))

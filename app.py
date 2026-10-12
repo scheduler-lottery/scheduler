@@ -464,8 +464,14 @@ def site_font(name):
 
 @app.route("/how-it-works")
 def how_it_works():
+    # A student signed in to a class: what its option means for them.
+    sid = next(iter(session.get("students") or {}), None)
+    try:
+        sheet = sheets.get_sheet(sid) if sid else None
+    except Exception:  # noqa: BLE001 - the general page, then
+        sheet = None
     return render_template("how_it_works.html", algorithms=ALGORITHMS, examples=example_views(),
-                           default_algorithm=DEFAULT_ALGORITHM)
+                           default_algorithm=DEFAULT_ALGORITHM, algorithm=sheet["algorithm"] if sheet else None)
 
 
 @app.route("/invite", methods=["GET", "POST"])

@@ -237,11 +237,13 @@
         if (!answer || !answer.ok || found) return;
         found = id;
         can = answer.can || [];
+        var once = "helper-done-" + (box.getAttribute("data-report") || "");
+        // Kept already, in its own box (its "All done!" gone): nothing to ask here.
+        if (can.indexOf("kept") >= 0 && store(once) && answer.done === false) { store("helper-keep", "1"); return; }
         if (can.indexOf("remove") < 0) go.textContent = "Show me how to remove it";
         box.hidden = false;
         // Its own box, too, at the top right of Chrome: "All done! … Delete me", once for this report (not
-        // again when the page is opened later). Deleted there, this page says so.
-        var once = "helper-done-" + (box.getAttribute("data-report") || "");
+        // again when the page is opened later). Deleted or kept there, this page says so.
         if (can.indexOf("done") >= 0 && !store(once)) {
           store(once, "1");
           send(id, { type: "done" }, function (r) { if (r && r.popup) watch(); });
@@ -267,7 +269,11 @@
       var until = Date.now() + 10 * 60 * 1000;
       watching = setInterval(function () {
         send(found, { type: "hello" }, function (answer) {
-          if (answer && answer.ok) { if (Date.now() > until) clearInterval(watching); return; }
+          if (answer && answer.ok) {
+            if (can.indexOf("kept") >= 0 && answer.done === false) { clearInterval(watching); keptThere(); return; }
+            if (Date.now() > until) clearInterval(watching);
+            return;
+          }
           clearInterval(watching);
           gone();
         });
@@ -279,11 +285,17 @@
       settle(first + "In " + browserName + "'s own menu:");
       watch();
     };
-    box.querySelector("[data-helper-remove-keep]").addEventListener("click", function () {
+    var keptThere = function () {
       store("helper-keep", "1");
       question.hidden = true;
       buttons.hidden = true;
+      steps.hidden = true;
       settle("OK: Scheduler Helper stays in " + browserName + ".");
+    };
+    box.querySelector("[data-helper-remove-keep]").addEventListener("click", function () {
+      if (watching) clearInterval(watching);
+      if (found && can.indexOf("kept") >= 0) send(found, { type: "kept" }, function () {}); // (its box: "ready" again)
+      keptThere();
     });
     go.addEventListener("click", function () {
       if (!found) return;
@@ -297,6 +309,18 @@
           });
         }, 1500);
       });
+    });
+  });
+
+  // How days are matched, changed after students were told something about
+  // ranking early (the link went out, or some have ranked): say what changes.
+  document.querySelectorAll("form.algo-choices[data-early-now]").forEach(function (form) {
+    form.addEventListener("submit", function (e) {
+      var told = form.getAttribute("data-early-now");
+      var pick = form.querySelector("input[name=algorithm]:checked");
+      var now = pick ? pick.getAttribute("data-early") : told;
+      if (told && now !== told && !window.confirm("Students were told: “" + told + "”\n\nWith this option: “" + now
+          + "”\n\nChange it anyway? (The Friendly reminder on the Class tab has the new words.)")) e.preventDefault();
     });
   });
 
@@ -990,6 +1014,16 @@
         // who's gone are shown; so straight there, no extra press. (The
         // button stays, in case the page doesn't move on.)
         add("p", "Comparing it with your list…", "mini-hint");
+        if (document.hidden) { // (behind the store, say: compared once this page is looked at)
+          if (!/Click here · /.test(document.title)) document.title = "List ready. Click here · " + document.title;
+          var whenSeen = function () {
+            if (document.hidden) return;
+            document.removeEventListener("visibilitychange", whenSeen);
+            form.submit();
+          };
+          document.addEventListener("visibilitychange", whenSeen);
+          return;
+        }
         form.submit();
         return;
       }
@@ -1065,6 +1099,8 @@
       guide.querySelector("[data-helper-install]").hidden = true;
       if (ready) ready.hidden = true;
       chromeBox.hidden = false;
+      var label = helperBox.querySelector(".option-label");
+      if (label) label.textContent = "Option 1 · Easiest, in Google Chrome: Scheduler Helper does it for you";
       uploadSecond();
     };
     if (connectBox && !connectBox.hidden) showHelp();
@@ -1095,11 +1131,16 @@
       var setBusy = function (on) {
         busy = on;
         helperGo.classList.toggle("is-busy", on);
-        if (!on) helperGo.textContent = goLabel;
+        if (!on) {
+          helperGo.textContent = goLabel;
+          var hint = ready && ready.querySelector(".mini-hint");
+          if (hint) hint.hidden = false;
+        }
       };
       var wantsHelper = false; // pressed "Add Scheduler Helper": watch for it, and say what's next once it's there
       var resumeAfterAdd = false; // pressed "Update from Canvas" with no helper: once it's added, the update carries on
       var accessWait = false; // told how to let it read Canvas: back on this tab, it tries again by itself
+      var retryOnReturn = false; // (1.0.0 stopped waiting for a sign-in: back on this tab, it asks again)
       var helperSay = function (text) { helperSaid.textContent = text; }; // (always in the page, so it's read out)
       // The browser's own words in the install steps.
       var browserName = isEdge ? "Edge" : isOpera ? "Opera" : "Chrome";
@@ -1255,6 +1296,12 @@
       var backHere = function () {
         lookAgain();
         if (accessWait && helperId && !busy) { accessWait = false; helperGo.click(); } // (let in, perhaps: try again)
+        else if (retryOnReturn && helperId && !busy) { retryOnReturn = false; helperGo.click(); }
+        else if (busy && signinUp && !can("show-signin")) {
+          helperSay("Canvas's sign-in page is open in another tab. Signed in already (there, or in another tab)? Press "
+            + "Get my class list from Canvas, and your list comes. Not yet? The same button brings Canvas's sign-in "
+            + "page back.");
+        }
       };
       window.addEventListener("focus", backHere);
       document.addEventListener("visibilitychange", function () { if (!document.hidden) backHere(); });
@@ -1268,8 +1315,8 @@
       var resending = false;
       var signinWords = function () {
         return can("show-signin")
-          ? "Canvas wants you to sign in. Its sign-in page is open in another tab, in front of this one: sign in there "
-            + "as usual, and you'll come straight back here."
+          ? "Canvas wants you to sign in, in another tab. Sign in there as usual, and you'll come straight back here. "
+            + "Don't see it? Press Show me Canvas's sign-in page."
           : "Canvas just came up in front of this page. Sign in there as usual, and you'll come straight back here. "
             + "(If it shows a Canvas page but no place to sign in, click the reload arrow ↻ at the top left of the "
             + "window, then sign in.)";
@@ -1336,7 +1383,12 @@
               if (signinUp) return; // (asked again: the press said so)
               signinUp = true;
               hush();
-              helperGo.textContent = "Show me Canvas's sign-in page";
+              if (!can("front")) document.title = pageTitle; // (1.0.0 brings this page back itself, once signed in)
+              // 1.0.4 can bring its sign-in page forward; with 1.0.0 a press asks again, which also
+              // brings the list if the professor signed in on another tab.
+              helperGo.textContent = can("show-signin") ? "Show me Canvas's sign-in page" : goLabel;
+              var hint = ready && ready.querySelector(".mini-hint");
+              if (hint) hint.hidden = true; // (it says the same, under the words just said)
               helperSay(signinWords());
               return;
             }
@@ -1365,7 +1417,10 @@
             + "then comes here by itself.");
         }, 30000);
         nudge = function () { if (Date.now() - started >= 8000) still(); }; // (not a double-click's second click)
-        again = function () { return ports.length < 2 && open(); };
+        again = function () { // (each press a new ask; the first, which opened Canvas's tab, stays)
+          if (ports.length >= 3) drop(ports[ports.length - 1]);
+          return open();
+        };
         hush();
       };
       var trouble = function (why) {
@@ -1381,13 +1436,18 @@
         }
         if (why === "host" || why === "access") { cannotRead(why); return; }
         if (why === "missing" || why === "forbidden") askWhich = true; // (the next press: the list of courses)
-        if ((why === "signin" || why === "closed") && !can("front")) markTab("Canvas sign-in closed · ");
+        if ((why === "signin" || why === "closed") && !can("front")) {
+          markTab(why === "closed" ? "Canvas sign-in closed · " : "Click here · ");
+          if (why === "signin") retryOnReturn = true;
+        }
         helperSay(why === "forbidden" ? "Canvas won't share that course's class list with you. Is it a course you teach?"
           : why === "missing" ? "Canvas couldn't find that course. Press Get my class list from Canvas to choose it again."
           : why === "offline" ? "This computer can't reach Canvas right now. Check that the internet is working, then "
             + "press Get my class list from Canvas again."
           : why === "down" ? "Canvas isn't answering right now (it may be down for maintenance). Try again in a few "
             + "minutes, or use Option 2 (Canvas's file), below."
+          : why === "signin" && !can("show-signin") ? "Canvas stopped waiting for you to sign in (after 10 minutes). Signed "
+            + "in since? Press Get my class list from Canvas, and your list comes."
           : why === "signin" || why === "closed" ? "Canvas sign-in didn't finish. Press Get my class list from Canvas to try again."
           : !can("show-signin") ? "Canvas didn't answer just now. If you have Canvas open in another tab and it's asking "
             + "you something (like “Leave site?”), answer it. Then press Get my class list from Canvas again."
@@ -1646,6 +1706,7 @@
         if (busy) { if (nudge && !second) nudge(); return; }
         resending = false;
         accessWait = false;
+        retryOnReturn = false;
         if (settingsGo) settingsGo.hidden = true;
         if (helperHosts.length && helperHosts.indexOf(host()) < 0) { trouble("host"); return; }
         helperCourses.hidden = true;
@@ -1705,9 +1766,9 @@
     // Opened from a link to this step (at=canvas: copied in another browser
     // to open here in Chrome): the step, in view. Nothing is read until the
     // button is pressed.
-    if (/[?&]at=canvas(&|$)/.test(location.search) && guide.closest("details")) {
+    if (/[?&]at=canvas(&|$)/.test(location.search)) {
       showHere(guide);
-      guide.closest("details").scrollIntoView({ block: "start" });
+      (guide.closest("details") || stepBox).scrollIntoView({ block: "start" });
     }
 
     // Back from Canvas (this page hidden, then looked at again) after

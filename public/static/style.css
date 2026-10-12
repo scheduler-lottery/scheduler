@@ -1066,7 +1066,7 @@ body.is-dragging .rank-item:not(.dragging) { pointer-events: none; }
 .algo-desc { font-size: 0.9rem; color: var(--muted); line-height: 1.5; }
 .algo-form { margin-top: auto; }
 
-.table-wrap { overflow-x: auto; }
+.table-wrap { overflow-x: auto; position: relative; } /* (its hidden headers stay inside it: no sideways scroll on a phone) */
 .admin-table { width: 100%; border-collapse: collapse; font-size: 0.93rem; }
 .admin-table th, .admin-table td {
   text-align: left;
@@ -3065,7 +3065,7 @@ details.guide:not([open]) { padding-bottom: 20px; }
 .algo-choice { display: flex; gap: 10px; align-items: flex-start; }
 .algo-choice input { margin-top: 4px; }
 .algo-choice-desc { display: block; font-size: 0.88rem; color: var(--muted); margin-top: 2px; }
-.option-label { margin: 0 0 10px; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.02em; color: var(--accent-strong, var(--text)); }
+.option-label { margin: 0 0 10px; font-size: 1.05rem; font-weight: 650; color: var(--accent-strong, var(--text)); }
 .canvas-paste { margin-top: 14px; }
 .canvas-paste summary { cursor: pointer; font-weight: 600; }
 .canvas-paste form { margin-top: 10px; }

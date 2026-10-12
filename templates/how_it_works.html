@@ -9,7 +9,13 @@
     <p class="note-box-label">Summary for students</p>
     <p>Rank the days in your true order of preference, with your first choice at the top.</p>
     <p>When sign-ups close, each student receives the highest-ranked day that still has room. When more students want a day than it has seats, a random draw decides.</p>
-    <p>Submitting early confers no advantage, and ranking a day above where you truly want it cannot improve your result.</p>
+    {% if algorithm == 'first_come' %}
+    <p>In this class, ranking early helps: when more students want a day than it has seats, whoever ranked first gets it, and changing your ranking later keeps your place.</p>
+    {% elif algorithm == 'rank_max' %}
+    <p>In this class, the schedule gives as many students as it can their first choice. Honest ranking is the safe choice, and submitting early confers no advantage.</p>
+    {% else %}
+    <p>Submitting early confers no advantage{% if not algorithm %} (unless your instructor chose “First come, first served”){% endif %}, and ranking a day above where you truly want it cannot improve your result.</p>
+    {% endif %}
   </div>
 
   <h2>Days you cannot attend</h2>
@@ -22,14 +28,24 @@
 
   <h2>Fairness</h2>
   <ul>
-    <li><strong>Not first-come, first-served.</strong> The time a ranking was submitted is never used.</li>
+    {% if algorithm == 'first_come' %}
+    <li><strong>First come, first served, in this class.</strong> Its instructor chose it: when a day is oversubscribed, the earliest rankings get it. Changing a ranking later keeps its place.</li>
+    {% else %}
+    <li><strong>Not first-come, first-served.</strong> The time a ranking was submitted is never used{% if not algorithm %}, unless an instructor chooses “First come, first served” for their class{% endif %}.</li>
+    {% endif %}
     <li><strong>A fixed random draw breaks ties.</strong> Each sheet has its own draw, and each student's place in it
       is fixed: it does not change when classmates rank, revise their choices, or mark days. The same rankings always
       produce the same schedule, so the draw cannot be repeated until a preferred result appears. The instructor
-      chooses the tie-breaking method before making the schedule and may adjust assignments by hand afterwards;
+      chooses how days are matched before making the schedule and may adjust assignments by hand afterwards;
       every change is recorded in the sheet's history.</li>
-    <li><strong>Honest ranking is the best strategy.</strong> No other order can earn you a better day, and marking
+    {% if algorithm == 'rank_max' %}
+    <li><strong>Honest ranking is the safe choice.</strong> This class's option packs in first choices; a different
+      order rarely helps and can backfire. Marking days you cannot attend never affects other students.</li>
+    {% else %}
+    <li><strong>Honest ranking is the best strategy.</strong> No other order can earn you a better day{% if not algorithm %}
+      (with every option but “Most first choices”, where it is the safe choice){% endif %}, and marking
       days you cannot attend never affects other students.</li>
+    {% endif %}
   </ul>
 
   <h2>Frequently asked questions</h2>
@@ -63,7 +79,8 @@
     </ol>
     <p>
       The result is <em>stable</em>: no student prefers a day that would have admitted them ahead of someone placed
-      there. It is also <em>strategy-proof</em> for students, which is why honest ranking is always the best approach.
+      there. It is also <em>strategy-proof</em> for students, which is why honest ranking is the best approach (the
+      “Most first choices” option is the exception: it is not strategy-proof).
     </p>
     <p><strong>Example.</strong> Four students and two days, with two seats each:</p>
     <ul>

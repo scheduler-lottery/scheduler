@@ -42,7 +42,7 @@
        or keyboard focus) and to screen readers (aria-label). #}
     <nav class="icon-dock" aria-label="Quick links">
       {# Home: a student's class page (or its sign-in), else the site's front page. #}
-      {% set home_url = brand_url if nav_sheet else url_for('landing') %}
+      {% set home_url = brand_url if nav_sheet else (url_for('student.home', sid=back_to_class) if back_to_class else url_for('landing')) %}
       <a href="{{ home_url }}" class="icon-dock-btn dock-tip" data-tip="Home" aria-label="Home"{% if request.path == home_url %} aria-current="page"{% endif %}>
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path d="M3.5 11.2 12 4l8.5 7.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -340,6 +340,7 @@
 {% endif %}
 
 {# How ranking works, in brief: the same promises as the full page. #}
+{% set page_algo = (nav_sheet or sheet or {}).algorithm if (nav_sheet or sheet) else None %}
 <div id="ranking-help" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="ranking-help-title">
   <div class="modal-dialog appearance-dialog ranking-dialog">
     <button type="button" class="modal-close" data-popover-close aria-label="Close">
@@ -363,7 +364,7 @@
         </li>
         <li class="ranking-step">
           <span class="tile-art"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5" stroke="currentColor" stroke-width="1.7"/><circle cx="8.6" cy="8.6" r="1.35" fill="currentColor"/><circle cx="12" cy="12" r="1.35" fill="currentColor"/><circle cx="15.4" cy="15.4" r="1.35" fill="currentColor"/></svg><span class="step-num" aria-hidden="true">3</span></span>
-          {% if nav_sheet and nav_sheet.algorithm == 'first_come' %}
+          {% if page_algo == 'first_come' %}
           <span class="step-name">First come, first served</span>
           <span class="step-text">When too many want a day, whoever ranked first gets it.</span>
           {% else %}
@@ -382,12 +383,12 @@
     <section class="appearance-group" aria-labelledby="ranking-facts">
       <h3 class="group-label" id="ranking-facts">Good to know</h3>
       <ul class="ranking-facts">
-        {% if nav_sheet and nav_sheet.algorithm == 'rank_max' %}
+        {% if page_algo == 'rank_max' %}
         <li>Rank in your true order: the schedule gives as many people as it can their first choice.</li>
         {% else %}
         <li>Rank in your true order. No other order can get you a better day.</li>
         {% endif %}
-        {% if nav_sheet and nav_sheet.algorithm == 'first_come' %}
+        {% if page_algo == 'first_come' %}
         <li>Ranking early helps: if too many people want a day, whoever ranked first gets it. Changing your ranking later keeps your place.</li>
         {% else %}
         <li>Ranking early gives no advantage: the time you rank is never used.</li>

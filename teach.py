@@ -783,24 +783,33 @@ def _reminders(sheet, share_url, counts, emails):
                  f"It takes about a minute. Here's the link:\n\n{share_url}\n\n"
                  + (f"{early}\n\n" if early else "") + "Thanks!\n"),
     }]
-    if sheet["closes_at"]:
-        when = deadlines.describe(sheet["closes_at"], sheet["owner_timezone"] or settings.DEFAULT_TIMEZONE)
+    # (What happens to those who don't rank: a seat left over, or none, as the instructor chose.)
+    after = ("If you don't rank, you'll get whatever day is left over." if sheet["include_unranked"] else
+             "If you don't rank, you won't get a day on the schedule.")
+    closing = None
+    if sheet["closes_at"] and sheet["closes_at"] > iso():
+        closing = "close " + deadlines.describe(sheet["closes_at"], sheet["owner_timezone"] or settings.DEFAULT_TIMEZONE)
+    elif deadlines.waiting_for_decision(sheet):  # (the deadline passed, and the instructor is deciding)
+        closing = "are about to close"
+    if closing:
         messages.append({
             "label": "Last call before the deadline",
             "subject": f"Last call: rank your presentation days for {title}",
-            "body": (f"Hi everyone,\n\nSign-ups for “{title}” close {when}.\n\n"
+            "body": (f"Hi everyone,\n\nSign-ups for “{title}” {closing}.\n\n"
                      f"If you haven't ranked your days yet, please do it today. It takes about a minute:\n\n"
-                     f"{share_url}\n\nIf you don't rank, you'll get whatever day is left over.\n\nThanks!\n"),
+                     f"{share_url}\n\n{after}\n\nThanks!\n"),
         })
     sender = signin.code_sender()
+    # (Only students with an email get this: they sign in with an emailed code.)
+    line = _sign_in_line(sheet, dict(counts, roster_with_email=counts["roster"]))
     messages.append({
         "label": "Trouble signing in?",
         "subject": f"How to sign in and rank your days for {title}",
         "body": (f"Hi everyone,\n\nIf you haven't ranked your presentation days for “{title}” yet, here's how.\n\n"
-                 f"1. Open this link: {share_url}\n\n2. {_sign_in_line(sheet, counts)}\n\n"
+                 f"1. Open this link: {share_url}\n\n2. {line}\n\n"
                  "3. Put the days in your order of preference, favorite at the top, and press “Save my ranking”.\n\n"
                  "No code arriving? Check your spam or junk folder"
-                 + (f" (it comes from {sender})" if sender else "")
+                 + (f" for an email from {sender}" if sender and sender not in line else "")
                  + ". Still stuck? Reply to this email, and I'll send you a sign-in link myself.\n\nThanks!\n"),
     })
     return {"to": me["email"], "bcc": ", ".join(emails), "count": len(emails), "messages": messages}
@@ -1226,6 +1235,8 @@ def _sheet_page(sid, tab):
     # call before the deadline, and one for students having trouble signing in.
     waiting_emails = [r["email"] for r in not_yet if r["email"]]
     nudge = _reminders(sheet, share_url, counts, waiting_emails) if sheet["bidding_open"] and waiting_emails else None
+    if nudge:
+        nudge["unreachable"] = len(not_yet) - len(waiting_emails)
     report = session.get("roster_report")
     if report and report.get("at") and time.time() - report["at"] > REPORT_HOURS * 3600:
         session.pop("roster_report", None)  # (a day-old report, and its undo, would read as today's)
@@ -2478,7 +2489,8 @@ def set_progress_emails(sid):
     db.run("UPDATE sheets SET progress_emails = :on WHERE id = :sid", on=int(on), sid=sheet["id"])
     db.commit()
     flash("You'll get emails about how your class is doing." if on else
-          "No more emails about how your class is doing (you'll still hear about your deadline).", "success")
+          "No more of these emails. You'll still hear when everyone has ranked and when your deadline passes.",
+          "success")
     return _back(sheet, "progress-emails")
 
 
@@ -3157,6 +3169,10 @@ def set_algorithm(sid):
                a=algorithm, at=iso(), sid=sheet["id"])
         db.commit()
         flash(f"Now using: {ALGORITHMS[algorithm]['label']}." + _after_setting_change(sheet), "success")
+        if ALGORITHM_EARLY.get(algorithm) != ALGORITHM_EARLY.get(sheet["algorithm"]) and (
+                sheet["shared_at"] or sheets.get_submissions(sheet["id"])):
+            flash("Students were told something different about ranking early. The Friendly reminder on the Class "
+                  "tab has the new words, if you'd like to tell them.", "info")
     return _back(sheet, "schedule")
 
 

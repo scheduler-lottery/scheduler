@@ -16,7 +16,7 @@ days and can take a couple of weeks for a new developer.
 .venv/bin/python tools/build_extension.py store
 ```
 
-The upload is `dist/scheduler-helper.zip`. It is version **1.0.4**, the one to upload
+The upload is `dist/scheduler-helper.zip`. It is version **1.0.5**, the one to upload
 now (in place of any earlier one still waiting for review). What changed since 1.0.0:
 - Added from Scheduler's page, it and the page find each other at once: the page comes
   back to the front (the store's tab closes) and the import starts by itself.
@@ -27,6 +27,7 @@ now (in place of any earlier one still waiting for review). What changed since 1
   Canvas's sign-in page back to the front, and Scheduler comes back before the list is read.
 - Canvas offline or down is said as such, never as a sign-in.
 - It can open its own Chrome settings page, for site access.
+- Kept (on the page or in its own box), it goes back to its ordinary toolbar box.
 
 It asks for no new permissions (the toolbar box needs none).
 
@@ -123,7 +124,7 @@ extensions from other stores" click, and the page says so):
 
 Bump `version` in `extension/manifest.json`, run `tools/build_extension.py store`
 again, upload the new zip under **Package**, and submit. The store has 1.0.0: upload
-1.0.4 now (it is already the version in `extension/manifest.json`, so skip the bump this
+1.0.5 now (it is already the version in `extension/manifest.json`, so skip the bump this
 once). It asks for no new permissions, so Chrome updates professors who have the helper
 without asking them anything. Until it's approved, the site works with 1.0.0 too (its
 Remove button then shows the steps to remove it in Chrome's menu).

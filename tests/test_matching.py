@@ -179,11 +179,23 @@ def test_filling_never_uses_a_cant_do_day_for_someone_with_options():
 
 
 def test_the_how_it_works_example_is_what_the_solver_does():
-    from matching_engine import EXAMPLE, example_views, solve_with
+    from matching_engine import EXAMPLE, _rank_max, example_views, solve_with
 
     seats = {d: EXAMPLE["seats"] for d in EXAMPLE["days"]}
     for algo, expected in EXAMPLE["results"].items():
-        assert solve_with(EXAMPLE["rankings"], EXAMPLE["draws"][algo], seats, algo, EXAMPLE["days"]) == expected, algo
+        if algo == "rank_max":  # (its own solver, the draw's order breaking ties)
+            got = _rank_max(EXAMPLE["rankings"], EXAMPLE["draws"]["rank_max"]["Monday"], seats)
+        elif algo == "first_come":  # (each student's first ranking, in the example's order)
+            order = EXAMPLE["draws"]["first_come"]["Monday"]
+            rows = [{"name_key": name, "display_name": name, "ranking": json.dumps(EXAMPLE["rankings"][name]),
+                     "excluded_days": "[]", "first_at": f"2026-10-0{order.index(name) + 1}T09:00:00Z"}
+                    for name in EXAMPLE["rankings"]]
+            got = {k: d for k, _n, d, _m in compute_assignment(build_student_prefs(rows, EXAMPLE["days"]),
+                                                                EXAMPLE["days"], EXAMPLE["seats"],
+                                                                algorithm="first_come", seed=1)}
+        else:
+            got = solve_with(EXAMPLE["rankings"], EXAMPLE["draws"][algo], seats, algo, EXAMPLE["days"])
+        assert got == expected, algo
     views = example_views()
     assert views["da_independent"]["verdict"] == "Everyone gets their first choice."
     assert views["da_day_favorable"]["verdict"] == "Everyone gets their second choice."

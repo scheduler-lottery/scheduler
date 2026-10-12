@@ -39,7 +39,7 @@ def test_the_canvas_step_has_words_for_each_kind_of_computer(prof):
     assert "its name ends in .zip" in words and "Downloads" in words
     assert "Drag in" not in words and "Drag in" not in text(prof.get("/"))
     # The grades in Canvas's file: said before the file is chosen, not after.
-    assert words.index("It also has grades in it") < words.index("Click here to choose Canvas's file")
+    assert words.index("It has grades in it too") < words.index("Click here to choose Canvas's file")
 
 
 def test_the_pages_about_canvas_say_what_happens_on_this_site(prof, monkeypatch):
@@ -128,7 +128,7 @@ def test_after_a_list_the_helper_brought_the_report_offers_to_remove_it(prof):
                          "students": [{"name": "Ana Lima", "email": "ana@school.edu"}]})
     r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": listed, "how": "helper", "setup": "1"})
     page = raw(prof.get(r.headers["Location"]))
-    assert "data-helper-remove" in page and "Remove it from Chrome" in text(page) and "Keep Scheduler Helper" in page
+    assert "data-helper-remove" in page and "Remove it from Chrome" in text(page) and "Keep it for next time" in page
     assert "data-helper-remove" not in raw(prof.get(r.headers["Location"]))  # (said once, with its report)
     # A list from Canvas's file: nothing to remove.
     other = prof.create_sheet(allow_unlisted=False)
@@ -166,7 +166,7 @@ def test_the_store_build_is_chromes_alone_and_asks_for_nothing_new(tmp_path, mon
     with zipfile.ZipFile(tmp_path / "scheduler-helper.zip") as z:
         manifest = json.loads(z.read("manifest.json"))
         code = z.read("background.js").decode()
-    assert manifest["version"] == "1.0.4" and manifest["permissions"] == ["scripting"]
+    assert manifest["version"] == "1.0.5" and manifest["permissions"] == ["scripting"]
     assert manifest["action"]["default_popup"] == "popup.html"  # (its own box: "Delete me"; no permission needed)
     assert manifest["host_permissions"] == ["https://canvas.northwestern.edu/*"]
     assert "background" in manifest and list(manifest["background"]) == ["service_worker"]

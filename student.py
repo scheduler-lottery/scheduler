@@ -858,6 +858,7 @@ def save(sid):
                                  first_at)
         VALUES (:sid, :key, :name, :ranking, :excluded, :comments, :at, :at)
         ON CONFLICT (sheet_id, name_key) DO UPDATE SET
+            first_at = COALESCE(submissions.first_at, submissions.updated_at),
             display_name = excluded.display_name,
             ranking = excluded.ranking,
             excluded_days = excluded.excluded_days,

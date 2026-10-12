@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Scheduler Helper",
   "short_name": "Scheduler",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Brings a course's class list (student names and emails) from your Canvas into Scheduler, when you ask on Scheduler's page.",
   "background": {
     "service_worker": "background.js"

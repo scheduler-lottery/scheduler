@@ -119,9 +119,9 @@ ALGORITHMS = {
     },
 }
 
-# The options an instructor can actually use. The third is shown only on the
-# Compare page: it isn't strategy-proof, and students are promised that
-# honest ranking is always their best move.
+# The options an instructor can actually use. The comparison-only option is
+# shown only on the Compare page. ("Most first choices" isn't strategy-proof
+# either: its students are told honest ranking is the safe choice.)
 CHOOSABLE = [k for k, v in ALGORITHMS.items() if not v.get("compare_only")]
 
 COMPARE_TRIALS = 200
@@ -206,7 +206,8 @@ def _rank_max(prefs, order, seats):
         return {}
     longest = max(len(prefs[k]) for k in keys)
     base = n + 1
-    tie = n * longest * n + 1  # (the draw's part never outweighs a single better rank)
+    step = longest + 1
+    tie = step ** n  # (the draw's part never outweighs a single better rank)
     placed = base ** (longest + 1) * tie  # (placing someone outweighs any ranks)
 
     # Nodes: 0 source, 1..n students, then days, then the sink.
@@ -222,7 +223,8 @@ def _rank_max(prefs, order, seats):
         edge(source, i + 1, 1, 0)
         for r, d in enumerate(prefs[k]):
             if d in day_node:
-                value = placed + base ** (longest - r) * tie + (longest - r) * (n - i)
+                # (and, among equally good schedules, the earlier in the draw gets the better day, first come)
+                value = placed + base ** (longest - r) * tie + (longest - r) * step ** (n - 1 - i)
                 edge(i + 1, day_node[d], 1, -value)
     for d in days:
         edge(day_node[d], sink, seats[d], 0)
@@ -344,7 +346,7 @@ def example_views():
         elif algo == "first_come":
             draw = "The order they ranked in: " + ", ".join(draws["Monday"]) + "."
         elif algo == "rank_max":
-            draw = "No draw needed here (a draw only breaks ties): " + ", ".join(draws["Monday"]) + "."
+            draw = "Ties are broken by one random order: " + ", ".join(draws["Monday"]) + "."
         else:
             draw = " ".join(f"{day}'s draw: {', '.join(order)}." for day, order in draws.items())
         firsts = sum(1 for name, day in result.items() if EXAMPLE["rankings"][name][0] == day)
@@ -475,13 +477,18 @@ def verdict(stats, current=DEFAULT_ALGORITHM):
     if current != DEFAULT_ALGORITHM and rec_top1 - (using.get("pct_top1") or 0) >= 2:
         return (
             f"The recommended option gives more students their first choice ({rec_top1:g}% vs. "
-            f"{using.get('pct_top1') or 0:g}%) — switch back to “{name}”."
+            f"{using.get('pct_top1') or 0:g}%) — consider switching to “{name}”."
         )
     if (best["pct_top1"] or 0) - rec_top1 < 2:
         if current == DEFAULT_ALGORITHM:
             return f"The recommended “{name}” does as well as anything here for your class — keep it."
         return f"These options do about the same for your class; the recommended “{name}” is the safe choice."
+    if best_id == "rank_max":
+        return (f"“{best['short']}” gives more students their first choice, but students could gain by ranking "
+                f"strategically; the recommended “{name}” is the safe choice.")
+    if best_id == current:
+        return f"For your class, “{best['short']}”, the option you use, gives the most students their first choice."
     return (
-        f"For your class, “{best['short']}” gives a few more students their first choice. "
+        f"For your class, “{best['short']}” gives more students their first choice. "
         "Each is fair in its own way; the recommended one is the safe default."
     )

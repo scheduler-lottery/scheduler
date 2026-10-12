@@ -57,10 +57,12 @@
         {% if sheet.algorithm == 'first_come' %}whoever ranked first gets it{% else %}a fair random draw decides{% endif %}.
       </p>
       <p>
-        <strong>Put your real favorite first.</strong> Ranking a day higher than you really want it never helps
-        you{% if sheet.algorithm == 'first_come' %}. Ranking early does help here: whoever ranks first gets first pick,
-        and changing your ranking later keeps your place.{% else %}, and ranking early doesn't help either — when you
-        sent your ranking isn't used at all.{% endif %}
+        <strong>Put your real favorite first.</strong>{% if sheet.algorithm == 'rank_max' %} This class's schedule
+        gives as many people as it can their first choice. Honest ranking is the safe choice: a different order rarely
+        helps and can backfire, and ranking early doesn't help.{% else %} Ranking a day higher than you really want it
+        never helps you{% if sheet.algorithm == 'first_come' %}. Ranking early does help here: whoever ranks first gets
+        first pick, and changing your ranking later keeps your place.{% else %}, and ranking early doesn't help
+        either — when you sent your ranking isn't used at all.{% endif %}{% endif %}
       </p>
       <p>
         <strong>“I really can't do this day”</strong> is for real conflicts. You won't be put on a day you marked —

@@ -39,7 +39,7 @@ SHEET_FIELDS = (
     "id", "title", "note", "rank_by", "capacity_per_day", "algorithm", "bidding_open",
     "allow_unlisted", "show_preview", "include_unranked", "lottery_seed", "last_algorithm",
     "scheduled_at", "schedule_signature", "published_at", "roster_updated_at", "created_at",
-    "updated_at", "canvas_course_id", "canvas_course", "short_code",
+    "updated_at", "canvas_course_id", "canvas_course", "short_code", "progress_emails",
 )
 # What a restore puts back. Whether sign-ups are open, and whether the
 # schedule is published, are left as they are now: going back to an earlier
@@ -916,7 +916,7 @@ def rankings_csv(days, submission_rows, roster_rows, zone):
     order = {d["key"]: i for i, d in enumerate(days)}
     listed = {r["name_key"]: r for r in roster_rows}
     rows = [["Student", "Email", "On your class list?", "Ranking (favorite first)", "Can't do",
-             "Notes", "Last saved"]]
+             "Notes", "First ranked", "Last saved"]]
     for r in submission_rows:
         ranking = [labels[d] for d in json.loads(r["ranking"]) if d in labels]
         missing = [d["label"] for d in days if d["label"] not in ranking]
@@ -932,7 +932,7 @@ def rankings_csv(days, submission_rows, roster_rows, zone):
         rows.append([
             r["display_name"], person["email"] if person else "", on_list, " > ".join(ranking),
             "; ".join(_day_names(json.loads(r["excluded_days"]), labels, order)), notes,
-            file_time(r["updated_at"], zone),
+            file_time(r.get("first_at") or r["updated_at"], zone), file_time(r["updated_at"], zone),
         ])
     return _csv(rows)
 
@@ -1109,6 +1109,7 @@ def _valid_export(export):
             and all(strings(r, ("name_key", "display_name", "email"), 320) for r in roster)
             and all(
                 strings(r, ("name_key", "display_name", "ranking", "excluded_days", "comments", "updated_at"), 20000)
+                and (r.get("first_at") is None or text(r.get("first_at"), 40))
                 and json_text(r["ranking"], list) and json_text(r["excluded_days"], list)
                 and json_text(r["comments"], dict)
                 for r in submissions
@@ -1313,6 +1314,8 @@ def restore(sheet_id, owner_id, data, keep_newer=True, parts=None):
         )
         parts = {"settings", "days", "roster", "submissions", "assignments"}
         keep_newer = False
+        if saved.get("progress_emails") in (0, False, "0"):  # (turned off before it was deleted: still off)
+            db.run("UPDATE sheets SET progress_emails = 0 WHERE id = :sid", sid=sheet_id)
         # The same short link as before (it may be on a slide or a syllabus),
         # unless another class has it now. A backup brought back as a new
         # sheet has a new id, so it never takes one.
@@ -1435,11 +1438,12 @@ def copy_sheet(sheet, owner_id):
     db.run(
         """
         INSERT INTO sheets (id, owner_id, title, note, capacity_per_day, algorithm, bidding_open,
-            allow_unlisted, show_preview, include_unranked, lottery_seed, theme, font, at_close, created_at,
-            updated_at)
+            allow_unlisted, show_preview, include_unranked, lottery_seed, theme, font, at_close, progress_emails,
+            created_at, updated_at)
         VALUES (:sid, :owner, :title, :note, :capacity, :algorithm, 1, :unlisted, :preview, :unranked,
-            :seed, :theme, :font, :at_close, :at, :at)
+            :seed, :theme, :font, :at_close, :progress, :at, :at)
         """,
+        progress=1 if sheet.get("progress_emails", 1) else 0,
         at_close=sheet["at_close"] or "ask",
         sid=sid, owner=owner_id, title=(sheet["title"] + " (copy)")[:100], note=sheet["note"],
         capacity=sheet["capacity_per_day"], algorithm=sheet["algorithm"],

@@ -115,21 +115,29 @@ def waiting_for_decision(sheet):
     return bool(sheet["bidding_open"] and sheet["deadline_asked_at"] and sheet["closes_at"])
 
 
-def _class_page(sheet):
-    return url_for("teach.sheet", sid=sheet["id"], _external=True)
+def _class_page(sheet, anchor=None):
+    return url_for("teach.sheet", sid=sheet["id"], _anchor=anchor, _external=True)
+
+
+def _can_tell():
+    """Can the site email an instructor now (a mailbox, and room today)?"""
+    return signin.smtp_ready() and signin.daily_room("notice") > 0
 
 
 def _tell(sheet, subject, body):
-    """Email the sheet's instructor, if the site has a mailbox. Never raises."""
-    if not signin.smtp_ready() or signin.daily_room("notice") <= 0:
-        return
+    """Email the sheet's instructor, if the site has a mailbox. Never raises.
+    True if it went."""
+    if not _can_tell():
+        return False
     try:
         signin.send_email(sheet["owner_email"], subject, body)
         signin.log_email(sheet["owner_email"], "notice")
         db.commit()
+        return True
     except Exception as exc:  # noqa: BLE001 - the class page says the same
         db.rollback()
         db.record_error("EMAIL", f"Sending a deadline note failed: {exc!r}")
+        return False
 
 
 def make_schedule(sheet):
@@ -251,29 +259,32 @@ def latest(days=LATEST_DAYS):
 # when a week has gone by since they shared the link and nobody has ranked;
 # and two days before the deadline, with who still hasn't. Each says what to
 # do next on the class page. Not for a sheet whose instructor turned them
-# off, or a list of fewer than four.
+# off or archived it; the half and nine-in-ten notes also skip a list of
+# fewer than four. An email that can't go out now (no mailbox, the day's
+# limit) isn't marked as sent: it goes once it can.
 # ---------------------------------------------------------------------------
 PROGRESS_MIN_CLASS = 4
 QUIET_DAYS = 7
+QUIET_MAX_DAYS = 30  # (a sheet idle longer than this was left on purpose: no email about it)
 REMIND_BEFORE_HOURS = 48
 
 
 def _wants_progress(sheet):
-    return bool(sheet and sheet["bidding_open"] and sheet.get("progress_emails", 1))
+    return bool(sheet and sheet["bidding_open"] and sheet.get("progress_emails", 1) and not sheet.get("archived_at"))
 
 
 def _still_to_rank(left):
-    return ", ".join(left[:12]) + (" …" if len(left) > 12 else "")
+    return ", ".join(left[:12]) + (f", and {len(left) - 12} more" if len(left) > 12 else "")
 
 
 def _remind_line(sheet):
     return ("To send them a reminder from your own email (it's written for you, with their addresses in Bcc), "
-            f"open your class page:\n\n{_class_page(sheet)}\n")
+            f"open your class page:\n\n{_class_page(sheet, 'signups')}\n")
 
 
 def progress(sheet):
     """After a ranking is saved: half the class, then nine in ten, said once each."""
-    if not _wants_progress(sheet):
+    if not _wants_progress(sheet) or not _can_tell():
         return
     listed = db.scalar("SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sheet["id"]) or 0
     if listed < PROGRESS_MIN_CLASS:
@@ -283,9 +294,9 @@ def progress(sheet):
     if not left:
         return  # (everyone: everyone_ranked says so)
     if ranked * 10 >= listed * 9:
-        column, said = "most_ranked_at", "nine in ten"
+        column, said = "most_ranked_at", "nine in ten of your students have"
     elif ranked * 2 >= listed:
-        column, said = "half_ranked_at", "half"
+        column, said = "half_ranked_at", "half of your students have"
     else:
         return
     marks = ("half_ranked_at", "most_ranked_at") if column == "most_ranked_at" else ("half_ranked_at",)
@@ -294,68 +305,100 @@ def progress(sheet):
     db.commit()
     if not told:
         return
-    _tell(
+    at = db.scalar(f"SELECT {column} FROM sheets WHERE id = :sid", sid=sheet["id"])  # noqa: S608
+    if not _tell(
         sheet, f"{sheet['title']}: {ranked} of {listed} students have ranked",
-        f"Good news: {said} of your class has ranked for “{sheet['title']}” ({ranked} of {listed}).\n\n"
+        f"Good news: {said} ranked for “{sheet['title']}” ({ranked} of {listed}).\n\n"
         f"Still to rank ({len(left)}): {_still_to_rank(left)}.\n\n" + _remind_line(sheet),
-    )
+    ):  # (not sent: said next time instead)
+        db.run(f"UPDATE sheets SET {column} = NULL WHERE id = :sid AND {column} = :at",  # noqa: S608
+               sid=sheet["id"], at=at)
+        db.commit()
 
 
 def quiet_weeks():
-    """The daily job: a week since the link went out (or the sheet was
-    made, if it never did), and nobody has ranked. Returns how many it told."""
-    since = iso(parse_iso(iso()) - timedelta(days=QUIET_DAYS))
+    """The daily job: a week since the link went out (or, with a class list
+    in, since the sheet was made), and nobody has ranked. Not for a sheet
+    idle over a month, or archived. Returns how many it told."""
+    if not _can_tell():
+        return 0
+    today = parse_iso(iso())
     found = db.rows(
         "SELECT id FROM sheets s WHERE bidding_open = 1 AND quiet_told_at IS NULL AND progress_emails = 1 "
-        "AND COALESCE(shared_at, created_at) <= :since AND NOT EXISTS (SELECT 1 FROM submissions u "
-        "WHERE u.sheet_id = s.id AND u.name_key NOT IN (SELECT name_key FROM roster r WHERE r.sheet_id = s.id "
-        "AND r.is_test = 1))", since=since)
+        "AND archived_at IS NULL AND COALESCE(shared_at, created_at) <= :since "
+        "AND COALESCE(shared_at, created_at) > :too_old "
+        "AND (shared_at IS NOT NULL OR EXISTS (SELECT 1 FROM roster l WHERE l.sheet_id = s.id AND l.is_test = 0)) "
+        "AND NOT EXISTS (SELECT 1 FROM submissions u WHERE u.sheet_id = s.id AND u.name_key NOT IN "
+        "(SELECT name_key FROM roster r WHERE r.sheet_id = s.id AND r.is_test = 1))",
+        since=iso(today - timedelta(days=QUIET_DAYS)), too_old=iso(today - timedelta(days=QUIET_MAX_DAYS)))
     told = 0
     for row in found:
         sheet = sheets.get_sheet(row["id"])
-        if not sheet or sheet["owner_disabled"]:
+        if not sheet or sheet["owner_disabled"] or not _can_tell():
             continue
+        at = iso()
         if not db.run("UPDATE sheets SET quiet_told_at = :at WHERE id = :sid AND quiet_told_at IS NULL",
-                      at=iso(), sid=sheet["id"]):
+                      at=at, sid=sheet["id"]):
             continue
         db.commit()
         shared = bool(sheet["shared_at"])
-        _tell(
+        weeks = max(1, (today - parse_iso(sheet["shared_at"] or sheet["created_at"])).days // 7)
+        gap = "a week" if weeks == 1 else plural(weeks, "week")
+        sent = _tell(
             sheet, f"{sheet['title']}: nobody has ranked yet",
-            (f"It's been a week since you shared the link for “{sheet['title']}”, and nobody has ranked yet.\n\n"
+            (f"It's been {gap} since you shared the link for “{sheet['title']}”, and nobody has ranked yet.\n\n"
              "Did the message reach your students? Sometimes it lands in a spam folder, or the link didn't make "
              "it into the post.\n\n" if shared else
-             f"It's been a week since you made the sign-up sheet “{sheet['title']}”, and nobody has ranked yet: "
+             f"It's been {gap} since you made the sign-up sheet “{sheet['title']}”, and nobody has ranked yet: "
              "the link may not have gone out to your students.\n\n")
             + "Your class page has the link and a ready-made message to send them:\n\n"
-            f"{_class_page(sheet)}\n",
+            f"{_class_page(sheet, 'share')}\n",
         )
-        told += 1
+        if sent:
+            told += 1
+        else:  # (not sent: tomorrow, then)
+            db.run("UPDATE sheets SET quiet_told_at = NULL WHERE id = :sid AND quiet_told_at = :at",
+                   sid=sheet["id"], at=at)
+            db.commit()
     return told
 
 
 def deadline_soon():
     """The daily job: sign-ups close within two days and some on the list
-    haven't ranked. Returns how many it told."""
+    haven't ranked. Once for each deadline (a deadline moved later, or set
+    again after a reopen, gets its own). Returns how many it told."""
+    if not _can_tell():
+        return 0
     soon = iso(parse_iso(iso()) + timedelta(hours=REMIND_BEFORE_HOURS))
-    found = db.rows("SELECT id FROM sheets WHERE bidding_open = 1 AND closes_at IS NOT NULL AND closes_at > :now "
-                    "AND closes_at <= :soon AND reminder_told_at IS NULL AND progress_emails = 1",
-                    now=iso(), soon=soon)
+    found = db.rows("SELECT id, closes_at, reminder_told_at FROM sheets WHERE bidding_open = 1 "
+                    "AND closes_at IS NOT NULL AND closes_at > :now AND closes_at <= :soon "
+                    "AND progress_emails = 1 AND archived_at IS NULL", now=iso(), soon=soon)
     told = 0
     for row in found:
+        before = row["reminder_told_at"]
+        if before and parse_iso(before) >= parse_iso(row["closes_at"]) - timedelta(hours=REMIND_BEFORE_HOURS):
+            continue  # (told already, about this deadline)
         sheet = sheets.get_sheet(row["id"])
         left = missing(sheet) if sheet and not sheet["owner_disabled"] else []
-        if not left:
+        if not left or not _can_tell():
             continue
-        if not db.run("UPDATE sheets SET reminder_told_at = :at WHERE id = :sid AND reminder_told_at IS NULL",
-                      at=iso(), sid=sheet["id"]):
+        at = iso()
+        claimed = db.run("UPDATE sheets SET reminder_told_at = :at WHERE id = :sid AND "
+                         + ("reminder_told_at = :before" if before else "reminder_told_at IS NULL"),
+                         at=at, sid=sheet["id"], before=before)
+        if not claimed:
             continue
         db.commit()
         zone = sheet["owner_timezone"] or settings.DEFAULT_TIMEZONE
-        _tell(
+        sent = _tell(
             sheet, f"{sheet['title']}: sign-ups close soon, and {plural(len(left), 'student hasn’t', 'students haven’t')} ranked",
             f"Sign-ups for “{sheet['title']}” close {describe(sheet['closes_at'], zone)}.\n\n"
             f"Still to rank ({len(left)}): {_still_to_rank(left)}.\n\n" + _remind_line(sheet),
         )
-        told += 1
+        if sent:
+            told += 1
+        else:
+            db.run("UPDATE sheets SET reminder_told_at = :before WHERE id = :sid AND reminder_told_at = :at",
+                   sid=sheet["id"], at=at, before=before)
+            db.commit()
     return told

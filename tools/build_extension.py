@@ -93,6 +93,12 @@ def build(target):
         sys.exit("build_extension.py: store or dev")
     # (The store's zip is always the repo's own extension/.)
     source = os.environ.get("EXTENSION_SOURCE") or SOURCE if target == "dev" else SOURCE
+    files = ["background.js", "popup.html", "popup.js"]
+    if target == "dev":  # (an earlier helper, EXTENSION_SOURCE: 1.0.0 has no popup)
+        files = [f for f in files if os.path.exists(os.path.join(source, f))]
+    missing = [f for f in files if not os.path.exists(os.path.join(source, f))]
+    if missing:
+        sys.exit("build_extension.py: missing " + ", ".join(missing))
     with open(os.path.join(source, "manifest.json"), encoding="utf-8") as handle:
         manifest = json.load(handle)
     name = "scheduler-helper" if target == "store" else os.environ.get("DEV_NAME") or "scheduler-helper-dev"
@@ -111,7 +117,6 @@ def build(target):
         ports = os.environ.get("DEV_SITE_PORTS", "5050").split(",")  # (another local Scheduler: DEV_SITE_PORTS=5050,5066)
         manifest["externally_connectable"]["matches"] += [f"http://{h}:{p.strip()}/*" for p in ports
                                                           for h in ("127.0.0.1", "localhost")]
-    files = ["background.js", "popup.html", "popup.js"]
     with open(os.path.join(out, "manifest.json"), "w", encoding="utf-8") as handle:
         json.dump(manifest, handle, indent=2)
     for file in files:

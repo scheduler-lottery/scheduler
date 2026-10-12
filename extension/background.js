@@ -25,7 +25,7 @@
 
 const VERSION = chrome.runtime.getManifest().version;
 // What this helper can do beyond reading Canvas, for the page to know (1.0.0 said none of this).
-const CAN = ["front", "show-signin", "remove", "settings", "done"];
+const CAN = ["front", "show-signin", "remove", "settings", "done", "kept"];
 const SCHEDULER_ORIGINS = ((chrome.runtime.getManifest().externally_connectable || {}).matches || [])
   .map((pattern) => (pattern.match(/^(https?:\/\/[^/]+)\//) || [])[1])
   .filter(Boolean);
@@ -80,9 +80,11 @@ async function handle(msg, say, schedulerTab) {
 
 chrome.runtime.onMessageExternal.addListener((msg, sender, reply) => {
   if (!fromScheduler(sender) || !msg) return undefined;
-  if (msg.type === "hello") {
-    reply({ ok: true, v: VERSION, hosts: CANVAS_HOSTS, can: CAN });
-    return undefined;
+  if (msg.type === "hello") { // (done: its box still says "All done!", not yet kept or deleted)
+    chrome.action.getBadgeText({})
+      .then((badge) => reply({ ok: true, v: VERSION, hosts: CANVAS_HOSTS, can: CAN, done: badge === "✓" }),
+        () => reply({ ok: true, v: VERSION, hosts: CANVAS_HOSTS, can: CAN }));
+    return true;
   }
   if (msg.type === "front") { // the page's own tab, to the front (just added: the store's tab it opened, closed)
     const tab = sender.tab;
@@ -111,6 +113,10 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, reply) => {
     chrome.action.setBadgeText({ text: "✓" })
       .then(() => (chrome.action.openPopup ? chrome.action.openPopup() : Promise.reject(new Error("old Chrome"))))
       .then(() => reply({ ok: true, popup: true }), () => reply({ ok: true, popup: false }));
+    return true;
+  }
+  if (msg.type === "kept") { // kept on the page: its own box goes back to "ready"
+    chrome.action.setBadgeText({ text: "" }).then(() => reply({ ok: true }), () => reply({ ok: false }));
     return true;
   }
   if (msg.type === "remove") { // the class list is in, and the professor pressed Remove Scheduler Helper on the page
