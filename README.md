@@ -1,4 +1,17 @@
-# Scheduler
+<p align="center">
+  <a href="https://scheduler-lottery.vercel.app"><img src="public/static/logo.svg" alt="Scheduler" width="96" height="96"></a>
+</p>
+
+<h1 align="center">Scheduler</h1>
+
+<p align="center">
+  <strong><a href="https://scheduler-lottery.vercel.app">scheduler-lottery.vercel.app</a></strong><br>
+  Fair presentation-day sign-ups for any class. Everything that runs is in this repository, in the open.
+</p>
+
+<p align="center">
+  <a href="https://github.com/scheduler-lottery/scheduler/actions/workflows/ci.yml"><img src="https://github.com/scheduler-lottery/scheduler/actions/workflows/ci.yml/badge.svg" alt="Tests and the helper's build"></a>
+</p>
 
 Fair presentation-day sign-ups for any class. Students rank the days they'd prefer, and
 everyone gets a day as high on their own list as possible. When more students want a day
@@ -24,6 +37,28 @@ restored without erasing newer rankings, professors can download or email themse
 backup any time (one is emailed when they close sign-ups), and a deleted sheet can be
 brought back for 30 days. Students' rankings save as they drag, and an old browser tab can
 never overwrite a newer ranking.
+
+---
+
+## Out in the open
+
+Everything the site and its Chrome extension do is in this repository:
+
+- **The site** (Flask, on Vercel): every page, the matching code (`matching_engine.py`), the
+  database tables (`schema.sql`), and `vercel.json`. What isn't here is only what can't be:
+  the settings with passwords and keys (environment variables, listed below), the database
+  itself, and the paid display fonts, which their license doesn't let us publish (the site
+  falls back to free fonts without them).
+- **Scheduler Helper**, the Chrome extension that brings a class list from Canvas, in
+  [`extension/`](extension/) (Chrome Web Store id `hafmidgmpikkkjphmcbnggidbaeoiapd`). Its build
+  is reproducible: `tools/build_extension.py store` makes the same zip, byte for byte, from the
+  same code, and every change is built in public by
+  [GitHub Actions](https://github.com/scheduler-lottery/scheduler/actions/workflows/ci.yml), which
+  prints each file's fingerprint and keeps the zip. To check the copy in the Chrome Web Store
+  against this code yourself, see `tools/verify_extension.py`.
+- **The tests**: `tests/` (run on every change, above) and the browser walk-throughs in
+  `tools/e2e_*.mjs`, which drive a real Chrome with the extension against a stand-in Canvas
+  (`tools/fake_canvas.py`).
 
 ---
 
@@ -247,3 +282,7 @@ Run the tests (they also run against Postgres if `TEST_PG_BIN` points at a folde
 | `db.py`, `schema.sql` | Database access and tables (same SQL on SQLite and Postgres) |
 | `maintenance.py` | The daily job |
 | `settings.py` | Every setting, read from environment variables |
+| `deadlines.py` | Deadlines, and the emails to professors about how sign-ups are going |
+| `shortlink.py` | A class's short link (spoo.me, no ads), checked daily |
+| `extension/` | Scheduler Helper, the Chrome extension (`tools/build_extension.py`, `tools/verify_extension.py`) |
+| `.github/workflows/ci.yml` | The public build: tests, and the extension's zip with its fingerprints |

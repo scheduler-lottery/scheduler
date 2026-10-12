@@ -171,6 +171,10 @@
   <a href="{{ url_for('how_it_works') }}">How days are assigned</a>
   <span aria-hidden="true">·</span>
   <a href="{{ url_for('privacy') }}">Privacy</a>
+  {% if source_url %}
+  <span aria-hidden="true">·</span>
+  <a href="{{ source_url }}" target="_blank" rel="noopener">Open source</a>
+  {% endif %}
   {% if not instructor and not nav_sheet %}
   <span aria-hidden="true">·</span>
   <a href="{{ url_for('teach.login') }}">Instructors: get started or sign in</a>

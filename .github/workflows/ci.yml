@@ -1,0 +1,42 @@
+# Out in the open: every change runs the tests, and builds Scheduler Helper
+# (the Chrome extension) exactly as it's uploaded to the Chrome Web Store,
+# printing each file's fingerprint and keeping the zip for anyone to check.
+name: Tests, and the helper's build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements-dev.txt
+      - name: Tests (SQLite; the Postgres runs need a local Postgres, see README)
+        run: python -m pytest -q -p no:cacheprovider
+
+  helper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Build Scheduler Helper as uploaded to the Chrome Web Store
+        run: python tools/build_extension.py store
+      - name: Each file's fingerprint
+        run: cd dist/scheduler-helper && sha256sum *
+      - name: It matches what was just built (the check anyone can run on the store's copy)
+        run: python tools/verify_extension.py dist/scheduler-helper.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scheduler-helper
+          path: dist/scheduler-helper.zip
