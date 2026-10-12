@@ -74,7 +74,7 @@ def test_connect_canvas_brings_the_course_the_sheet_is_named_for(prof, monkeypat
     back = _authorize(canvas, prof.get(f"/teach/s/{sid}/canvas/connect").headers["Location"])
     r = prof.get(back.path + "?" + back.query)
     assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")  # no course to pick: straight to the list
-    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 8
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid) == 8
     assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :sid", sid=sid) == "202"
     assert not fake.TOKENS  # the permission given back
     # A name that doesn't say which course: the list of courses, to pick from.

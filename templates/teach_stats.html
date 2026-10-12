@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{# Sign-ups at a glance (teach.stats): each sheet that's open, how far along
+   it is, and the next thing to do; then the closed ones, briefly. #}
+{% block title %}Sign-ups at a glance — {{ app_name }}{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="admin-header">
+    <h1>Sign-ups at a glance</h1>
+    <a class="btn btn-secondary" href="{{ url_for('teach.dashboard') }}">My sign-up sheets</a>
+  </div>
+  {% if open_sheets %}
+  <p class="lead-line">
+    {{ totals.open | plural('sign-up sheet') }} open{% if totals.listed %}: <strong>{{ totals.ranked }} of {{ totals.listed }}</strong> students on your lists have ranked{% endif %}.
+  </p>
+  <ul class="stats-list">
+    {% for s in open_sheets %}
+    <li class="stats-sheet">
+      <div class="stats-head">
+        <a class="stats-title" href="{{ url_for('teach.sheet', sid=s.id) }}">{{ s.title }}</a>
+        {% if s.closes %}<span class="mini-hint">Closes {{ s.closes }}</span>{% else %}<span class="mini-hint">No deadline: you close sign-ups</span>{% endif %}
+      </div>
+      {% if s.roster_count %}
+      <progress class="stats-bar" max="{{ s.roster_count }}" value="{{ s.listed_count }}" aria-label="{{ s.listed_count }} of {{ s.roster_count }} ranked">{{ s.percent }}%</progress>
+      <p class="stats-line"><strong>{{ s.listed_count }} of {{ s.roster_count }}</strong> ranked ({{ s.percent }}%){% if s.unlisted_count %}, plus {{ s.unlisted_count }} not on your list{% endif %}.
+        {% if s.waiting %}{{ s.waiting }} still to rank.{% else %}Everyone has ranked.{% endif %}</p>
+      {% elif s.allow_unlisted %}
+      <p class="stats-line"><strong>{{ s.ranked }}</strong> {{ 'person has' if s.ranked == 1 else 'people have' }} signed up (anyone with the link can).</p>
+      {% else %}
+      <p class="stats-line">No class list yet, so students can't sign in.</p>
+      {% endif %}
+      {% if s.day_count %}
+      <p class="mini-hint">{{ s.day_count | plural('day') }} × {{ s.capacity_per_day | plural('seat') }} = {{ s.seats | plural('seat') }}{% if s.roster_count %} for {{ s.roster_count | plural('student') }}{% endif %}.{% if s.short_of_seats %} <strong class="warn-text">Not enough seats for everyone</strong>: add a day or a seat a day.{% endif %}</p>
+      {% endif %}
+      <div class="helper-row stats-actions">
+        {% if not s.roster_count and not s.allow_unlisted %}
+        <a class="btn btn-primary btn-small" href="{{ url_for('teach.setup', sid=s.id, step='students') }}">Add your students</a>
+        {% elif not s.shared_at %}
+        <a class="btn btn-primary btn-small" href="{{ url_for('teach.setup', sid=s.id, step='share') }}">Share the link</a>
+        {% elif s.waiting %}
+        <a class="btn btn-primary btn-small" href="{{ url_for('teach.sheet', sid=s.id) }}#remind">Remind the {{ s.waiting }} who haven't ranked</a>
+        {% else %}
+        <a class="btn btn-primary btn-small" href="{{ url_for('teach.sheet', sid=s.id) }}">Close sign-ups and make the schedule</a>
+        {% endif %}
+        <a class="btn btn-ghost btn-small" href="{{ url_for('teach.sheet', sid=s.id) }}">Class page</a>
+        {% if s.short_of_seats %}<a class="btn btn-ghost btn-small" href="{{ url_for('teach.edit_sheet', sid=s.id) }}">Days and seats</a>{% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="lead-line">No sign-ups are open right now.{% if not closed_sheets %} <a href="{{ url_for('teach.new_sheet') }}">Make a sign-up sheet</a>{% endif %}</p>
+  {% endif %}
+
+  {% if closed_sheets %}
+  <h2 class="card-heading stats-closed-heading">Closed</h2>
+  <ul class="plain-rows">
+    {% for s in closed_sheets %}
+    <li class="plain-row">
+      <a href="{{ url_for('teach.sheet', sid=s.id) }}">{{ s.title }}</a>
+      <span class="mini-hint">{% if s.roster_count %}{{ s.listed_count }} of {{ s.roster_count }} ranked{% else %}{{ s.ranked }} ranked{% endif %} · {% if s.published_at %}schedule published{% elif s.assigned_count %}schedule made, not published yet{% else %}no schedule yet{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% endblock %}

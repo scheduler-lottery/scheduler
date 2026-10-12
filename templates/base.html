@@ -37,28 +37,38 @@
       <span class="brand-name">{{ app_name }}</span>
     </a>
 
-    {% set has_settings = (nav_sheet and nav_student) or (instructor and not nav_sheet) %}
+    {% set has_settings = nav_student or instructor %}
+    {# Icon buttons, each named in a tip that shows right under it (on hover
+       or keyboard focus) and to screen readers (aria-label). #}
     <nav class="icon-dock" aria-label="Quick links">
       {# Home: a student's class page (or its sign-in), else the site's front page. #}
       {% set home_url = brand_url if nav_sheet else url_for('landing') %}
-      <a href="{{ home_url }}" class="icon-dock-btn" aria-label="Home" title="Home"{% if request.path == home_url %} aria-current="page"{% endif %}>
+      <a href="{{ home_url }}" class="icon-dock-btn dock-tip" data-tip="Home" aria-label="Home"{% if request.path == home_url %} aria-current="page"{% endif %}>
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path d="M3.5 11.2 12 4l8.5 7.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M5.8 9.6V19a1 1 0 0 0 1 1h3.7v-5.2h3V20h3.7a1 1 0 0 0 1-1V9.6" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
         </svg>
       </a>
       {% if nav_sheet and nav_student %}
-        <a href="{{ url_for('student.rank', sid=nav_sheet.id) }}" class="icon-dock-label"{% if request.endpoint == 'student.rank' %} aria-current="page"{% endif %}>My ranking</a>
+        <a href="{{ url_for('student.rank', sid=nav_sheet.id) }}" class="icon-dock-btn dock-tip" data-tip="My ranking" aria-label="My ranking"{% if request.endpoint == 'student.rank' %} aria-current="page"{% endif %}>
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M4.5 5.5h1.5v4M4.3 9.5h3.4M4.5 14.2c.3-.8 1-1.2 1.7-1.2 1 0 1.6.7 1.6 1.4 0 1.4-3.3 2.4-3.3 4.1h3.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 7h9M11 12h7M11 17h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </a>
         {% if nav_sheet.published_at or (nav_sheet.show_preview and nav_sheet.bidding_open) %}
-        <a href="{{ url_for('student.schedule', sid=nav_sheet.id) }}" class="icon-dock-label"{% if request.endpoint == 'student.schedule' %} aria-current="page"{% endif %}>{{ 'Schedule' if nav_sheet.published_at else 'Draft' }}</a>
+        <a href="{{ url_for('student.schedule', sid=nav_sheet.id) }}" class="icon-dock-btn dock-tip" data-tip="{{ 'The schedule' if nav_sheet.published_at else 'Draft schedule' }}" aria-label="{{ 'The schedule' if nav_sheet.published_at else 'Draft schedule' }}"{% if request.endpoint == 'student.schedule' %} aria-current="page"{% endif %}>
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 9.5h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8.5 14l2.2 2.2 4.8-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
         {% endif %}
-      {% elif instructor and not nav_sheet %}
+      {% elif instructor %}
         {% if has_sheets %}
-        <a href="{{ url_for('teach.dashboard') }}" class="icon-dock-label"{% if request.endpoint == 'teach.dashboard' %} aria-current="page"{% endif %}>My sheets</a>
+        <a href="{{ url_for('teach.dashboard') }}" class="icon-dock-btn dock-tip" data-tip="My sign-up sheets" aria-label="My sign-up sheets"{% if request.endpoint == 'teach.dashboard' %} aria-current="page"{% endif %}>
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="2.2" stroke="currentColor" stroke-width="1.7"/><path d="M8.5 8h7M8.5 11.5h7M8.5 15h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </a>
         {% else %}
         {# Nothing to list yet: greyed out, and a click says so. #}
         <div class="popover-wrap">
-          <button type="button" class="icon-dock-label dock-empty" data-popover-target="no-sheets" aria-haspopup="true" aria-expanded="false">My sheets</button>
+          <button type="button" class="icon-dock-btn dock-tip dock-empty" data-tip="My sign-up sheets (none yet)" aria-label="My sign-up sheets (none yet)" data-popover-target="no-sheets" aria-haspopup="true" aria-expanded="false">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="2.2" stroke="currentColor" stroke-width="1.7"/><path d="M8.5 8h7M8.5 11.5h7M8.5 15h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          </button>
           <div id="no-sheets" class="popover-dropdown no-sheets-pop">
             <p class="no-sheets-title">No sheets yet</p>
             {% if request.endpoint == 'teach.new_sheet' %}
@@ -70,30 +80,43 @@
           </div>
         </div>
         {% endif %}
+        <a href="{{ url_for('teach.new_sheet') }}" class="icon-dock-btn dock-tip" data-tip="New sign-up sheet" aria-label="New sign-up sheet"{% if request.endpoint == 'teach.new_sheet' %} aria-current="page"{% endif %}>
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+        </a>
+        {% if has_sheets %}
+        <a href="{{ url_for('teach.stats') }}" class="icon-dock-btn dock-tip" data-tip="Sign-ups at a glance" aria-label="Sign-ups at a glance"{% if request.endpoint == 'teach.stats' %} aria-current="page"{% endif %}>
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M4 20h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="5.5" y="11" width="3" height="6.5" rx="1" stroke="currentColor" stroke-width="1.6"/><rect x="10.5" y="6.5" width="3" height="11" rx="1" stroke="currentColor" stroke-width="1.6"/><rect x="15.5" y="9" width="3" height="8.5" rx="1" stroke="currentColor" stroke-width="1.6"/></svg>
+        </a>
+        {% endif %}
+        {% if dock_share %}
+        {# On one of a sheet's own pages: its link for students, copied in one click. #}
+        <button type="button" class="icon-dock-btn dock-tip" data-tip="Copy the link for students" aria-label="Copy the link for students" data-copy="#dock-share-link">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <input class="visually-hidden" id="dock-share-link" value="{{ dock_share }}" readonly tabindex="-1" aria-hidden="true">
+        {% endif %}
       {% endif %}
 
+      <span class="dock-sep" aria-hidden="true"></span>
       {# Opens the "How ranking works" window; the page of the same subject
          is the fallback without scripts. #}
-      <a href="{{ url_for('how_it_works') }}" class="icon-dock-label" data-popover-target="ranking-help" aria-haspopup="dialog" aria-expanded="false">
-        <span class="label-long">How ranking works</span><span class="label-short">How it works</span>
+      <a href="{{ url_for('how_it_works') }}" class="icon-dock-btn dock-tip" data-tip="How ranking works" aria-label="How ranking works" data-popover-target="ranking-help" aria-haspopup="dialog" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="12" cy="12" r="8.6" stroke="currentColor" stroke-width="1.7"/><path d="M9.6 9.6a2.5 2.5 0 0 1 4.9.7c0 1.7-2.5 2.1-2.5 3.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="17" r="1.05" fill="currentColor"/></svg>
       </a>
-
-      {% if has_settings %}
-      <button type="button" class="settings-btn" data-popover-target="settings" aria-haspopup="dialog" aria-expanded="false" aria-label="Settings">
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-        </svg>
-        <span class="settings-word">Settings</span>
-      </button>
-      {% endif %}
-
-      <button type="button" class="icon-dock-btn{% if has_settings %} dock-optional{% endif %}" data-popover-target="appearance" aria-haspopup="dialog" aria-expanded="false" aria-label="Appearance: theme, text size and font" title="Appearance">
+      <button type="button" class="icon-dock-btn dock-tip tip-end" data-tip="Appearance: contrast, colors, text size" data-popover-target="appearance" aria-haspopup="dialog" aria-expanded="false" aria-label="Appearance: contrast, colors, text size">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <circle cx="12" cy="12" r="8.2" stroke="currentColor" stroke-width="1.7"/>
           <path d="M12 3.8a8.2 8.2 0 0 1 0 16.4z" fill="currentColor"/>
         </svg>
       </button>
+      {% if has_settings %}
+      <button type="button" class="icon-dock-btn dock-tip tip-end" data-tip="Settings and sign out" data-popover-target="settings" aria-haspopup="dialog" aria-expanded="false" aria-label="Settings and sign out">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      {% endif %}
     </nav>
   </div>
 </header>
@@ -266,6 +289,16 @@
           <span class="tile-art"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="2.2" stroke="currentColor" stroke-width="1.7"/><path d="M8.5 8h7M8.5 11.5h7M8.5 15h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
           <span class="choice-name">{{ 'My sign-up sheets' if has_sheets else 'Make my first sheet' }}</span>
         </a>
+        {% if has_sheets %}
+        <a class="settings-tile" href="{{ url_for('teach.stats') }}">
+          <span class="tile-art"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M4 20h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="5.5" y="11" width="3" height="6.5" rx="1" stroke="currentColor" stroke-width="1.6"/><rect x="10.5" y="6.5" width="3" height="11" rx="1" stroke="currentColor" stroke-width="1.6"/><rect x="15.5" y="9" width="3" height="8.5" rx="1" stroke="currentColor" stroke-width="1.6"/></svg></span>
+          <span class="choice-name">Sign-ups at a glance</span>
+        </a>
+        <a class="settings-tile" href="{{ url_for('teach.new_sheet') }}">
+          <span class="tile-art"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span>
+          <span class="choice-name">New sign-up sheet</span>
+        </a>
+        {% endif %}
         {% if is_owner %}
         <a class="settings-tile" href="{{ url_for('owner.index') }}">
           <span class="tile-art"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="8" cy="15" r="4" stroke="currentColor" stroke-width="1.7"/><path d="M11 12l8.5-8.5M16 7l2.5 2.5M13.8 9.2l2 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>

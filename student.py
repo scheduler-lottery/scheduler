@@ -143,7 +143,9 @@ def signin_page(sid):
         "student_signin.html",
         sheet=g.sheet,
         counts=counts,
-        not_ready=not g.sheet["allow_unlisted"] and counts["roster"] + counts["test_students"] == 0,
+        # No class list yet: not open, except to the instructor, signing in as a test student.
+        not_ready=not g.sheet["allow_unlisted"] and counts["roster"] == 0
+        and not (counts["test_students"] and _owner_is_viewing()),
         published=_published(),
         typed=clean_text(request.args.get("name"), 120),
     )
@@ -178,7 +180,7 @@ def _code_email(row):
 def _send_code(row, force_email=False):
     subject, body = _code_email(row)
     sid, key = g.sheet["id"], row["name_key"]
-    class_size = db.scalar("SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) or 0
+    class_size = db.scalar("SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid) or 0
     try:
         return signin.issue_code(
             scope=sid, subject=key, display_name=row["display_name"], email=row["email"],
@@ -332,10 +334,13 @@ def login_again(sid):
 @bp.route("/login", methods=["POST"])
 def login(sid):
     rows = _roster_rows()
-    if not g.sheet["allow_unlisted"] and not rows:
+    typed = clean_text(request.form.get("name"), 120)
+    # No class list yet (only the test students): not ready, except for the
+    # instructor, or someone typing a test student's name (its code goes to the instructor).
+    if not g.sheet["allow_unlisted"] and not any(not r["is_test"] for r in rows) and not _owner_is_viewing() \
+            and not any(r["is_test"] and fold(typed) == r["name_key"] for r in rows):
         flash("This sign-up isn't ready yet — your instructor is still adding the class list.", "error")
         return redirect(_here("student.signin"))
-    typed = clean_text(request.form.get("name"), 120)
     pick = request.form.get("pick", "")
     if pick == NEW_NAME:
         return _start_unlisted(typed)

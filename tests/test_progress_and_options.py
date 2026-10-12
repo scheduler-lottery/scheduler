@@ -163,8 +163,25 @@ def test_a_ranking_keeps_its_first_time_when_changed(prof, browser):
 # Around the site
 # ---------------------------------------------------------------------------
 def test_the_top_bar_has_a_home_button(prof):
+    prof.create_sheet()
     page = raw(prof.get("/teach/"))
-    assert re.search(r'<a href="/" class="icon-dock-btn" aria-label="Home"', page)
+    assert re.search(r'<a href="/" class="icon-dock-btn dock-tip" data-tip="Home" aria-label="Home"', page)
+    for tip in ("My sign-up sheets", "New sign-up sheet", "Sign-ups at a glance", "How ranking works",
+                "Appearance: contrast, colors, text size", "Settings and sign out"):
+        assert re.search(f'data-tip="{re.escape(tip)}"[^>]*aria-label="{re.escape(tip)}"', page), tip
+
+
+def test_sign_ups_at_a_glance_shows_each_open_sheet_and_whats_next(prof, browser):
+    sid = prof.create_sheet(title="LAW 540 Evidence")
+    prof.upload(sid, SIX)
+    rank(browser, sid, 2, day_keys(sid))
+    page = text(prof.get("/teach/stats"))
+    assert "Sign-ups at a glance" in page and "LAW 540 Evidence" in page
+    assert "2 of 6 ranked (33%)" in page and "4 still to rank" in page
+    assert re.search(r'<progress class="stats-bar" max="6" value="2"', raw(prof.get("/teach/stats")))
+    # On the sheet's own pages, the bar copies its link for students.
+    assert 'data-tip="Copy the link for students"' in raw(prof.get(f"/teach/s/{sid}"))
+    assert 'data-tip="Copy the link for students"' not in raw(prof.get("/teach/"))
 
 
 def test_the_canvas_step_offers_option_1_and_option_2_with_a_paste_box(prof):
@@ -176,3 +193,26 @@ def test_the_canvas_step_offers_option_1_and_option_2_with_a_paste_box(prof):
     assert f'id="canvas-paste-{sid}"' in page and "Or paste your own list" in words
     r = prof.post(f"/teach/s/{sid}/roster", {"pasted": "Ana Lima, ana@school.edu", "setup": "1"})
     assert "Added 1 student" in follow(prof, r)
+
+
+def test_every_new_sheet_has_test_students_signing_in_with_the_professors_email(prof, browser):
+    sid = prof.create_sheet(allow_unlisted=False)
+    rows = [r for r in _roster_rows(prof, sid) if r[1]]
+    assert sorted(r[0] for r in rows) == ["Test Student 1", "Test Student 2", "Test Student 3"]
+    assert {r[2] for r in rows} == {"prof@school.edu"}
+    assert "Test Student 1, Test Student 2, Test Student 3" in text(prof.get(f"/teach/s/{sid}"))
+    # Not open to students until a real class list is in; the professor can try it already.
+    assert "your instructor is still setting this up" in text(browser().get(f"/c/{sid}"))
+    stranger = browser()
+    assert "isn't ready yet" in follow(stranger, stranger.post(f"/c/{sid}/login", {"name": "Ana Lima"}))
+    tester = browser()
+    tester.post(f"/c/{sid}/login", {"name": "Test Student 2"})
+    assert tester.outbox[-1].to == ["prof@school.edu"]
+    # "See it as a student" isn't ticked off until they're used.
+    assert q(prof.app, "SELECT tested_at FROM sheets WHERE id = :sid", sid=sid) is None
+
+
+def _roster_rows(prof, sid):
+    with prof.app.app_context():
+        return [(r["display_name"], r["is_test"], r["email"]) for r in db.rows(
+            "SELECT display_name, is_test, email FROM roster WHERE sheet_id = :sid", sid=sid)]

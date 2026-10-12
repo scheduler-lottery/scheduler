@@ -257,15 +257,15 @@
     <button class="btn btn-primary" type="submit">See it as a student </button>
   </form>
   {% if test_roster %}
-  <p class="mini-hint">Test students on your list: {{ test_roster | map(attribute='display_name') | join(', ') }}.</p>
+  <p>Or sign in as a student yourself, the way your class will: your sheet has <strong>{{ test_roster | length }} test students</strong> ({{ test_roster | map(attribute='display_name') | join(', ') }}), and their sign-in codes go to <strong>{{ test_roster[0].email }}</strong>. Open your student link, type “{{ test_roster[-1].display_name }}”, and enter the code from your email. They never count toward your class, and their rankings stop counting once real students rank.</p>
   <form method="post" action="{{ url_for('teach.remove_test_students', sid=sheet.id) }}" data-confirm="Remove the test students and anything they ranked?">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn btn-ghost btn-small" type="submit">I'm done — remove the test students</button>
   </form>
   {% endif %}
   <details class="more-options">
-    <summary>Also try the emailed-code sign-in</summary>
-    <p class="mini-hint">Adds Test Student 1 and 2 with their codes going to the inbox below. Then open your student link (if you used “See it as a student”, sign out of Test Student 1 there first), type “Test Student 2”, and enter the code from your email.</p>
+    <summary>{{ 'Send the test students’ codes somewhere else' if test_roster else 'Add test students, to try the emailed-code sign-in' }}</summary>
+    <p class="mini-hint">{{ 'Test Student 1, 2 and 3' }}, with their sign-in codes going to the inbox below. Then open your student link (if you used “See it as a student”, sign out of Test Student 1 there first), type “Test Student 2”, and enter the code from your email.</p>
     <form method="post" action="{{ url_for('teach.add_test_students', sid=sheet.id) }}" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label for="test-email" class="visually-hidden">Send the test codes to</label>

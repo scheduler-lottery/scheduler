@@ -215,6 +215,21 @@ def _has_sheets(instructor):
         return True
 
 
+def _dock_share(instructor):
+    """On one of the instructor's own sheet pages: its link for students, for
+    the top bar's copy button."""
+    sid = (request.view_args or {}).get("sid") if request.blueprint == "teach" else None
+    if not (instructor and sid):
+        return None
+    try:
+        sheet = sheets.get_sheet(sid)
+    except Exception:  # noqa: BLE001 - no button, then
+        return None
+    if not sheet or sheet["owner_id"] != instructor["id"]:
+        return None
+    return url_for("student.signin", sid=sheet["id"], _external=True)
+
+
 @app.context_processor
 def template_globals():
     try:
@@ -229,6 +244,7 @@ def template_globals():
         "csrf_token": auth.csrf_token,
         "nav_sheet": g.get("sheet"),
         "nav_student": g.get("student"),
+        "dock_share": _dock_share(instructor),
         "contact_email": settings.CONTACT_EMAIL,
         "source_url": settings.SOURCE_URL,
         "built_by": "" if settings.BUILT_BY == "-" else settings.BUILT_BY,

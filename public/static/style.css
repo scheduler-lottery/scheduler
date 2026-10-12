@@ -300,6 +300,55 @@ select,
 .icon-dock-btn:hover { background: var(--accent-soft); color: var(--accent-strong); }
 .icon-dock-btn:active { transform: scale(0.93); }
 .icon-dock-btn[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent-strong); }
+.icon-dock-btn[aria-current="page"] { background: var(--accent-soft); color: var(--accent-strong); }
+.icon-dock-btn.dock-empty { opacity: 0.55; }
+.stats-list { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 14px; }
+.stats-sheet { padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-md, 12px); }
+.stats-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; align-items: baseline; }
+.stats-title { font-weight: 700; font-size: 1.05rem; }
+.stats-bar { display: block; width: 100%; height: 10px; margin: 10px 0 6px; border: 0; border-radius: 99px;
+  background: var(--surface-soft, rgba(0, 0, 0, 0.06)); overflow: hidden; appearance: none; -webkit-appearance: none; }
+.stats-bar::-webkit-progress-bar { background: var(--surface-soft, rgba(0, 0, 0, 0.06)); border-radius: 99px; }
+.stats-bar::-webkit-progress-value { background: var(--accent); border-radius: 99px; }
+.stats-bar::-moz-progress-bar { background: var(--accent); border-radius: 99px; }
+.stats-line { margin: 0 0 4px; }
+.stats-actions { margin-top: 10px; }
+.stats-closed-heading { margin-top: 24px; }
+.warn-text { color: var(--danger, #9b2c1f); }
+.dock-sep { width: 1px; height: 22px; margin: 0 3px; background: var(--border); flex-shrink: 0; }
+/* Each icon's name, right under it, at once on hover or keyboard focus
+   (and "Copied" after a copy). Its window open: no tip over it. */
+.dock-tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 50%;
+  transform: translate(-50%, -3px);
+  padding: 5px 9px;
+  border-radius: 7px;
+  background: var(--text);
+  color: var(--bg);
+  font: 600 0.76rem/1.2 var(--font-sans);
+  letter-spacing: 0;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 80ms ease, transform 80ms ease, visibility 0s linear 80ms;
+  z-index: 80;
+}
+.dock-tip:hover::after, .dock-tip:focus-visible::after, .dock-tip.tip-show::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  transition-delay: 0s;
+}
+.dock-tip.tip-end::after { left: auto; right: 0; transform: translateY(-3px); }
+.dock-tip.tip-end:hover::after, .dock-tip.tip-end:focus-visible::after, .dock-tip.tip-end.tip-show::after { transform: none; }
+.dock-tip[aria-expanded="true"]::after { display: none; }
+@media (hover: none) { .dock-tip:hover:not(.tip-show)::after { opacity: 0; visibility: hidden; } }
+@media (prefers-reduced-motion: reduce) { .dock-tip::after { transition: none; } }
 
 /* Text-label dock buttons — used where a bare pictogram (an eye, a list)
    would be ambiguous, e.g. Rank vs Results. Same footprint/behavior as

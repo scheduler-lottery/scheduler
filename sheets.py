@@ -32,7 +32,7 @@ SNAPSHOTS_KEPT = 40
 # these go first, so ones taken before a delete or replace last longest.
 ROUTINE_SNAPSHOTS = ("daily", "closed", "rerun", "undo", "restore", "place", "method")
 DELETED_SHEETS_KEPT_DAYS = 30
-TEST_STUDENT_NAMES = ("Test Student 1", "Test Student 2")
+TEST_STUDENT_NAMES = ("Test Student 1", "Test Student 2", "Test Student 3")
 EXPORT_FORMAT = "scheduler-sheet-v1"
 
 SHEET_FIELDS = (
@@ -624,9 +624,10 @@ def clear_roster(sid):
     return removed
 
 
-def add_test_students(sid, email, names=TEST_STUDENT_NAMES):
-    """Add the pretend students an instructor uses to try the student side.
-    Their codes go to `email`. Returns the names added."""
+def add_test_students(sid, email, names=TEST_STUDENT_NAMES, tried=True):
+    """Add the pretend students an instructor uses to try the student side
+    (every new sheet starts with them: tried=False, so "See it as a student"
+    isn't ticked off yet). Their codes go to `email`. Returns the names added."""
     for name in names:
         db.run(
             """
@@ -636,7 +637,8 @@ def add_test_students(sid, email, names=TEST_STUDENT_NAMES):
             """,
             sid=sid, key=normalize_name(name), name=name, email=email,
         )
-    db.run("UPDATE sheets SET tested_at = :at, updated_at = :at WHERE id = :sid", at=iso(), sid=sid)
+    if tried:
+        db.run("UPDATE sheets SET tested_at = :at, updated_at = :at WHERE id = :sid", at=iso(), sid=sid)
     return list(names)
 
 

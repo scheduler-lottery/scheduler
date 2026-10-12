@@ -336,9 +336,17 @@
       if (!source) return;
       var text = source.value;
       var done = function () {
-        btn.textContent = "Copied";
         clearTimeout(back);
-        back = setTimeout(function () { btn.textContent = label; }, 1800);
+        if (btn.hasAttribute("data-tip")) { // (an icon: its tip says so)
+          var tip = btn.getAttribute("data-tip-was") || btn.getAttribute("data-tip");
+          btn.setAttribute("data-tip-was", tip);
+          btn.setAttribute("data-tip", "Copied");
+          btn.classList.add("tip-show");
+          back = setTimeout(function () { btn.setAttribute("data-tip", tip); btn.classList.remove("tip-show"); }, 1800);
+        } else {
+          btn.textContent = "Copied";
+          back = setTimeout(function () { btn.textContent = label; }, 1800);
+        }
         var said = btn.parentNode.querySelector("[data-copy-said]"); // (what's next, where it stays)
         if (said) said.textContent = said.getAttribute("data-copy-said");
         var markUrl = btn.getAttribute("data-mark-shared");

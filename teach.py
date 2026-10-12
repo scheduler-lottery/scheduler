@@ -350,10 +350,56 @@ def _own_snapshot(snap_id):
 @instructor_required
 def dashboard():
     instructor = current_instructor()
-    deadlines.enforce_all(owner_id=instructor["id"])  # so each sheet's status is right
-    mine = db.rows(
+    mine = _my_sheets(instructor)
+    titles = [fold(s["title"]) for s in mine]
+    for s in mine:
+        s["same_title"] = titles.count(fold(s["title"])) > 1
+    download = request.args.get("download", "")
+    download_url = (
+        url_for("teach.snapshot_zip", snap_id=download)
+        if download and sheets.get_snapshot(download, instructor["id"]) else None
+    )
+    return render_template(
+        "teach_dashboard.html", sheets=[s for s in mine if not s["archived_at"]],
+        archived=[s for s in mine if s["archived_at"]], deleted=sheets.deleted_sheets(instructor["id"]),
+        download_url=download_url,
+    )
+
+
+@bp.route("/stats")
+@instructor_required
+def stats():
+    """Sign-ups at a glance: each sheet that isn't archived, open ones first:
+    how many have ranked, who hasn't, the deadline, whether the seats go
+    round, and what to do next."""
+    instructor = current_instructor()
+    zone = instructor["timezone"] or settings.DEFAULT_TIMEZONE
+    rows = [s for s in _my_sheets(instructor) if not s["archived_at"]]
+    for s in rows:
+        listed = s["roster_count"]
+        s["ranked"] = s["listed_count"] if listed else s["listed_count"] + s["unlisted_count"]
+        s["percent"] = round(100 * s["listed_count"] / listed) if listed else None
+        s["waiting"] = listed - s["listed_count"] if listed else 0
+        s["seats"] = s["capacity_per_day"] * s["day_count"]
+        s["short_of_seats"] = bool(listed and s["seats"] < listed)
+        s["closes"] = deadlines.describe(s["closes_at"], zone) if s["closes_at"] and s["bidding_open"] else ""
+    open_ones = [s for s in rows if s["bidding_open"]]
+    totals = {"open": len(open_ones), "listed": sum(s["roster_count"] for s in open_ones),
+              "ranked": sum(s["listed_count"] for s in open_ones if s["roster_count"])}
+    return render_template("teach_stats.html", open_sheets=open_ones,
+                           closed_sheets=[s for s in rows if not s["bidding_open"]], totals=totals)
+
+
+def _my_sheets(instructor):
+    """The instructor's sheets, newest first, with their counts (for My
+    sheets and Sign-ups at a glance). Passed deadlines are acted on first,
+    so each status is right."""
+    deadlines.enforce_all(owner_id=instructor["id"])
+    return db.rows(
         """
         SELECT s.id, s.title, s.bidding_open, s.allow_unlisted, s.published_at, s.created_at, s.archived_at,
+            s.closes_at, s.capacity_per_day, s.shared_at,
+            (SELECT COUNT(*) FROM sheet_days d WHERE d.sheet_id = s.id) AS day_count,
             (SELECT COUNT(*) FROM roster r WHERE r.sheet_id = s.id AND r.is_test = 0) AS roster_count,
             (SELECT COUNT(*) FROM submissions x JOIN roster r
                 ON r.sheet_id = x.sheet_id AND r.name_key = x.name_key AND r.is_test = 0
@@ -368,19 +414,6 @@ def dashboard():
         ORDER BY s.created_at DESC
         """,
         me=instructor["id"],
-    )
-    titles = [fold(s["title"]) for s in mine]
-    for s in mine:
-        s["same_title"] = titles.count(fold(s["title"])) > 1
-    download = request.args.get("download", "")
-    download_url = (
-        url_for("teach.snapshot_zip", snap_id=download)
-        if download and sheets.get_snapshot(download, instructor["id"]) else None
-    )
-    return render_template(
-        "teach_dashboard.html", sheets=[s for s in mine if not s["archived_at"]],
-        archived=[s for s in mine if s["archived_at"]], deleted=sheets.deleted_sheets(instructor["id"]),
-        download_url=download_url,
     )
 
 
@@ -554,6 +587,8 @@ def new_sheet():
             seed=sheets.new_lottery_seed(), at=at,
         )
         sheets.save_days(sid, [("", d["label"], d["date"]) for d in values["days"]])
+        # Test students from the start: the instructor signs in as them, with codes to their own email.
+        sheets.add_test_students(sid, current_instructor()["email"], tried=False)
         db.commit()
         _warn_past_days(values["days"])
         if fold(values["title"]) in mine:
@@ -704,6 +739,7 @@ def edit_sheet(sid):
 def duplicate_sheet(sid):
     sheet = owned_sheet(sid)
     new_sid = sheets.copy_sheet(sheet, current_instructor()["id"])
+    sheets.add_test_students(new_sid, current_instructor()["email"], tried=False)
     db.commit()
     flash(
         f"Made a copy of “{sheet['title']}” with the same days and settings — but no class list or "
@@ -2499,7 +2535,8 @@ def add_test_students(sid):
         return _back(sheet, "try-it")
     sheets.add_test_students(sheet["id"], email)
     db.commit()
-    flash(f"Added Test Student 1 and Test Student 2. Their sign-in codes go to {email}.", "success")
+    flash(f"Added {', '.join(sheets.TEST_STUDENT_NAMES[:-1])} and {sheets.TEST_STUDENT_NAMES[-1]}. Their sign-in "
+          f"codes go to {email}.", "success")
     return _back(sheet, "try-it")
 
 

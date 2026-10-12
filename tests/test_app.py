@@ -292,7 +292,7 @@ def test_copy_for_next_term(prof, browser):
     assert new_sid != sid and "/edit" in r.headers["Location"]
     with prof.app.app_context():
         assert db.scalar("SELECT title FROM sheets WHERE id = :sid", sid=new_sid) == "Fall seminar (copy)"
-        assert db.scalar("SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=new_sid) == 0
+        assert db.scalar("SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=new_sid) == 0
     assert [d for d in day_keys(new_sid)] and len(day_keys(new_sid)) == 2
 
 
@@ -305,7 +305,7 @@ def test_first_upload_applies_and_reports(prof):
     assert "Added 3 students" in page and "none of that was saved" in page
     assert "only 4 seats" not in page  # 3 students fit in 4 seats
     with prof.app.app_context():
-        stored = db.rows("SELECT * FROM roster WHERE sheet_id = :sid ORDER BY name_key", sid=sid)
+        stored = db.rows("SELECT * FROM roster WHERE sheet_id = :sid AND is_test = 0 ORDER BY name_key", sid=sid)
     assert [r["display_name"] for r in stored] == ["Alex Johnson", "Riya Patel", "Sam Lee"]
     assert set(stored[0]) == {"sheet_id", "name_key", "display_name", "email", "is_test", "name_pending"}
     # The report stays until it's dismissed.
@@ -332,7 +332,7 @@ def test_a_different_list_is_never_swapped_in_without_asking(prof, browser):
     snap = re.search(r"/undo/(\w+)", page).group(1)
     prof.post(f"/teach/s/{sid}/undo/{snap}", {"parts": "roster"})
     with prof.app.app_context():
-        names = {r["display_name"] for r in db.rows("SELECT display_name FROM roster WHERE sheet_id = :sid", sid=sid)}
+        names = {r["display_name"] for r in db.rows("SELECT display_name FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid)}
     assert names == {"Alex Johnson", "Riya Patel", "Sam Lee"}
 
 
@@ -344,7 +344,7 @@ def test_pasting_more_names_adds_to_the_list(prof):
     assert "Only add Late Comer (keep Alex Johnson and Riya Patel on my list)" in page
     page = follow(prof, prof.post(r.headers["Location"], {"action": "add"}))
     assert "Added 1 new student" in page
-    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 4
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid) == 4
 
 
 def test_excel_files_and_other_wrong_files(prof):
@@ -471,7 +471,7 @@ def test_name_suggestions_need_three_letters_and_skip_test_and_typed_names(prof,
     assert s.get(f"/c/{sid}/names?q=pat").get_json() == ["Riya Patel"]
     assert s.get(f"/c/{sid}/names?q=test").get_json() == []
     assert s.get(f"/c/{sid}/names?q=unl").get_json() == []
-    assert prof.get(f"/c/{sid}/names?q=test").get_json() == ["Test Student 1", "Test Student 2"]
+    assert prof.get(f"/c/{sid}/names?q=test").get_json() == ["Test Student 1", "Test Student 2", "Test Student 3"]
 
 
 def test_name_suggestions_are_rate_limited(prof, browser, monkeypatch):
@@ -905,7 +905,7 @@ def test_deleted_sheet_comes_back_with_its_pins_and_versions(prof, browser):
     r = prof.post(f"/teach/restore-deleted/{snap_id}")
     assert r.headers["Location"].endswith(f"/teach/s/{sid}")
     assert browser().get(f"/c/{sid}").status_code == 200
-    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 3
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid) == 3
     assert q(prof.app, "SELECT COUNT(*) FROM submissions WHERE sheet_id = :sid", sid=sid) == 1
     assert q(prof.app, "SELECT COUNT(*) FROM snapshots WHERE sheet_id = :sid", sid=sid) >= 1
     browser().sign_in_student(sid, "Pin Person", pin="5926")  # same PIN still works
@@ -1054,7 +1054,7 @@ def test_emailed_code_test_students(prof, browser):
     with prof.app.app_context():
         import sheets
         counts = sheets.counts(sid)
-    assert counts["roster"] == 3 and counts["test_students"] == 2 and counts["submissions"] == 0
+    assert counts["roster"] == 3 and counts["test_students"] == 3 and counts["submissions"] == 0
     prof.post(f"/teach/s/{sid}/test-students/remove")
     assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 1", sid=sid) == 0
     assert q(prof.app, "SELECT COUNT(*) FROM submissions WHERE sheet_id = :sid", sid=sid) == 0
@@ -1858,7 +1858,7 @@ def test_a_new_upload_keeps_each_same_name_student_with_their_ranking(prof, brow
     pid = re.search(r"/roster/review/(\w+)", review.headers["Location"]).group(1)
     prof.post(f"/teach/s/{sid}/roster/review/{pid}", {"action": "replace"})
     with prof.app.app_context():
-        rows = {r["name_key"]: r["email"] for r in db.rows("SELECT * FROM roster WHERE sheet_id = :sid", sid=sid)}
+        rows = {r["name_key"]: r["email"] for r in db.rows("SELECT * FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid)}
         ranked = db.scalar("SELECT name_key FROM submissions WHERE sheet_id = :sid", sid=sid)
     assert rows["alex kim"] == "akim7@school.edu" and rows["alex kim 2"] == "alex.kim@school.edu"
     assert rows[ranked] == "alex.kim@school.edu"  # the ranking still belongs to the one who made it
@@ -2671,14 +2671,16 @@ def test_the_professor_hears_once_when_everyone_has_ranked(prof, browser):
 def test_my_sheets_is_greyed_out_until_there_is_a_sheet(browser):
     newcomer = browser().sign_in_instructor("new@school.edu")
     page = raw(newcomer.get("/teach/"))
-    assert 'class="icon-dock-label dock-empty" data-popover-target="no-sheets"' in page
+    assert re.search(r'class="icon-dock-btn dock-tip dock-empty" data-tip="My sign-up sheets \(none yet\)"[^>]*'
+                     r'data-popover-target="no-sheets"', page)
     assert "No sheets yet" in page and "Make my first sheet" in page
     assert "You're making your first one" in html(newcomer.get("/teach/new"))
     newcomer.create_sheet()
     page = raw(newcomer.get("/teach/"))
     assert "No sheets yet" not in page
-    assert 'class="icon-dock-label" aria-current="page">My sheets</a>' in page  # you're on it
-    assert 'aria-current="page"' not in raw(newcomer.get("/teach/new"))
+    assert re.search(r'data-tip="My sign-up sheets" aria-label="My sign-up sheets" aria-current="page"', page)  # you're on it
+    page = raw(newcomer.get("/teach/new"))
+    assert page.count('aria-current="page"') == 1 and re.search(r'aria-label="New sign-up sheet" aria-current="page"', page)
 
 
 def test_settings_is_a_window_with_who_you_are_and_sign_out(prof, browser):
@@ -2908,11 +2910,11 @@ def test_a_list_of_emails_alone_works_and_each_student_types_their_name(prof, br
     assert "already called Alex Johnson" in page and 'value="alex johnson"' in page  # what she typed stays
     assert alexis.post(f"/c/{sid}/name", {"name": "Alexis Jones"}).headers["Location"].endswith(f"/c/{sid}/home")
     assert alexis.get(f"/c/{sid}/home").status_code == 200
-    rows = db_rows(prof.app, "SELECT display_name, name_pending FROM roster WHERE sheet_id = :sid ORDER BY email", sid=sid)
+    rows = db_rows(prof.app, "SELECT display_name, name_pending FROM roster WHERE sheet_id = :sid AND is_test = 0 ORDER BY email", sid=sid)
     assert [(r["display_name"], r["name_pending"]) for r in rows] == [("Alexis Jones", 0), ("Alex Johnson", 1)]
     # Adding the same emails again keeps the name she typed.
     prof.post(f"/teach/s/{sid}/roster/quick-add", {"people": "ajones7@school.edu, new.person@school.edu"})
-    rows = db_rows(prof.app, "SELECT display_name FROM roster WHERE sheet_id = :sid ORDER BY email", sid=sid)
+    rows = db_rows(prof.app, "SELECT display_name FROM roster WHERE sheet_id = :sid AND is_test = 0 ORDER BY email", sid=sid)
     assert [r["display_name"] for r in rows] == ["Alexis Jones", "Alex Johnson", "New Person"]
 
 
@@ -3046,7 +3048,7 @@ def test_lists_that_arent_class_lists_are_turned_away_quietly(prof):
                                                                                             "email": "a@b.edu"}]})
     prof.post(f"/teach/s/{sid}/canvas-list", {"list": odd})
     with prof.app.app_context():
-        assert db.scalar("SELECT display_name FROM roster WHERE sheet_id = :s", s=sid) == "A B"
+        assert db.scalar("SELECT display_name FROM roster WHERE sheet_id = :s AND is_test = 0", s=sid) == "A B"
         assert db.scalar("SELECT COUNT(*) FROM error_log") == 0
 
 
@@ -3167,7 +3169,7 @@ def test_scheduler_helper_is_offered_only_once_it_exists(prof, monkeypatch):
     # A list the helper fetched for this page goes in like one copied here.
     r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=3), "how": "helper"})
     assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")
-    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 3
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid) == 3
 
 
 def test_the_helper_extension_builds_with_least_permissions():
@@ -3243,7 +3245,7 @@ def test_connect_canvas_reads_the_class_list_with_canvas_permission(prof, monkey
     assert text(prof.get("/teach/canvas/oauth/pick")) == page  # a reload just shows them again
     r = prof.post("/teach/canvas/oauth/pick", {"course_id": "101", "course_name": "2026FA_BUSCOM_615_SEC1 (2026 Fall)"})
     assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")
-    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 57
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid) == 57
     assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :sid", sid=sid) == "101"
     assert "Who was added (57)" in text(prof.get(f"/teach/s/{sid}"))
     assert not fake.TOKENS  # Canvas's permission given back at once
@@ -3268,7 +3270,7 @@ def test_connect_canvas_takes_no_for_an_answer_and_nothing_forged(prof, monkeypa
     r = prof.get(back.path + "?" + forged)
     assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")
     assert "already been used, so nothing happened" in follow(prof, r) and not fake.TOKENS
-    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 0
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid) == 0
     # The permission waits ten minutes for the course to be picked, no more, and is given back even then: on a
     # pick, or on a reload of the course list.
     monkeypatch.setattr(canvas_oauth, "SEALED_FOR", -1)
@@ -3310,7 +3312,7 @@ def test_connect_canvas_can_pick_a_different_course(prof, monkeypatch):
     r = prof.post(r.headers["Location"], {"action": "replace"})
     assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students")
     assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :sid", sid=sid) == "202"
-    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 8
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid) == 8
 
 
 def test_leaving_the_course_list_any_way_gives_canvas_its_permission_back(prof, monkeypatch):
@@ -3343,7 +3345,7 @@ def test_leaving_the_course_list_any_way_gives_canvas_its_permission_back(prof, 
         r = again_there()
         assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")
         assert "already been used" in follow(prof, r)
-    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 4
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid) == 4
     # Connect Canvas pressed again while a course list waits: the waiting permission goes back first.
     _connect(prof, canvas, sid, "?pick=1")
     assert len(fake.TOKENS) == 1
@@ -3371,11 +3373,11 @@ def test_a_course_list_left_open_for_another_sheet_reads_nothing(prof, monkeypat
     page = follow(prof, r)
     assert "was for a different sheet, so nothing was read" in page and "Which course is “Torts” for?" in page
     for sid in (first, second):
-        assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 0
+        assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid) == 0
     # Picked on the list that's waiting: that sheet's.
     prof.post("/teach/canvas/oauth/pick", {"sid": second, "course_id": "202", "course_name": "2026FA_LAW_540_SEC20"})
-    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=second) == 8 and not fake.TOKENS
-    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=first) == 0
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=second) == 8 and not fake.TOKENS
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=first) == 0
 
 
 def test_connect_canvas_asks_again_when_the_sheets_course_is_gone(prof, monkeypatch):
@@ -3402,7 +3404,7 @@ def test_connect_canvas_asks_again_when_the_sheets_course_is_gone(prof, monkeypa
     r = prof.post("/teach/canvas/oauth/pick", {"course_id": "202", "course_name": "2026FA_LAW_540_SEC20 (2026 Fall)"})
     assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students") and not fake.TOKENS
     assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :sid", sid=sid) == "202"
-    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 8
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid) == 8
     assert taken == [("connect", "8823")]
     # One Canvas won't share any more (they're off the course), with a list in place: what changes, first.
     with prof.app.app_context():
@@ -3434,7 +3436,7 @@ def test_a_file_with_no_names_or_emails_gets_a_look_first(prof):
     r = prof.upload(sid, "Alex Kim,2L,Torts\nSam Lee,3L,Contracts\nRiya Patel,2L,Torts\n", filename="class.csv")
     assert "/roster/review/" in r.headers["Location"]  # though the sheet has no list yet
     assert "may not be your class list" in text(prof.get(r.headers["Location"]))
-    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid", sid=sid) == 0
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid) == 0
 
 
 def test_no_message_points_at_a_guide_that_is_gone():
@@ -3451,7 +3453,7 @@ def test_canvas_names_written_last_first_are_turned_round_not_cut(prof):
     names = ["Kim, Alex", "Lee, Sam", "Diaz, Maria", "Kim, Jordan"]
     prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=4, names=names)})
     with prof.app.app_context():
-        got = sorted(r["display_name"] for r in db.rows("SELECT display_name FROM roster WHERE sheet_id = :s", s=sid))
+        got = sorted(r["display_name"] for r in db.rows("SELECT display_name FROM roster WHERE sheet_id = :s AND is_test = 0", s=sid))
     assert got == ["Alex Kim", "Jordan Kim", "Maria Diaz", "Sam Lee"]
 
 
