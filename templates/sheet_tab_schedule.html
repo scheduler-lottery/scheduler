@@ -259,20 +259,24 @@
     {% endif %}
   {% endif %}
 
-  <details class="more-options">
-    <summary>Advanced — how ties are broken (most people never change this)</summary>
-    <form method="post" action="{{ url_for('teach.set_algorithm', sid=sheet.id) }}" class="capacity-row"
-          {% if has_schedule %}data-confirm="The schedule is already made. Changing how ties are broken gives a different draw — students were told the draw is fixed. Change it anyway? (The change is kept in Earlier versions.)"{% endif %}>
+  <details class="more-options" id="matching">
+    <summary>How days are matched (most people never change this)</summary>
+    <p class="mini-hint">The first option, a lottery, suits almost every class. The others sort and match differently; <a href="{{ url_for('how_it_works') }}" target="_blank" rel="noopener">see them side by side on an example</a>.</p>
+    <form method="post" action="{{ url_for('teach.set_algorithm', sid=sheet.id) }}" class="algo-choices"
+          {% if has_schedule %}data-confirm="The schedule is already made. Changing how days are matched gives a different schedule — students were told the draw is fixed. Change it anyway? (The change is kept in Earlier versions.)"{% endif %}>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label for="algorithm" class="visually-hidden">Method</label>
-      <select id="algorithm" name="algorithm">
+      <fieldset>
+        <legend class="visually-hidden">How days are matched</legend>
         {% for algo_id in choosable %}
-        <option value="{{ algo_id }}" {{ 'selected' if algo_id == current_algorithm }}>{{ algorithms[algo_id].label }}</option>
+        <label class="choice algo-choice">
+          <input type="radio" name="algorithm" value="{{ algo_id }}" {{ 'checked' if algo_id == current_algorithm }}>
+          <span><strong>{{ algorithms[algo_id].label }}</strong>{% if algo_id == current_algorithm %} <span class="tag">in use</span>{% endif %}
+            <span class="algo-choice-desc">{{ algorithms[algo_id].description }}</span></span>
+        </label>
         {% endfor %}
-      </select>
-      <button type="submit" class="btn btn-secondary btn-small">Use this</button>
+      </fieldset>
+      <button type="submit" class="btn btn-secondary btn-small">Use this one</button>
     </form>
-    <p class="mini-hint">{{ algorithms[current_algorithm].description }}</p>
     <form method="post" action="{{ url_for('teach.compare', sid=sheet.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-ghost btn-small" {{ 'disabled' if not submissions }}>Compare the options on your class's rankings</button>

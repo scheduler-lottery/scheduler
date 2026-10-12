@@ -21,7 +21,7 @@ from sqlalchemy import create_engine, event, text
 import settings
 from util import iso, new_id
 
-SCHEMA_VERSION = "18"
+SCHEMA_VERSION = "19"
 SCHEMA_PATH = os.path.join(settings.BASE_DIR, "schema.sql")
 # Postgres advisory lock held while one server upgrades the schema (any
 # number, as long as nothing else in the database uses the same one).
@@ -75,6 +75,14 @@ MIGRATIONS = [
     ("sheets", "canvas_course", "TEXT"),
     ("canvas_imports", "expires_at", "TEXT"),
     ("sheets", "short_code", "TEXT"),
+    ("submissions", "first_at", "TEXT"),  # (when a ranking was first saved: first come, first served)
+    # Emails to the instructor about their class's progress (deadlines.progress, quiet_weeks, deadline_soon),
+    # each sent once, unless they turn them off.
+    ("sheets", "progress_emails", "INTEGER NOT NULL DEFAULT 1"),
+    ("sheets", "half_ranked_at", "TEXT"),
+    ("sheets", "most_ranked_at", "TEXT"),
+    ("sheets", "quiet_told_at", "TEXT"),
+    ("sheets", "reminder_told_at", "TEXT"),
 ]
 
 # Indexes on columns added above (so made after them).

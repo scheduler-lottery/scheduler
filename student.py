@@ -849,8 +849,9 @@ def save(sid):
     saved_at = iso()
     db.run(
         """
-        INSERT INTO submissions (sheet_id, name_key, display_name, ranking, excluded_days, comments, updated_at)
-        VALUES (:sid, :key, :name, :ranking, :excluded, :comments, :at)
+        INSERT INTO submissions (sheet_id, name_key, display_name, ranking, excluded_days, comments, updated_at,
+                                 first_at)
+        VALUES (:sid, :key, :name, :ranking, :excluded, :comments, :at, :at)
         ON CONFLICT (sheet_id, name_key) DO UPDATE SET
             display_name = excluded.display_name,
             ranking = excluded.ranking,
@@ -865,6 +866,7 @@ def save(sid):
     sheets.touch(g.sheet["id"])
     db.commit()
     deadlines.everyone_ranked(g.sheet)
+    deadlines.progress(g.sheet)
     return jsonify(ok=True, saved_at=saved_at)
 
 

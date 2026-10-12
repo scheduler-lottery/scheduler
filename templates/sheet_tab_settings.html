@@ -14,6 +14,22 @@
   <a class="btn btn-secondary" href="{{ url_for('teach.edit_sheet', sid=sheet.id) }}">Edit days &amp; settings</a>
 </section>
 
+{# -------------------------------------------------- emails about progress #}
+<section class="card" id="progress-emails">
+  <h2 class="card-heading">Emails to you about your class</h2>
+  <form method="post" action="{{ url_for('teach.set_progress_emails', sid=sheet.id) }}" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="choice">
+      <input type="checkbox" name="progress_emails" value="1" {{ 'checked' if sheet.progress_emails }}>
+      <span><strong>Email me how sign-ups are going</strong>: when half of your class has ranked, then nine in ten;
+        if a week goes by after you share the link and nobody has ranked; and two days before your deadline, with
+        who still hasn't. Each comes once, with a ready-made reminder for students on your class page.</span>
+    </label>
+    <button type="submit" class="btn btn-secondary btn-small">Save</button>
+  </form>
+  {% if not mail_by_gmail %}<p class="mini-hint">This site can't send email of its own yet, so these emails wait until its owner sets that up. Your class page shows the same news.</p>{% endif %}
+</section>
+
 {# --------------------------------------------------------------- backups #}
 <section class="card" id="backups">
   <h2 class="card-heading">Backups</h2>

@@ -83,7 +83,7 @@
     <div class="algo-options">
       {% for algo_id, algo in algorithms.items() %}
       {% set ex = examples[algo_id] %}
-      <article class="algo-option{{ ' is-recommended' if algo_id == 'da_independent' }}{{ ' is-compare' if algo.compare_only }}">
+      <article class="algo-option{{ ' is-recommended' if algo_id == default_algorithm }}{{ ' is-compare' if algo.compare_only }}">
         <h4 class="algo-option-title">{{ algo.label }}</h4>
         <p class="algo-desc">{{ algo.description }}</p>
         <div class="algo-example">
@@ -104,7 +104,7 @@
       {% endfor %}
     </div>
     {% if examples.da_single_lottery.verdict == examples.da_independent.verdict %}
-    <p class="mini-hint">Here the first two options give the same schedule. In a real class, with more students and days, their results differ a little: one shared order is the same line for every day, while a draw for each day gives a student unlucky on one day a fresh chance on the next.</p>
+    <p class="mini-hint">Here the first options all give the same schedule. In a real class, with more students and days, their results differ a little: one shared order is the same line for every day; a draw for each day gives a student unlucky on one day a fresh chance on the next; “most first choices” packs in first choices, and “first come” follows the order students ranked in.</p>
     {% endif %}
     <p class="mini-hint">
       The matching is computed with <a href="https://github.com/daffidwilde/matching" target="_blank" rel="noopener">matching</a>,

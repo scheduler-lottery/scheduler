@@ -166,7 +166,8 @@ def test_the_store_build_is_chromes_alone_and_asks_for_nothing_new(tmp_path, mon
     with zipfile.ZipFile(tmp_path / "scheduler-helper.zip") as z:
         manifest = json.loads(z.read("manifest.json"))
         code = z.read("background.js").decode()
-    assert manifest["version"] == "1.0.3" and manifest["permissions"] == ["scripting"]
+    assert manifest["version"] == "1.0.4" and manifest["permissions"] == ["scripting"]
+    assert manifest["action"]["default_popup"] == "popup.html"  # (its own box: "Delete me"; no permission needed)
     assert manifest["host_permissions"] == ["https://canvas.northwestern.edu/*"]
     assert "background" in manifest and list(manifest["background"]) == ["service_worker"]
     assert "safari" not in code.lower() and "allow.html" not in code

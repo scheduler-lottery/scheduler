@@ -871,7 +871,8 @@ def export_sheet(sheet, include_pins=False):
         "days": get_days(sid),
         "roster": get_roster(sid),
         "submissions": [
-            {k: r[k] for k in ("name_key", "display_name", "ranking", "excluded_days", "comments", "updated_at")}
+            {k: r.get(k) for k in ("name_key", "display_name", "ranking", "excluded_days", "comments", "updated_at",
+                                   "first_at")}
             for r in get_submissions(sid)
         ],
         "assignments": [
@@ -1372,10 +1373,12 @@ def restore(sheet_id, owner_id, data, keep_newer=True, parts=None):
                     merged[s["name_key"]] = s
         db.run("DELETE FROM submissions WHERE sheet_id = :sid", sid=sheet_id)
         db.run_many(
-            "INSERT INTO submissions (sheet_id, name_key, display_name, ranking, excluded_days, comments, updated_at) "
-            "VALUES (:sid, :name_key, :display_name, :ranking, :excluded_days, :comments, :updated_at)",
-            [{"sid": sheet_id, **{k: s[k] for k in ("name_key", "display_name", "ranking", "excluded_days",
-                                                      "comments", "updated_at")}} for s in merged.values()],
+            "INSERT INTO submissions (sheet_id, name_key, display_name, ranking, excluded_days, comments, updated_at, "
+            "first_at) VALUES (:sid, :name_key, :display_name, :ranking, :excluded_days, :comments, :updated_at, "
+            ":first_at)",
+            [{"sid": sheet_id, "first_at": s.get("first_at") or s["updated_at"],
+              **{k: s[k] for k in ("name_key", "display_name", "ranking", "excluded_days", "comments", "updated_at")}}
+             for s in merged.values()],
         )
     if "assignments" in parts:
         db.run("DELETE FROM assignments WHERE sheet_id = :sid", sid=sheet_id)

@@ -181,7 +181,7 @@ try {
   check(await until(me.session, `document.querySelector("[data-helper-go]").offsetParent !== null`),
     "with the helper installed, the step offers one button: Get my class list from Canvas");
   check(await evaluate(me.session, `!document.querySelector("[data-canvas-download]").open
-    && [...document.querySelectorAll(".canvas-guide details")].filter((d) => !d.closest("[hidden]")).length === 1`),
+    && [...document.querySelectorAll(".canvas-guide details")].filter((d) => !d.closest("[hidden]") && !d.parentElement.closest("details")).length === 1`),
     "with only one other way, folded: upload Canvas's student file");
   await shot(me.session, "1-one-button.png", "[data-helper]");
 
@@ -234,11 +234,11 @@ try {
   await evaluate(me.session, `document.querySelector(".canvas-update").open = true`);
   check(await until(me.session, `document.querySelector("[data-helper-go]") && document.querySelector("[data-helper-go]").offsetParent !== null`),
     "Update from Canvas offers the same one button");
-  const tabsBefore = (await send("Target.getTargets")).targetInfos.filter((t) => t.type === "page").length;
+  const tabsBefore = (await send("Target.getTargets")).targetInfos.filter((t) => t.type === "page" && !t.url.startsWith("chrome-extension:")).length;
   await evaluate(me.session, `document.querySelector("[data-helper-go]").click()`);
   check(await until(me.session, `document.readyState === "complete" && document.body.innerText.includes("already matches 2026FA_BUSCOM_615_SEC1")`, 15000),
     "one click: Canvas's list read and compared, nothing changed, and it says so");
-  const tabsAfter = (await send("Target.getTargets")).targetInfos.filter((t) => t.type === "page").length;
+  const tabsAfter = (await send("Target.getTargets")).targetInfos.filter((t) => t.type === "page" && !t.url.startsWith("chrome-extension:")).length;
   check(tabsAfter === tabsBefore, "with no Canvas tab at all (read directly, signed in)");
 
   // Canvas is read only over a port (single messages are for "hello" and the like), and "hello" says what else it can do.
@@ -448,8 +448,11 @@ try {
   // Added again: a list it brings, added, and then the offer to remove it
   // from Chrome, which does just that, in one press.
   await send("Extensions.loadUnpacked", { path: HELPER });
-  check(await until(me.session, `document.querySelector("[data-helper-said]").textContent.includes("Scheduler Helper is added")`, 15000),
-    "added again: the page notices by itself");
+  check(await until(me.session, `!document.querySelector("[data-canvas-arrived]").hidden
+    || !document.querySelector("[data-helper-courses]").hidden
+    || /Getting|sign in/.test(document.querySelector("[data-helper-said]").textContent)`, 15000),
+    "added again: the page notices by itself, and carries on getting the list (said: "
+    + await evaluate(me.session, `document.querySelector("[data-helper-said]").textContent`) + ")");
   check(!!(await canvasStep(me.session, "LAW 540 Remove Seminar"))
     && await until(me.session, `document.querySelector("[data-helper-go]").offsetParent !== null`, 15000), "a new sheet's one button");
   await evaluate(me.session, `document.querySelector("[data-helper-go]").click()`);

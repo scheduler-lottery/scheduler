@@ -731,25 +731,62 @@ def _sign_in_line(sheet, counts):
             "ask me to reset it.")
 
 
+def _reminders(sheet, share_url, counts, emails):
+    """Ready-made reminders for students who haven't ranked, to send from the
+    instructor's own email: {to, bcc, count, messages: [{label, subject, body}]}."""
+    me = current_instructor()
+    title = sheet["title"]
+    by = f" by {sheet['rank_by']}" if sheet["rank_by"] else ""
+    early = ALGORITHM_EARLY.get(sheet["algorithm"])
+    messages = [{
+        "label": "Friendly reminder",
+        "subject": f"Reminder: rank your presentation days for {title}",
+        "body": (f"Hi everyone,\n\nIf you haven't yet, please rank the days you could present for “{title}”{by}.\n\n"
+                 f"It takes about a minute. Here's the link:\n\n{share_url}\n\n"
+                 + (f"{early}\n\n" if early else "") + "Thanks!\n"),
+    }]
+    if sheet["closes_at"]:
+        when = deadlines.describe(sheet["closes_at"], sheet["owner_timezone"] or settings.DEFAULT_TIMEZONE)
+        messages.append({
+            "label": "Last call before the deadline",
+            "subject": f"Last call: rank your presentation days for {title}",
+            "body": (f"Hi everyone,\n\nSign-ups for “{title}” close {when}.\n\n"
+                     f"If you haven't ranked your days yet, please do it today. It takes about a minute:\n\n"
+                     f"{share_url}\n\nIf you don't rank, you'll get whatever day is left over.\n\nThanks!\n"),
+        })
+    sender = signin.code_sender()
+    messages.append({
+        "label": "Trouble signing in?",
+        "subject": f"How to sign in and rank your days for {title}",
+        "body": (f"Hi everyone,\n\nIf you haven't ranked your presentation days for “{title}” yet, here's how.\n\n"
+                 f"1. Open this link: {share_url}\n\n2. {_sign_in_line(sheet, counts)}\n\n"
+                 "3. Put the days in your order of preference, favorite at the top, and press “Save my ranking”.\n\n"
+                 "No code arriving? Check your spam or junk folder"
+                 + (f" (it comes from {sender})" if sender else "")
+                 + ". Still stuck? Reply to this email, and I'll send you a sign-in link myself.\n\nThanks!\n"),
+    })
+    return {"to": me["email"], "bcc": ", ".join(emails), "count": len(emails), "messages": messages}
+
+
 def _announcement(sheet, share_url, counts):
     if not sheet["allow_unlisted"] and not counts["roster"]:
         return ""
-    lines = [
-        f"Please rank the presentation days for {sheet['title']}:",
+    # One thought to a paragraph: easy to read in an email.
+    paragraphs = [
+        f"Please rank the presentation days for {sheet['title']}. Here's the link:",
         share_url,
-        "",
         _sign_in_line(sheet, counts),
-        "",
-        "Then put the days in your real order of preference, favorite at the top, and press “Save my ranking”. "
-        "After that it saves as you go, and you can change it until sign-ups close."
+        "Then put the days in your real order of preference, favorite at the top, and press “Save my ranking”.",
+        "After that, it saves as you go, and you can change it until sign-ups close."
         + (f" Please rank by {sheet['rank_by']}." if sheet["rank_by"] else ""),
     ]
-    if sheet["algorithm"] != "da_day_favorable":
-        lines.append("Ranking early doesn't help: if too many people want the same day, a fair random draw decides.")
-    lines.append("Once I publish the schedule, you'll see your day on that same page.")
+    early = ALGORITHM_EARLY.get(sheet["algorithm"])
+    if early:
+        paragraphs.append(early)
+    paragraphs.append("Once I publish the schedule, you'll see your day on that same page.")
     if sheet["note"]:
-        lines += ["", sheet["note"]]
-    return "\n".join(lines)
+        paragraphs.append(sheet["note"])
+    return "\n\n".join(paragraphs)
 
 
 def _publish_announcement(sheet, share_url, counts, without_day=0):
@@ -965,8 +1002,8 @@ def _changed_emails(sheet, snap_id, roster_rows):
 # Each class has three tabs: Class (the class at a glance and its sign-ups),
 # Schedule (running the bidding) and Settings (days, backups, deleting).
 # Anchors say which tab a section lives on, for links and redirects.
-SCHEDULE_ANCHORS = {"schedule", "publish", "no-day", "algorithm", "capacity", "move-who", "move-to"}
-SETTINGS_ANCHORS = {"settings", "backups", "danger"}
+SCHEDULE_ANCHORS = {"schedule", "publish", "no-day", "algorithm", "matching", "capacity", "move-who", "move-to"}
+SETTINGS_ANCHORS = {"settings", "progress-emails", "backups", "danger"}
 TAB_TEMPLATES = {"class": "sheet_tab_class.html", "schedule": "sheet_tab_schedule.html",
                  "settings": "sheet_tab_settings.html"}
 
@@ -1144,20 +1181,11 @@ def _sheet_page(sid, tab):
     if not code:  # deleted from another tab while this page was loading: owned_sheet says so
         return redirect(url_for("teach.sheet", sid=sid))
     short_url = url_for("short_link", code=code, _external=True)
-    # "Nudge": a reminder to everyone on the list who hasn't ranked, from the
-    # instructor's own email (their addresses in Bcc).
+    # Reminders for everyone on the list who hasn't ranked, from the
+    # instructor's own email (their addresses in Bcc): a friendly one, a last
+    # call before the deadline, and one for students having trouble signing in.
     waiting_emails = [r["email"] for r in not_yet if r["email"]]
-    nudge = {
-        "to": me["email"], "bcc": ", ".join(waiting_emails), "count": len(waiting_emails),
-        "subject": f"Reminder: rank your presentation days for {sheet['title']}",
-        "body": (
-            "Hi everyone,\n\n"
-            f"If you haven't yet, please rank the days you could present for “{sheet['title']}”"
-            + (f" by {sheet['rank_by']}" if sheet["rank_by"] else "") + ". It takes about a minute, and ranking "
-            "early or late makes no difference to the day you get:\n\n"
-            f"{share_url}\n\nThanks!\n"
-        ),
-    } if sheet["bidding_open"] and waiting_emails else None
+    nudge = _reminders(sheet, share_url, counts, waiting_emails) if sheet["bidding_open"] and waiting_emails else None
     report = session.get("roster_report")
     if report and report.get("at") and time.time() - report["at"] > REPORT_HOURS * 3600:
         session.pop("roster_report", None)  # (a day-old report, and its undo, would read as today's)
@@ -1345,9 +1373,10 @@ def undo(sid, snap_id):
         ):
             db.run(
                 "INSERT INTO submissions (sheet_id, name_key, display_name, ranking, excluded_days, comments, "
-                "updated_at) VALUES (:sid, :key, :name, :ranking, :excluded, :comments, :at)",
+                "updated_at, first_at) VALUES (:sid, :key, :name, :ranking, :excluded, :comments, :at, :first)",
                 sid=sheet["id"], key=key, name=sub["display_name"], ranking=sub["ranking"],
                 excluded=sub["excluded_days"], comments=sub["comments"], at=sub["updated_at"],
+                first=sub.get("first_at") or sub["updated_at"],
             )
             seat = next((a for a in data["assignments"] if a["name_key"] == key), None)
             known = {d["key"] for d in sheets.get_days(sheet["id"])}
@@ -1401,6 +1430,8 @@ def undo(sid, snap_id):
 # The last word on a report about Canvas's own download, which has grades in it.
 CANVAS_FILE_TIP = "Canvas's file is still in your Downloads folder, and it has grades in it. You can delete it now."
 REPORT_TIPS = 8  # notes a report shows, at most
+# What the message to students says about ranking early, by how days are matched.
+ALGORITHM_EARLY = {key: option.get("early") for key, option in ALGORITHMS.items()}
 REPORT_HOURS = 12  # how long a report stays on the class page, unless "OK, got it" goes first
 # New students offered the link after an update, at most: past that it's a new class, shared the usual way (and
 # their names ride in the session cookie, which a few hundred would overflow, losing the report with them).
@@ -2397,6 +2428,20 @@ def remove_student(sid):
     return _back(sheet, "class-list")
 
 
+@bp.route("/s/<sid>/progress-emails", methods=["POST"])
+@instructor_required
+def set_progress_emails(sid):
+    """Emails about the class's progress (deadlines.progress, quiet_weeks,
+    deadline_soon): on or off."""
+    sheet = owned_sheet(sid)
+    on = request.form.get("progress_emails") == "1"
+    db.run("UPDATE sheets SET progress_emails = :on WHERE id = :sid", on=int(on), sid=sheet["id"])
+    db.commit()
+    flash("You'll get emails about how your class is doing." if on else
+          "No more emails about how your class is doing (you'll still hear about your deadline).", "success")
+    return _back(sheet, "progress-emails")
+
+
 @bp.route("/s/<sid>/who", methods=["POST"])
 @instructor_required
 def set_who(sid):
@@ -3066,7 +3111,7 @@ def set_algorithm(sid):
               "used for a real schedule.", "error")
     elif algorithm != sheet["algorithm"]:
         if sheets.get_assignments(sheet["id"]):
-            sheets.take_snapshot(sheet, "method", "Before changing how ties are broken")
+            sheets.take_snapshot(sheet, "method", "Before changing how days are matched")
         db.run("UPDATE sheets SET algorithm = :a, updated_at = :at WHERE id = :sid",
                a=algorithm, at=iso(), sid=sheet["id"])
         db.commit()

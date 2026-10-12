@@ -4,8 +4,11 @@ Turning everyone's rankings into a schedule.
 The heart of it is a peer-reviewed solver — the `matching` package's
 Hospital/Residents game (many-to-one Gale–Shapley deferred acceptance), the
 family of algorithm school-choice systems use to assign students to schools
-with limited seats. Days have no opinions of their own, so each option only
-controls how the random tie-breaking order is drawn.
+with limited seats. Days have no opinions of their own, so most options only
+control the order that breaks ties: a random draw, or, first come first
+served, when each student first saved a ranking. "Most first choices"
+solves instead for the most first choices, then seconds, and so on (a
+min-cost flow), with the draw breaking ties.
 
 Around the solver, three things it doesn't know about:
 
@@ -36,34 +39,69 @@ import json
 import time
 from collections import Counter
 
-DEFAULT_ALGORITHM = "da_independent"
+# New sheets start with the first option; a sheet keeps the one it has.
+DEFAULT_ALGORITHM = "da_single_lottery"
+DRAW_SAYS = "Ranking early doesn't help: if too many people want the same day, a fair random draw decides."
 
 ALGORITHMS = {
-    "da_independent": {
-        "label": "Fair draw for each day (recommended)",
-        "short": "Fair draw (recommended)",
-        "description": (
-            "Everyone's list is considered at once, and each student gets a day as high on "
-            "their list as possible. When more students want a day than it has seats, a "
-            "random draw decides — a separate draw for each day. Students gain nothing by "
-            "ranking dishonestly."
-        ),
-        "technical": (
-            "Student-proposing deferred acceptance (resident-optimal) with an independent "
-            "random priority order per day. Stable and strategy-proof for students."
-        ),
-    },
     "da_single_lottery": {
-        "label": "One shared draw",
-        "short": "One shared draw",
+        "label": "Lottery (recommended): one random order",
+        "short": "Lottery",
         "description": (
             "Students are put in one random order, and each, in turn, gets the best day still "
-            "open on their list. Also fair; results are a little different."
+            "open on their list. Simple and fair, and students gain nothing by ranking "
+            "dishonestly."
         ),
         "technical": (
             "Deferred acceptance with a single random priority order shared by every day — "
             "equivalent to random serial dictatorship. Strategy-proof for students."
         ),
+        "early": DRAW_SAYS,
+    },
+    "da_independent": {
+        "label": "Fair draw for each day",
+        "short": "Fair draw for each day",
+        "description": (
+            "Everyone's list is considered at once, and each student gets a day as high on "
+            "their list as possible. When more students want a day than it has seats, a "
+            "random draw decides — a separate draw for each day. Also fair, and students gain "
+            "nothing by ranking dishonestly; results are a little different."
+        ),
+        "technical": (
+            "Student-proposing deferred acceptance (resident-optimal) with an independent "
+            "random priority order per day. Stable and strategy-proof for students."
+        ),
+        "early": DRAW_SAYS,
+    },
+    "rank_max": {
+        "label": "Most first choices",
+        "short": "Most first choices",
+        "description": (
+            "Gives as many students as possible their first choice, then as many as possible "
+            "their second, and so on; a random draw breaks ties. Usually the most first "
+            "choices, but a student could, in principle, do better by not ranking honestly."
+        ),
+        "technical": (
+            "Rank-maximal assignment among maximum-cardinality ones (a min-cost max-flow "
+            "with lexicographic weights), ties broken by a single random order. Not "
+            "strategy-proof."
+        ),
+        "early": "Ranking early doesn't help: the schedule gives as many people as possible their first choice, "
+                 "and a fair random draw breaks ties.",
+    },
+    "first_come": {
+        "label": "First come, first served",
+        "short": "First come",
+        "description": (
+            "Whoever ranks first gets first pick: in the order students first saved their "
+            "ranking, each gets the best day still open on their list. Changing a ranking "
+            "later keeps their place. Rewards ranking early, and the message to students says so."
+        ),
+        "technical": (
+            "Serial dictatorship in order of each student's first saved ranking (ties, by the "
+            "draw). Strategy-proof for students given the order."
+        ),
+        "early": "Rank soon: if too many people want the same day, whoever ranked first gets it.",
     },
     "da_day_favorable": {
         "compare_only": True,
@@ -119,6 +157,7 @@ def build_student_prefs(submission_rows, day_keys):
             "pref": [d for d in ranking if d not in excluded],
             "ranking": ranking,
             "excluded": excluded,
+            "at": r.get("first_at") or r.get("updated_at") or "",  # (first come, first served)
         })
     return students
 
@@ -138,9 +177,109 @@ def _solve(students, day_keys, seats, algorithm, seed):
     keys = [k for k, p in prefs.items() if p]
     if not keys:
         return {}
-    shared = algorithm == "da_single_lottery"
-    priority = {d: sorted(keys, key=lambda k: _draw(seed, "all" if shared else d, k)) for d in open_days}
+    if algorithm == "rank_max":
+        return _rank_max({k: prefs[k] for k in keys}, sorted(keys, key=lambda k: _draw(seed, "all", k)), seats)
+    if algorithm == "first_come":
+        at = {s["key"]: s.get("at") or "" for s in students}
+        order = sorted(keys, key=lambda k: (at[k] or "~", _draw(seed, "all", k)))  # (no time: last)
+        priority = {d: order for d in open_days}
+    else:
+        shared = algorithm == "da_single_lottery"
+        priority = {d: sorted(keys, key=lambda k: _draw(seed, "all" if shared else d, k)) for d in open_days}
     return solve_with({k: prefs[k] for k in keys}, priority, seats, algorithm, day_keys)
+
+
+def _rank_max(prefs, order, seats):
+    """Most first choices: as many students placed as can be; among those
+    schedules, the most first choices, then the most second choices, and so
+    on; ties go to whoever is earlier in `order` (the draw). An exact
+    min-cost max-flow (source -> student -> day -> sink, successive
+    shortest paths with potentials), with weights that make each of those
+    aims outrank the next. `prefs`: {key: [days, best first]}. Returns
+    {key: day}."""
+    import heapq
+
+    keys = list(order)
+    n = len(keys)
+    days = sorted({d for k in keys for d in prefs[k] if seats.get(d, 0) > 0})
+    if not n or not days:
+        return {}
+    longest = max(len(prefs[k]) for k in keys)
+    base = n + 1
+    tie = n * longest * n + 1  # (the draw's part never outweighs a single better rank)
+    placed = base ** (longest + 1) * tie  # (placing someone outweighs any ranks)
+
+    # Nodes: 0 source, 1..n students, then days, then the sink.
+    source, sink = 0, n + len(days) + 1
+    day_node = {d: n + 1 + i for i, d in enumerate(days)}
+    graph = [[] for _ in range(sink + 1)]  # edges: [to, capacity, cost, index of the reverse edge]
+
+    def edge(a, b, cap, cost):
+        graph[a].append([b, cap, cost, len(graph[b])])
+        graph[b].append([a, 0, -cost, len(graph[a]) - 1])
+
+    for i, k in enumerate(keys):
+        edge(source, i + 1, 1, 0)
+        for r, d in enumerate(prefs[k]):
+            if d in day_node:
+                value = placed + base ** (longest - r) * tie + (longest - r) * (n - i)
+                edge(i + 1, day_node[d], 1, -value)
+    for d in days:
+        edge(day_node[d], sink, seats[d], 0)
+
+    # Potentials: shortest distances from the source (a DAG, so in order).
+    inf = float("inf")
+    potential = [inf] * (sink + 1)
+    potential[source] = 0
+    for node in [source] + list(range(1, n + 1)) + [day_node[d] for d in days]:
+        if potential[node] == inf:
+            continue
+        for to, cap, cost, _ in graph[node]:
+            if cap > 0 and potential[node] + cost < potential[to]:
+                potential[to] = potential[node] + cost
+    for i in range(sink + 1):
+        if potential[i] == inf:
+            potential[i] = 0
+
+    while True:
+        dist = [inf] * (sink + 1)
+        back = [None] * (sink + 1)
+        dist[source] = 0
+        heap = [(0, source)]
+        while heap:
+            here, node = heapq.heappop(heap)
+            if here > dist[node]:
+                continue
+            for j, (to, cap, cost, _) in enumerate(graph[node]):
+                if cap <= 0:
+                    continue
+                step = here + cost + potential[node] - potential[to]
+                if step < dist[to]:
+                    dist[to] = step
+                    back[to] = (node, j)
+                    heapq.heappush(heap, (step, to))
+        if dist[sink] == inf:
+            break
+        for i in range(sink + 1):
+            if dist[i] < inf:
+                potential[i] += dist[i]
+        if potential[sink] - potential[source] >= 0:
+            break  # (no placement left that adds anything)
+        node = sink
+        while node != source:
+            prev, j = back[node]
+            graph[prev][j][1] -= 1
+            to, _, _, rev = graph[prev][j]
+            graph[to][rev][1] += 1
+            node = prev
+
+    who = {day_node[d]: d for d in days}
+    assigned = {}
+    for i, k in enumerate(keys):
+        for to, cap, cost, _ in graph[i + 1]:
+            if to in who and cap == 0 and cost < 0:
+                assigned[k] = who[to]
+    return assigned
 
 
 def solve_with(prefs, priority, seats, algorithm, day_keys):
@@ -180,11 +319,15 @@ EXAMPLE = {
         "da_independent": {"Monday": ["Cleo", "Dev", "Ana", "Ben"], "Tuesday": ["Ana", "Ben", "Cleo", "Dev"]},
         "da_single_lottery": {"Monday": ["Cleo", "Dev", "Ana", "Ben"], "Tuesday": ["Cleo", "Dev", "Ana", "Ben"]},
         "da_day_favorable": {"Monday": ["Cleo", "Dev", "Ana", "Ben"], "Tuesday": ["Ana", "Ben", "Cleo", "Dev"]},
+        "rank_max": {"Monday": ["Cleo", "Dev", "Ana", "Ben"], "Tuesday": ["Cleo", "Dev", "Ana", "Ben"]},
+        "first_come": {"Monday": ["Cleo", "Dev", "Ana", "Ben"], "Tuesday": ["Cleo", "Dev", "Ana", "Ben"]},
     },
     "results": {
         "da_independent": {"Ana": "Monday", "Ben": "Monday", "Cleo": "Tuesday", "Dev": "Tuesday"},
         "da_single_lottery": {"Ana": "Monday", "Ben": "Monday", "Cleo": "Tuesday", "Dev": "Tuesday"},
         "da_day_favorable": {"Ana": "Tuesday", "Ben": "Tuesday", "Cleo": "Monday", "Dev": "Monday"},
+        "rank_max": {"Ana": "Monday", "Ben": "Monday", "Cleo": "Tuesday", "Dev": "Tuesday"},
+        "first_come": {"Ana": "Monday", "Ben": "Monday", "Cleo": "Tuesday", "Dev": "Tuesday"},
     },
 }
 
@@ -198,6 +341,10 @@ def example_views():
         draws = EXAMPLE["draws"][algo]
         if algo == "da_single_lottery":
             draw = "One order for every day: " + ", ".join(draws["Monday"]) + "."
+        elif algo == "first_come":
+            draw = "The order they ranked in: " + ", ".join(draws["Monday"]) + "."
+        elif algo == "rank_max":
+            draw = "No draw needed here (a draw only breaks ties): " + ", ".join(draws["Monday"]) + "."
         else:
             draw = " ".join(f"{day}'s draw: {', '.join(order)}." for day, order in draws.items())
         firsts = sum(1 for name, day in result.items() if EXAMPLE["rankings"][name][0] == day)
@@ -321,18 +468,20 @@ def verdict(stats, current=DEFAULT_ALGORITHM):
     """One plain sentence about the comparison, aware of the option in use."""
     recommended = stats.get(DEFAULT_ALGORITHM) or {}
     rec_top1 = recommended.get("pct_top1") or 0
-    best_id, best = max(stats.items(), key=lambda kv: kv[1]["pct_top1"] or 0)
+    name = recommended.get("short", "Lottery")
+    best_id, best = max(((k, v) for k, v in stats.items() if not v.get("compare_only")),
+                        key=lambda kv: kv[1]["pct_top1"] or 0)
     using = stats.get(current) or recommended
     if current != DEFAULT_ALGORITHM and rec_top1 - (using.get("pct_top1") or 0) >= 2:
         return (
             f"The recommended option gives more students their first choice ({rec_top1:g}% vs. "
-            f"{using.get('pct_top1') or 0:g}%) — switch back to “{recommended.get('short', 'Fair draw')}”."
+            f"{using.get('pct_top1') or 0:g}%) — switch back to “{name}”."
         )
     if (best["pct_top1"] or 0) - rec_top1 < 2:
         if current == DEFAULT_ALGORITHM:
-            return "The recommended fair draw does as well as anything here for your class — keep it."
-        return "These options do about the same for your class; the recommended fair draw is the safe choice."
+            return f"The recommended “{name}” does as well as anything here for your class — keep it."
+        return f"These options do about the same for your class; the recommended “{name}” is the safe choice."
     return (
         f"For your class, “{best['short']}” gives a few more students their first choice. "
-        "Either is fair; the recommended one is the safe default."
+        "Each is fair in its own way; the recommended one is the safe default."
     )

@@ -66,4 +66,6 @@ def run_daily():
         "near_limits": usage.daily_check(),
         "workos_records_deleted": signin.forget_remote_users(),
         "deadlines_acted_on": deadlines.enforce_all(),
+        "quiet_weeks_told": deadlines.quiet_weeks(),
+        "deadlines_soon_told": deadlines.deadline_soon(),
     }

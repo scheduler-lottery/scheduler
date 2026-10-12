@@ -4,7 +4,7 @@
    Helper 1.0.3 removes itself; with 1.0.0, the steps in Chrome's own menu,
    and the page notices once it's gone. #}
 {% if report and report.helper and helper_ids %}
-<div class="helper-remove" data-helper-remove data-helper-ids="{{ helper_ids }}" hidden>
+<div class="helper-remove" data-helper-remove data-helper-ids="{{ helper_ids }}" data-report="{{ sheet.id }}-{{ report.at or '' }}" hidden>
   <p data-helper-remove-ask><strong>Done with Scheduler Helper?</strong> You can remove it from <span data-browser-name>Chrome</span> now. Keep it if you'll update this list from Canvas later (adding it back takes a few clicks).</p>
   <div class="helper-remove-buttons">
     <button type="button" class="btn btn-secondary btn-small" data-helper-remove-go>Remove it from <span data-browser-name>Chrome</span></button>

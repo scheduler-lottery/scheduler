@@ -177,23 +177,16 @@ try {
   check(!!store, "the store opens");
   if (store) await send("Target.activateTarget", { targetId: store.targetId });
   check(await until(me.session, `document.visibilityState === "hidden"`, 5000), "in front of this page");
-  // Added there (as "Add extension" does): this page comes back by itself, and points at the button.
-  const tabs = (await pages()).length;
+  // Added there (as "Add extension" does): the page and the helper find each other at once, and the page
+  // carries on by itself: signed out of Canvas, so Canvas's sign-in comes up, and that's all there is to do.
+  const was = created.length;
   const loaded = await send("Extensions.loadUnpacked", { path: HELPER });
   check(loaded.id === DEV_ID, "Scheduler Helper is added");
-  check(await until(me.session, `document.visibilityState === "visible"`, 10000), "this page comes back to the front by itself");
-  check(await until(me.session, `document.querySelector("[data-helper-said]").textContent.includes("Scheduler Helper is added. Now press Get my class list from Canvas")
-    && document.activeElement === document.querySelector("[data-helper-go]")`, 5000),
-    "saying it's added, with the one button ready to press");
-  await sleep(1500);
-  check((await pages()).length === tabs - 1 && !(await pages()).some((t) => t.targetId === store.targetId),
-    "and the store's tab, done with, closed");
-  check(!(await pages()).some((t) => t.url.startsWith(CANVAS)), "and nothing read from Canvas until it's pressed (no Canvas tab)");
-  // One press: signed out of Canvas, so Canvas's sign-in; then this course's list, no question.
-  const was = created.length;
-  await evaluate(me.session, `document.querySelector("[data-helper-go]").click()`);
-  const signIn = await newCanvasTab(was, 10000);
-  check(!!signIn, "one press: Canvas's sign-in comes up");
+  const signIn = await newCanvasTab(was, 15000);
+  check(!!signIn, "the page carries on by itself: Canvas's sign-in comes up, with nothing pressed");
+  check(await until(me.session, `document.querySelector("[data-helper-said]").textContent.includes("Canvas wants you to sign in")`, 10000),
+    "and the page says to sign in there");
+  check(!(await pages()).some((t) => t.targetId === store.targetId), "and the store's tab, done with, closed");
   if (signIn) {
     const s = await attach(signIn.targetId);
     await until(s, `location.pathname === "/login" && !!document.querySelector("form")`, 10000);

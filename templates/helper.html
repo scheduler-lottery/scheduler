@@ -22,19 +22,23 @@
   <h2>What it does</h2>
   <ul>
     <li>On a sign-up sheet's <strong>Your students</strong> step (or, later, under <strong>Class changed in Canvas?</strong>
-      on its class page), you click <strong>Get my class list from Canvas</strong>.</li>
+      on its class page), you click <strong>Get my class list from Canvas</strong>. Added from that step, it starts
+      by itself.</li>
     <li>The helper asks your school's Canvas for your list of courses, then for the students in one course: the one
       your sheet is named for, or, if that isn't clear, the one you pick. It
       does that as you, signed in to Canvas the usual way. If you aren't signed in, Canvas's sign-in page comes up for
       you to sign in (with Duo, as always), and you're brought straight back.</li>
     <li>It hands {{ app_name }}'s page each student's <strong>name and email address</strong>, and nothing else. You
       look the list over, and press Add.</li>
+    <li>Then it offers to delete itself: its own box at the top right of Chrome says <strong>All done!</strong> with a
+      <strong>Delete me</strong> button (the page offers the same).</li>
   </ul>
 
   <h2>What it never does</h2>
   <ul>
     <li>It never sees your password, and never changes anything in Canvas.</li>
-    <li>It does nothing until you click that button on {{ app_name }}'s own site. No other site can ask it for
+    <li>It does nothing until you ask on {{ app_name }}'s own site: by clicking that button, or by adding it from
+      there, which carries straight on. No other site can ask it for
       anything.</li>
     <li>It keeps nothing, and sends nothing anywhere but this site.</li>
   </ul>
@@ -42,7 +46,7 @@
   <h2>What your browser will tell you</h2>
   <p>When you add it, Chrome or Edge says it can “read and change your data on canvas.northwestern.edu”. That's the
     permission it needs to ask Canvas for your class list; it only ever reads your list of courses and the names and
-    emails of one course's students, and only when you click. Its code is public:
+    emails of one course's students, and only when you ask. Its code is public:
     <a href="{{ source_url }}/tree/main/extension" rel="noopener">see exactly what it does</a>.</p>
 
   <h2>Removing it</h2>

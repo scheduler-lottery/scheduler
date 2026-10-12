@@ -131,8 +131,8 @@ try {
   let words = await visibleText();
   check(words.includes("Add to Chrome") && words.includes("Add extension") && !words.includes("Allow extensions from other stores"),
     "with Chrome's own words");
-  check(await evaluate(me, `!document.querySelector("[data-canvas-download]").open`) && words.includes("Or use Canvas's file of your students instead"),
-    "and the file folded under it");
+  check(await evaluate(me, `!document.querySelector("[data-canvas-download]").open`) && words.includes("Option 2 · Do it yourself")
+    && words.includes("Option 1 · Easiest"), "and the file (Option 2) folded under it (Option 1)");
   check(!/token|bookmark|copy and paste/i.test(words), "and nothing else: no token, no bookmark, no copy and paste");
   await shot("chrome-add-helper.png");
 
@@ -157,7 +157,7 @@ try {
       `${name}: how to open this page in Chrome, where the helper does it`);
     check((await evaluate(me, `document.querySelector("[data-page-link]").value`)).indexOf(step + "&b=") === 0,
       `${name}: the link to copy is this page's`);
-    check(await evaluate(me, `!document.querySelector("[data-canvas-download]").open`) && words.includes("Or use Canvas's file of your students instead"),
+    check(await evaluate(me, `!document.querySelector("[data-canvas-download]").open`) && words.includes("Option 2 · Do it yourself"),
       `${name}: or Canvas's file, folded under it`);
     await evaluate(me, `document.querySelector("[data-canvas-download] summary").click()`);
     check(await shown("[data-canvas-download] form[data-dropzone]"), `${name}: and opened, the box for it, in the last step`);

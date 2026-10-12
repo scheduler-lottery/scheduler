@@ -3012,6 +3012,15 @@ details.guide:not([open]) { padding-bottom: 20px; }
 .canvas-update { scroll-margin-top: 92px; }
 .helper-remove { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
 .helper-remove-buttons { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; margin-top: 8px; }
+.algo-choices fieldset { border: 0; margin: 0 0 10px; padding: 0; display: grid; gap: 8px; }
+.algo-choice { display: flex; gap: 10px; align-items: flex-start; }
+.algo-choice input { margin-top: 4px; }
+.algo-choice-desc { display: block; font-size: 0.88rem; color: var(--muted); margin-top: 2px; }
+.option-label { margin: 0 0 10px; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.02em; color: var(--accent-strong, var(--text)); }
+.canvas-paste { margin-top: 14px; }
+.canvas-paste summary { cursor: pointer; font-weight: 600; }
+.canvas-paste form { margin-top: 10px; }
+.canvas-paste textarea { width: 100%; }
 .helper-remove-steps { margin: 8px 0 0; padding-left: 1.4em; }
 .helper-remove-steps li + li { margin-top: 4px; }
 .helper-trouble { margin-top: 10px; }

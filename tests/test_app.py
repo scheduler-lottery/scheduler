@@ -1544,7 +1544,7 @@ def test_comparison_only_option_cannot_be_used_for_real(prof, browser):
     sid = prof.create_sheet()
     page = follow(prof, prof.post(f"/teach/s/{sid}/algorithm", {"algorithm": "da_day_favorable"}))
     assert "only for comparing" in page
-    assert q(prof.app, "SELECT algorithm FROM sheets WHERE id = :sid", sid=sid) == "da_independent"
+    assert q(prof.app, "SELECT algorithm FROM sheets WHERE id = :sid", sid=sid) == "da_single_lottery"  # (new sheets' default)
 
 
 def test_reopening_a_post_only_page_goes_back_to_the_sheet(prof, browser):
@@ -2785,7 +2785,7 @@ def test_a_new_sheet_goes_on_to_its_students_and_its_link_with_a_progress_bar(pr
     page = raw(prof.get(f"/teach/s/{sid}/setup"))
     assert "Step 7 of 8" in text(page) and "Add your students" in page
     assert "Do you use Canvas for this class?" in html_lib.unescape(page)
-    assert page.count('name="setup" value="1"') == 4  # the drop box, Canvas's file, pasting, "sign themselves up"
+    assert page.count('name="setup" value="1"') == 5  # the drop box, Canvas's file and its paste box, pasting, "sign themselves up"
     assert browser().sign_in_instructor("other@school.edu").get(f"/teach/s/{sid}/setup").status_code == 404
 
     # The class list, added from the setup, comes back to the setup and says what it read.
@@ -2975,7 +2975,7 @@ def test_workos_sends_invitations_once_the_owner_has_tested_them(prof, browser, 
 
 def test_the_ranking_options_each_show_the_same_small_example(browser):
     page = text(browser().get("/how-it-works"))
-    assert page.count("In the example") == 3 and "Ana and Ben want Monday most" in page
+    assert page.count("In the example") == 5 and "Ana and Ben want Monday most" in page
     assert "Everyone gets their first choice." in page and "Everyone gets their second choice." in page
 
 
@@ -3163,7 +3163,7 @@ def test_scheduler_helper_is_offered_only_once_it_exists(prof, monkeypatch):
     assert 'data-helper-ids="abcdefghijklmnopabcdefghijklmnop"' in page and "Get my class list from Canvas" in page
     assert 'data-helper-store="https://chromewebstore.google.com/detail/x"' in page
     assert "Add Scheduler Helper to Chrome" in text(prof.get(f"/teach/s/{sid}"))
-    assert "use Canvas's file of your students" in text(prof.get(f"/teach/s/{sid}"))
+    assert "Option 2 · Do it yourself: Canvas's file, or paste your own list" in text(prof.get(f"/teach/s/{sid}"))
     # A list the helper fetched for this page goes in like one copied here.
     r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=3), "how": "helper"})
     assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")
@@ -3181,7 +3181,7 @@ def test_the_helper_extension_builds_with_least_permissions():
     with zf.ZipFile("dist/scheduler-helper.zip") as z:
         manifest = json.loads(z.read("manifest.json"))
         assert sorted(z.namelist()) == ["background.js", "icon-128.png", "icon-16.png", "icon-32.png", "icon-48.png",
-                                        "manifest.json"]
+                                        "manifest.json", "popup.html", "popup.js"]
     assert manifest["permissions"] == ["scripting"] and "key" not in manifest
     assert manifest["host_permissions"] == ["https://canvas.northwestern.edu/*"]
     assert manifest["externally_connectable"]["matches"] == ["https://scheduler-lottery.vercel.app/*"]

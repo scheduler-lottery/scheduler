@@ -36,7 +36,8 @@
     {% if sheet.canvas_course_id %}<p class="mini-hint"><a href="{{ url_for('teach.canvas_connect', sid=sheet.id, setup=1 if setup else None, pick=1) }}">Use a different Canvas course</a></p>{% endif %}
   </section>
   {% elif helper_ids %}
-  <section class="canvas-easy canvas-helper" data-helper hidden>
+  <section class="canvas-easy canvas-helper" data-helper aria-labelledby="option-1-{{ sheet.id }}" hidden>
+    <p class="option-label" id="option-1-{{ sheet.id }}">Option 1 · Easiest: Scheduler Helper does it for you</p>
     <div data-helper-ready hidden>
       <{{ hl }} class="visually-hidden">Scheduler Helper</{{ hl }}>
       <button type="button" class="btn btn-primary btn-large" data-helper-go>Get my class list from Canvas</button>
@@ -58,19 +59,19 @@
       <ol class="helper-install-steps" data-steps-for="chrome">
         <li>Chrome's web store opens. Click <strong>Add to Chrome</strong>.</li>
         <li>Chrome says the helper can “read and change your data” on your school's Canvas. It says that about any helper that reads a website; this one only reads. Click <strong>Add extension</strong>.</li>
-        <li>That's all: this page comes back by itself. (If it doesn't, click “<span data-page-title>{{ sheet.title }}</span>” at the very top of the window.)</li>
+        <li>That's all: this page comes back by itself and gets your class list. If Canvas asks you to sign in, sign in as usual. (If this page doesn't come back, click “<span data-page-title>{{ sheet.title }}</span>” at the very top of the window.)</li>
       </ol>
       <ol class="helper-install-steps" data-steps-for="edge" hidden>
         <li>The web store opens. Click <strong>Allow extensions from other stores</strong> at the top, then <strong>Allow</strong>.</li>
         <li>Click <strong>Get</strong>. Edge says the helper can “read and change your data” on your school's Canvas. It says that about any helper that reads a website; this one only reads. Click <strong>Add extension</strong>.</li>
-        <li>That's all: this page comes back by itself. (If it doesn't, click “<span data-page-title>{{ sheet.title }}</span>” at the very top of the window.)</li>
+        <li>That's all: this page comes back by itself and gets your class list. If Canvas asks you to sign in, sign in as usual. (If this page doesn't come back, click “<span data-page-title>{{ sheet.title }}</span>” at the very top of the window.)</li>
       </ol>
       <details class="mini-hint helper-trouble">
         <summary>Trouble adding it?</summary>
         <p><strong>Added it already, and this still shows?</strong> <span data-browser-name>Chrome</span> turns add-ons off in private (Incognito) windows, and each <span data-browser-name>Chrome</span> profile has its own: open this page in the <span data-browser-name>Chrome</span> window where you added it.</p>
-        <p><strong><span data-browser-name>Chrome</span> won't add it?</strong> If it says it's blocked, or warns you off it, you don't need it: click <strong>Or use Canvas's file of your students instead</strong>, below. It brings the same names and emails.</p>
+        <p><strong><span data-browser-name>Chrome</span> won't add it?</strong> If it says it's blocked, or warns you off it, you don't need it: use <strong>Option 2</strong>, below: Canvas's file brings the same names and emails.</p>
       </details>
-      <p class="mini-hint">It reads only your list of courses and one course's student names and email addresses, only when you press the button on this page, and it never sees your password. <a href="{{ url_for('helper') }}" target="_blank" rel="noopener">What it does, and how to remove it</a></p>
+      <p class="mini-hint">It reads only your list of courses and one course's student names and email addresses, only when you ask on this page (adding it here asks, too), and it never sees your password. <a href="{{ url_for('helper') }}" target="_blank" rel="noopener">What it does, and how to remove it</a></p>
     </div>
     <div data-helper-chrome hidden>
       <{{ hl }} class="canvas-easy-title">Easiest: let Google Chrome do it</{{ hl }}>
@@ -93,7 +94,8 @@
   <div class="canvas-arrived-here" data-canvas-arrived hidden></div>
 
   <details class="canvas-by-hand canvas-upload" data-canvas-download>
-    <summary><span data-upload-title="Get Canvas's file of your students">Or use Canvas's file of your students instead</span></summary>
+    <summary><span data-upload-title="Get Canvas's file of your students (or paste your own list)">Option 2 · Do it yourself: Canvas's file, or paste your own list</span></summary>
+    <p class="mini-hint">Download Canvas's file of your students (the steps below), or, if you have your own list, <a href="#canvas-paste-{{ sheet.id }}" data-open-paste>paste it in</a>.</p>
     <p class="canvas-welcome" data-file-said role="status" id="file-said-{{ sheet.id }}"></p>
     <p class="canvas-phone-note" data-phone-only hidden><strong>This part is easiest on a computer.</strong> Everything so far is saved, so you can stop here: on your computer, sign in to {{ app_name }}, click <strong>My sheets</strong>, then “{{ sheet.title }}”{% if has_list %}, then <strong>Class changed in Canvas? Update from Canvas</strong>{% else %}, and add your students from there{% endif %}. Or, on this phone or tablet, {% if has_list %}add anyone new in the <a href="#add-students">Add students</a> box above{% else %}<button type="button" class="btn-link" data-go="paste">type or paste your students</button> instead{% endif %}.</p>
     <p class="mini-hint">Canvas can give you a file listing your students. You save it from Canvas (steps 1 to 3), then choose it here (step 4). It also has grades in it: {{ app_name }} keeps only the names and email addresses, and throws everything else away as it reads the file, never saving it.</p>
@@ -191,6 +193,16 @@
     </li>
     </ol>
     <p class="mini-hint">No download button? Click <strong>Reports</strong> instead, then <strong>Run Report</strong> next to <strong>Class Roster</strong>, and choose that file in the last step.</p>
+    <details class="canvas-paste" id="canvas-paste-{{ sheet.id }}">
+      <summary>Or paste your own list</summary>
+      <form method="post" action="{{ url_for('teach.upload_roster', sid=sheet.id) }}" class="stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if setup %}<input type="hidden" name="setup" value="1">{% endif %}
+        <label for="canvas-pasted-{{ sheet.id }}" class="field-help">One student per line: their name, then a comma and their school email. You can also copy the whole table from Canvas's <strong>People</strong> page and paste it here.</label>
+        <textarea id="canvas-pasted-{{ sheet.id }}" name="pasted" rows="6" placeholder="Alex Johnson, alex.johnson@school.edu&#10;Sam Lee, sam.lee@school.edu"></textarea>
+        <button class="btn btn-secondary" type="submit">{{ 'Compare with my list' if has_list else 'Use these names' }}</button>
+      </form>
+    </details>
   </details>
   <p class="canvas-welcome" data-canvas-welcome role="status"></p>
   {# Back from Canvas: one press to choose its file (app.js), pinned to the

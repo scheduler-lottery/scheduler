@@ -204,8 +204,9 @@
   })();
 
   // After a class list Scheduler Helper brought: remove it from Chrome, if
-  // the professor wants. The helper asks Chrome to remove it; 1.0.0 can't,
-  // so the steps in Chrome's own menu, and the page notices once it's gone.
+  // the professor wants, in one click here or in the helper's own box (1.0.4
+  // opens it: "Delete me"). 1.0.0 can't remove itself, so the steps in
+  // Chrome's own menu; the page notices once it's gone, whichever way.
   // "Keep Scheduler Helper" is remembered on this computer.
   document.querySelectorAll("[data-helper-remove]").forEach(function (box) {
     var rt = window.chrome && chrome.runtime && chrome.runtime.sendMessage ? chrome.runtime : null;
@@ -238,6 +239,13 @@
         can = answer.can || [];
         if (can.indexOf("remove") < 0) go.textContent = "Show me how to remove it";
         box.hidden = false;
+        // Its own box, too, at the top right of Chrome: "All done! … Delete me", once for this report (not
+        // again when the page is opened later). Deleted there, this page says so.
+        var once = "helper-done-" + (box.getAttribute("data-report") || "");
+        if (can.indexOf("done") >= 0 && !store(once)) {
+          store(once, "1");
+          send(id, { type: "done" }, function (r) { if (r && r.popup) watch(); });
+        }
       });
     });
     var settle = function (text) { // (said, with the focus there, as the buttons it came from go)
@@ -1145,13 +1153,13 @@
               : "click the puzzle piece at the top right of " + browserName + ", then the three dots next to Scheduler "
                 + "Helper, then Manage extension. There, ")
             + "under Site access, turn on " + host() + ". Then come back to this tab: it carries on by itself. Or "
-            + "use Canvas's file of your students instead, below.");
+            + "use Option 2 (Canvas's file), below.");
           if (settingsGo && can("settings")) settingsGo.hidden = false;
           if (!helperBox.contains(document.activeElement)) helperGo.focus();
           return;
         }
         uploadFirst();
-        fileSay("Scheduler Helper can't read your school's Canvas yet, so use Canvas's file of your students instead. "
+        fileSay("Scheduler Helper can't read your school's Canvas yet, so get Canvas's file of your students instead. "
           + "It brings the same names and emails. Start with Open Canvas, just below.");
         opener.focus({ preventScroll: true });
         if (fileSaid) fileSaid.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -1205,15 +1213,12 @@
           call(helperId, { type: "front" }, function (r) {
             if (!(r && r.ok)) markTab("Added. Click here · ");
           });
-          if (resumeAfterAdd) {
-            resumeAfterAdd = false;
-            helperSay("Scheduler Helper is added. Getting your class list from Canvas…");
-            helperGo.click();
-            return;
-          }
-          helperSay("Scheduler Helper is added. Now press Get my class list from Canvas.");
+          // Added from this page's own button: it carries on and gets the list
+          // (the professor only signs in to Canvas, if it asks).
+          resumeAfterAdd = false;
           helperGo.scrollIntoView({ block: "center" });
           helperGo.focus({ preventScroll: true });
+          helperGo.click();
         });
       };
       var watchStore = null;
@@ -1374,7 +1379,7 @@
           : why === "offline" ? "This computer can't reach Canvas right now. Check that the internet is working, then "
             + "press Get my class list from Canvas again."
           : why === "down" ? "Canvas isn't answering right now (it may be down for maintenance). Try again in a few "
-            + "minutes, or use Canvas's file of your students instead, below."
+            + "minutes, or use Option 2 (Canvas's file), below."
           : why === "signin" || why === "closed" ? "Canvas sign-in didn't finish. Press Get my class list from Canvas to try again."
           : !can("show-signin") ? "Canvas didn't answer just now. If you have Canvas open in another tab and it's asking "
             + "you something (like “Leave site?”), answer it. Then press Get my class list from Canvas again."
@@ -1413,13 +1418,13 @@
               guide.querySelector("[data-helper-add]").href = storeUrl;
               uploadSecond();
               helperSay("Scheduler Helper is no longer in " + browserName + " (it was removed or turned off), so it "
-                + "can't bring your class list. Add it again with the button above (three clicks), or use Canvas's "
-                + "file of your students instead.");
+                + "can't bring your class list. Add it again with the button above (three clicks), or use Option 2 "
+                + "(Canvas's file), below.");
               guide.querySelector("[data-helper-add]").focus({ preventScroll: true });
               helperSaid.scrollIntoView({ block: "nearest", behavior: "smooth" });
             } else {
               uploadFirst();
-              fileSay("Scheduler Helper is no longer in " + browserName + ", so use Canvas's file of your students "
+              fileSay("Scheduler Helper is no longer in " + browserName + ", so get Canvas's file of your students "
                 + "instead. It brings the same names and emails. Start with Open Canvas, just below.");
               opener.focus({ preventScroll: true });
             }
@@ -1673,6 +1678,19 @@
           add.focus({ preventScroll: true });
           resumeAfterAdd = true; // (once it's added, the update carries on)
         }
+      });
+    });
+
+    // "Paste it in" (Option 2): its box, open, ready to paste into.
+    guide.querySelectorAll("[data-open-paste]").forEach(function (link) {
+      link.addEventListener("click", function (e) {
+        var box = document.getElementById(link.getAttribute("href").slice(1));
+        if (!box) return;
+        e.preventDefault();
+        box.open = true;
+        box.scrollIntoView({ block: "center", behavior: "smooth" });
+        var area = box.querySelector("textarea");
+        if (area) area.focus({ preventScroll: true });
       });
     });
 

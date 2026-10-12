@@ -111,7 +111,7 @@ def build(target):
         ports = os.environ.get("DEV_SITE_PORTS", "5050").split(",")  # (another local Scheduler: DEV_SITE_PORTS=5050,5066)
         manifest["externally_connectable"]["matches"] += [f"http://{h}:{p.strip()}/*" for p in ports
                                                           for h in ("127.0.0.1", "localhost")]
-    files = ["background.js"]
+    files = ["background.js", "popup.html", "popup.js"]
     with open(os.path.join(out, "manifest.json"), "w", encoding="utf-8") as handle:
         json.dump(manifest, handle, indent=2)
     for file in files:

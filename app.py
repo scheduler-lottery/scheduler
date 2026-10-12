@@ -39,7 +39,7 @@ import signin
 import student
 import teach
 import usage
-from matching_engine import ALGORITHMS, example_views
+from matching_engine import ALGORITHMS, DEFAULT_ALGORITHM, example_views
 from util import ID_ALPHABET, in_zone, initials, iso, new_id, now, parse_iso, plural
 
 app = Flask(__name__, static_folder="public/static", static_url_path="/static")
@@ -448,7 +448,8 @@ def site_font(name):
 
 @app.route("/how-it-works")
 def how_it_works():
-    return render_template("how_it_works.html", algorithms=ALGORITHMS, examples=example_views())
+    return render_template("how_it_works.html", algorithms=ALGORITHMS, examples=example_views(),
+                           default_algorithm=DEFAULT_ALGORITHM)
 
 
 @app.route("/invite", methods=["GET", "POST"])

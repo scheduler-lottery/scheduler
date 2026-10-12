@@ -8,7 +8,8 @@
 // pages do, and sends back names and emails, nothing else. It never changes
 // anything in Canvas, never sees a password, and keeps nothing. The page can
 // also ask it to bring the page's own tab back to the front, and, once the
-// class list is in and the professor says so, to remove itself.
+// class list is in, to say so in its own box (popup.html: "Delete me"), or,
+// pressed on the page, to remove itself.
 //
 // How it reads Canvas:
 //   1. straight from here (Chrome sends the professor's Canvas session with
@@ -24,7 +25,7 @@
 
 const VERSION = chrome.runtime.getManifest().version;
 // What this helper can do beyond reading Canvas, for the page to know (1.0.0 said none of this).
-const CAN = ["front", "show-signin", "remove", "settings"];
+const CAN = ["front", "show-signin", "remove", "settings", "done"];
 const SCHEDULER_ORIGINS = ((chrome.runtime.getManifest().externally_connectable || {}).matches || [])
   .map((pattern) => (pattern.match(/^(https?:\/\/[^/]+)\//) || [])[1])
   .filter(Boolean);
@@ -103,6 +104,13 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, reply) => {
   if (msg.type === "settings") { // Chrome's page for the helper (its site access), next to the page's tab
     chrome.tabs.create({ url: "chrome://extensions/?id=" + chrome.runtime.id, index: sender.tab.index + 1, openerTabId: sender.tab.id })
       .then(() => reply({ ok: true }), () => reply({ ok: false }));
+    return true;
+  }
+  if (msg.type === "done") { // the class list it brought is in: its own box says so, with "Delete me"
+    chrome.action.setBadgeBackgroundColor({ color: "#2f6b3b" }).catch(() => {});
+    chrome.action.setBadgeText({ text: "✓" })
+      .then(() => (chrome.action.openPopup ? chrome.action.openPopup() : Promise.reject(new Error("old Chrome"))))
+      .then(() => reply({ ok: true, popup: true }), () => reply({ ok: true, popup: false }));
     return true;
   }
   if (msg.type === "remove") { // the class list is in, and the professor pressed Remove Scheduler Helper on the page

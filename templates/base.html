@@ -39,6 +39,14 @@
 
     {% set has_settings = (nav_sheet and nav_student) or (instructor and not nav_sheet) %}
     <nav class="icon-dock" aria-label="Quick links">
+      {# Home: a student's class page (or its sign-in), else the site's front page. #}
+      {% set home_url = brand_url if nav_sheet else url_for('landing') %}
+      <a href="{{ home_url }}" class="icon-dock-btn" aria-label="Home" title="Home"{% if request.path == home_url %} aria-current="page"{% endif %}>
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M3.5 11.2 12 4l8.5 7.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M5.8 9.6V19a1 1 0 0 0 1 1h3.7v-5.2h3V20h3.7a1 1 0 0 0 1-1V9.6" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+        </svg>
+      </a>
       {% if nav_sheet and nav_student %}
         <a href="{{ url_for('student.rank', sid=nav_sheet.id) }}" class="icon-dock-label"{% if request.endpoint == 'student.rank' %} aria-current="page"{% endif %}>My ranking</a>
         {% if nav_sheet.published_at or (nav_sheet.show_preview and nav_sheet.bidding_open) %}
@@ -322,8 +330,13 @@
         </li>
         <li class="ranking-step">
           <span class="tile-art"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5" stroke="currentColor" stroke-width="1.7"/><circle cx="8.6" cy="8.6" r="1.35" fill="currentColor"/><circle cx="12" cy="12" r="1.35" fill="currentColor"/><circle cx="15.4" cy="15.4" r="1.35" fill="currentColor"/></svg><span class="step-num" aria-hidden="true">3</span></span>
+          {% if nav_sheet and nav_sheet.algorithm == 'first_come' %}
+          <span class="step-name">First come, first served</span>
+          <span class="step-text">When too many want a day, whoever ranked first gets it.</span>
+          {% else %}
           <span class="step-name">Ties get a fair draw</span>
           <span class="step-text">When too many want a day, a fixed random draw decides.</span>
+          {% endif %}
         </li>
         <li class="ranking-step">
           <span class="tile-art"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 9.5h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M8.5 14l2.2 2.2 4.8-4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="step-num" aria-hidden="true">4</span></span>
@@ -336,11 +349,19 @@
     <section class="appearance-group" aria-labelledby="ranking-facts">
       <h3 class="group-label" id="ranking-facts">Good to know</h3>
       <ul class="ranking-facts">
+        {% if nav_sheet and nav_sheet.algorithm == 'rank_max' %}
+        <li>Rank in your true order: the schedule gives as many people as it can their first choice.</li>
+        {% else %}
         <li>Rank in your true order. No other order can get you a better day.</li>
+        {% endif %}
+        {% if nav_sheet and nav_sheet.algorithm == 'first_come' %}
+        <li>Ranking early helps: if too many people want a day, whoever ranked first gets it. Changing your ranking later keeps your place.</li>
+        {% else %}
         <li>Ranking early gives no advantage: the time you rank is never used.</li>
+        {% endif %}
         <li>Mark a day you can't make only for a real conflict. You'll never be given a day you marked.</li>
         <li>Each class has one fixed draw, so the same rankings always give the same schedule. Nobody can redraw for a better result.</li>
-        {% if instructor and not nav_student %}<li>As the instructor, you choose how ties are broken and can move students by hand afterwards. Every change is kept in the sheet's history.</li>{% endif %}
+        {% if instructor and not nav_student %}<li>As the instructor, you choose how days are matched and can move students by hand afterwards. Every change is kept in the sheet's history.</li>{% endif %}
       </ul>
     </section>
 

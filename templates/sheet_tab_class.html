@@ -350,10 +350,14 @@
   <p class="deadline-line">Sign-ups closed automatically at your deadline (<time datetime="{{ deadline.auto_closed_at }}" data-local="deadline">{{ deadline.auto_closed_at[:16] }}</time>).</p>
   {% endif %}
   {% if nudge %}
-  <div class="nudge">
-    <a class="btn btn-primary" data-compose data-to="{{ nudge.to }}" data-bcc="{{ nudge.bcc }}" data-subject="{{ nudge.subject }}" data-body="{{ nudge.body }}"
-       href="mailto:{{ nudge.to }}?bcc={{ nudge.bcc | replace(' ', '') }}&amp;subject={{ nudge.subject | urlencode }}&amp;body={{ nudge.body | urlencode }}">Nudge the {{ nudge.count }} who haven't ranked</a>
-    <span class="mini-hint">Opens a ready-to-send reminder in your own email, with their addresses in Bcc.</span>
+  <div class="nudge" id="remind">
+    <p class="nudge-title"><strong>Nudge the {{ nudge.count }} who haven't ranked</strong> <span class="mini-hint">Each button opens a ready-to-send reminder in your own email, with their addresses in Bcc. Pick the one that fits:</span></p>
+    <div class="helper-row">
+      {% for m in nudge.messages %}
+      <a class="btn {{ 'btn-primary' if loop.first else 'btn-secondary' }}" data-compose data-to="{{ nudge.to }}" data-bcc="{{ nudge.bcc }}" data-subject="{{ m.subject }}" data-body="{{ m.body }}"
+         href="mailto:{{ nudge.to }}?bcc={{ nudge.bcc | replace(' ', '') }}&amp;subject={{ m.subject | urlencode }}&amp;body={{ m.body | urlencode }}">{{ m.label }}</a>
+      {% endfor %}
+    </div>
     {% with picker_id="nudge", mail_why="It's picked to match your email address.", mail_account=me %}{% include "_mail_picker.html" %}{% endwith %}
   </div>
   {% endif %}
