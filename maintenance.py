@@ -14,10 +14,13 @@ It does three things:
 
 from datetime import timedelta
 
+from flask import url_for
+
 import canvas_import
 import db
 import deadlines
 import sheets
+import shortlink
 import signin
 import usage
 from util import iso, now
@@ -67,5 +70,6 @@ def run_daily():
         "workos_records_deleted": signin.forget_remote_users(),
         "deadlines_acted_on": deadlines.enforce_all(),
         "quiet_weeks_told": deadlines.quiet_weeks(),
+        "short_links_remade": shortlink.check_all(lambda sid: url_for("student.signin", sid=sid, _external=True)),
         "deadlines_soon_told": deadlines.deadline_soon(),
     }

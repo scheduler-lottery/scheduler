@@ -112,6 +112,8 @@ CANVAS_HELPER_HOSTS = [host for _name, host in CANVAS_HELPER_SCHOOLS.values()]
 CANVAS_DEV_HOST = "" if IS_VERCEL else _env("CANVAS_DEV_HOST")
 if not re.fullmatch(r"(127\.0\.0\.1|localhost):\d{2,5}", CANVAS_DEV_HOST):
     CANVAS_DEV_HOST = ""
+# Short links for a class (shortlink.py, by spoo.me). SHORT_LINKS=0 turns them off.
+SHORT_LINKS = _env("SHORT_LINKS", "1") != "0"
 CANVAS_HELPER_STORE_URL = _env("CANVAS_HELPER_STORE_URL",
                                "https://chromewebstore.google.com/detail/scheduler-helper/" + CHROME_HELPER_ID)
 

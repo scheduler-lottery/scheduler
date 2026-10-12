@@ -163,7 +163,8 @@ def test_new_short_codes_are_8_characters_and_older_6_character_ones_still_work(
     with prof.app.app_context():
         db.run("UPDATE sheets SET short_code = 'k7q2mx' WHERE id = :sid", sid=older)
         db.commit()
-    assert "http://localhost/k7q2mx" in html(prof.get(f"/teach/s/{older}"))  # kept, not replaced
+    prof.get(f"/teach/s/{older}")
+    assert q(prof.app, "SELECT short_code FROM sheets WHERE id = :sid", sid=older) == "k7q2mx"  # kept, not replaced
     s = browser()
     assert s.get("/k7q2mx").headers["Location"].endswith(f"/c/{older}")
     assert s.get("/join?code=K7Q2MX").headers["Location"].endswith(f"/c/{older}")
@@ -345,3 +346,54 @@ def test_servers_starting_together_on_an_empty_database_all_come_up(pg_server):
     results = _start_together(url, 4)
     assert all(code == 0 and out.endswith("ok") for code, out, _err in results), results
     assert _version_and_column(url) == (db.SCHEMA_VERSION, True)
+
+
+
+# ---------------------------------------------------------------------------
+# The short link shown for a slide or the board: spoo.me's, or none
+# ---------------------------------------------------------------------------
+def test_a_new_sheet_gets_one_spoo_me_link_shown_without_https(prof, monkeypatch):
+    import settings
+    import shortlink
+
+    made = []
+    monkeypatch.setattr(settings, "SHORT_LINKS", True)
+    monkeypatch.setattr(shortlink, "make", lambda url: made.append(url) or "https://spoo.me/AbC123")
+    sid = prof.create_sheet()
+    assert len(made) == 1 and made[0].endswith(f"/c/{sid}")
+    page = html(prof.get(f"/teach/s/{sid}"))
+    assert 'value="spoo.me/AbC123"' in page and "Copy short link" in page
+    prof.get(f"/teach/s/{sid}")
+    assert len(made) == 1  # (made once, kept)
+
+
+def test_no_short_link_when_spoo_me_cant_make_one_and_a_try_a_day_after(prof, monkeypatch):
+    import settings
+    import shortlink
+
+    tries = []
+    monkeypatch.setattr(settings, "SHORT_LINKS", True)
+    monkeypatch.setattr(shortlink, "make", lambda url: tries.append(url) and None)
+    sid = prof.create_sheet()
+    page = html(prof.get(f"/teach/s/{sid}"))
+    assert "Copy short link" not in page and "Copy student link" in page and len(tries) == 1
+    with prof.app.app_context():
+        db.run("UPDATE sheets SET short_url_at = '2020-01-01T00:00:00Z', short_url = 'https://is.gd/old' "
+               "WHERE id = :sid", sid=sid)
+        db.commit()
+    monkeypatch.setattr(shortlink, "make", lambda url: "https://spoo.me/Zz9x")
+    assert 'value="spoo.me/Zz9x"' in html(prof.get(f"/teach/s/{sid}"))  # (an older kind is made again)
+
+
+def test_the_daily_job_remakes_a_short_link_that_no_longer_leads_to_the_class(prof, monkeypatch):
+    import settings
+    import shortlink
+
+    monkeypatch.setattr(settings, "SHORT_LINKS", True)
+    monkeypatch.setattr(shortlink, "make", lambda url: "https://spoo.me/First1")
+    sid = prof.create_sheet()
+    monkeypatch.setattr(shortlink, "leads_to", lambda short, url: False)
+    monkeypatch.setattr(shortlink, "make", lambda url: "https://spoo.me/Again2")
+    r = prof.client.get("/cron/daily", headers={"Authorization": "Bearer cron-secret"})
+    assert r.get_json()["short_links_remade"] == 1
+    assert q(prof.app, "SELECT short_url FROM sheets WHERE id = :sid", sid=sid) == "https://spoo.me/Again2"

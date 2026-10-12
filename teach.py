@@ -34,6 +34,7 @@ import db
 import deadlines
 import settings
 import sheets
+import shortlink
 import signin
 from auth import current_instructor, instructor_required
 from matching_engine import (
@@ -590,6 +591,7 @@ def new_sheet():
         # Test students from the start: the instructor signs in as them, with codes to their own email.
         sheets.add_test_students(sid, current_instructor()["email"], tried=False)
         db.commit()
+        shortlink.for_sheet(sheets.get_sheet(sid), url_for("student.signin", sid=sid, _external=True))
         _warn_past_days(values["days"])
         if fold(values["title"]) in mine:
             flash("You already have a sheet with this title — the link code under each title on your list "
@@ -1216,7 +1218,9 @@ def _sheet_page(sid, tab):
     code = sheets.short_code(sid)
     if not code:  # deleted from another tab while this page was loading: owned_sheet says so
         return redirect(url_for("teach.sheet", sid=sid))
-    short_url = url_for("short_link", code=code, _external=True)
+    # The short link for a slide or the board: spoo.me's (made once, kept), or
+    # none. (The sheet's own code, above, still works in the "Have a code?" box.)
+    short_url = shortlink.for_sheet(sheet, share_url)
     # Reminders for everyone on the list who hasn't ranked, from the
     # instructor's own email (their addresses in Bcc): a friendly one, a last
     # call before the deadline, and one for students having trouble signing in.

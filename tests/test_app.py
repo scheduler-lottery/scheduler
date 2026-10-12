@@ -1880,26 +1880,27 @@ def test_archiving_tucks_a_sheet_away_and_deleting_offers_it_first(prof, browser
     assert "Nothing was deleted" in follow(prof, r)
 
 
-def test_the_short_link_is_this_sites_own(prof, browser, monkeypatch):
-    import urllib.request
+def test_the_short_link_is_spoo_me_and_the_sites_own_code_still_works(prof, browser, monkeypatch):
+    import settings
+    import shortlink
 
-    def no_outside_service(*a, **k):
-        raise AssertionError("a short link must not go to an outside service (they show ads)")
+    asked = []
 
-    monkeypatch.setattr(urllib.request, "urlopen", no_outside_service)
+    def spoo(url):
+        asked.append(url)
+        return "https://spoo.me/Ab12Cd"
+
+    monkeypatch.setattr(settings, "SHORT_LINKS", True)
+    monkeypatch.setattr(shortlink, "make", spoo)
     sid = prof.create_sheet()
     page = html(prof.get(f"/teach/s/{sid}"))
-    short = re.search(r'id="short-url" type="text" readonly value="http://localhost/([a-z0-9]{8})"', page).group(1)
-    assert any(ch.isdigit() for ch in short) and "is.gd" not in page and "TinyURL" not in page
-    assert short in html(prof.get(f"/teach/s/{sid}"))  # the same one each time
+    assert 'id="short-url" type="text" readonly value="spoo.me/Ab12Cd"' in page and len(asked) == 1
+    assert "is.gd" not in page and "TinyURL" not in page and "da.gd" not in page
+    # The sheet's own code, for the "Have a code?" box and links printed before, still leads to the class.
+    short = q(prof.app, "SELECT short_code FROM sheets WHERE id = :sid", sid=sid)
     s = browser()
     assert s.get(f"/{short}").headers["Location"].endswith(f"/c/{sid}")
     assert s.get(f"/{short.upper()}").headers["Location"].endswith(f"/c/{sid}")
-    assert s.get(f"/join?code={short}").headers["Location"].endswith(f"/c/{sid}")  # typed in the box, too
-    other = prof.create_sheet(title="Another class")
-    assert sheets_short(prof, other) != short
-    assert s.get("/zz9zz9").status_code == 404
-
 
 def sheets_short(prof, sid):
     page = html(prof.get(f"/teach/s/{sid}"))

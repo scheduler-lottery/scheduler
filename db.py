@@ -21,7 +21,7 @@ from sqlalchemy import create_engine, event, text
 import settings
 from util import iso, new_id
 
-SCHEMA_VERSION = "19"
+SCHEMA_VERSION = "20"
 SCHEMA_PATH = os.path.join(settings.BASE_DIR, "schema.sql")
 # Postgres advisory lock held while one server upgrades the schema (any
 # number, as long as nothing else in the database uses the same one).
@@ -83,6 +83,7 @@ MIGRATIONS = [
     ("sheets", "most_ranked_at", "TEXT"),
     ("sheets", "quiet_told_at", "TEXT"),
     ("sheets", "reminder_told_at", "TEXT"),
+    ("sheets", "short_url_at", "TEXT"),  # (when spoo.me was last asked for, or checked, its short link)
 ]
 
 # Indexes on columns added above (so made after them).
