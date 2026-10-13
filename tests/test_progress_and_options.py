@@ -100,7 +100,7 @@ def test_reminders_offer_a_friendly_one_a_last_call_and_sign_in_help(prof, brows
     rank(browser, sid, 1, day_keys(sid))
     page = raw(prof.get(f"/teach/s/{sid}"))
     words = text(page)
-    assert "Nudge the 5 who haven't ranked" in words
+    assert "Remind the 5 who haven't ranked" in words
     assert "Friendly reminder" in words and "Trouble signing in?" in words
     assert "Last call" not in words  # (no deadline)
     bodies = re.findall(r'data-body="([^"]*)"', page)

@@ -715,6 +715,8 @@
       back.hidden = at === 0;
       next.hidden = at === steps.length - 1;
       done.hidden = at !== steps.length - 1;
+      // (What Create leads to: said once, by the last question.)
+      form.parentNode.querySelectorAll("[data-wizard-last-only]").forEach(function (el) { el.hidden = done.hidden; });
       error.hidden = true;
       var question = steps[at].querySelector(".wizard-q");
       if (focus && question) {

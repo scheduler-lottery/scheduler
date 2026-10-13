@@ -40,7 +40,7 @@
 {% macro f_capacity() %}
     <div class="field">
       <label for="capacity">Seats per day</label>
-      <p class="field-help">How many presentations fit in one class meeting.</p>
+      {% if mode != 'new' %}<p class="field-help">How many presentations fit in one class meeting.</p>{% endif %}
       <input type="number" id="capacity" name="capacity" min="1" max="500" value="{{ form.capacity }}" required class="input-short"{% if mode == 'new' %} enterkeyhint="next"{% endif %}>
     </div>
 
@@ -48,12 +48,12 @@
 {% macro f_rank_by() %}
     <div class="field deadline-field" id="deadline-field" data-deadline-field data-zone="{{ deadline_zone }}">
       <label for="close_date">Sign-ups close <span class="muted">(optional)</span></label>
-      <p class="field-help">Pick a date and a time, or leave it empty if you'd rather close sign-ups yourself.</p>
+      {% if mode != 'new' %}<p class="field-help">Pick a date and a time, or leave it empty to close sign-ups yourself.</p>{% endif %}
       {# With JavaScript: the deadline as a chip, and a calendar in a pop-up
          (calendar.js). Without it: the plain date box and time menu below. #}
       <ul class="day-chips" data-deadline-chip hidden></ul>
       <button type="button" class="btn btn-primary" data-popover-target="deadline-calendar" aria-haspopup="dialog"
-              data-deadline-open hidden>Pick a date and time</button>
+              data-deadline-open hidden>Pick a deadline</button>
       <div class="deadline-row" data-deadline-native>
         <input type="date" id="close_date" name="close_date" value="{{ form.close_date }}" min="{{ today }}">
         <label for="close_time" class="visually-hidden">Time</label>
@@ -96,13 +96,13 @@
         <legend>Who can sign up</legend>
         <label class="choice">
           <input type="radio" name="allow_unlisted" value="0" {{ 'checked' if not form.allow_unlisted }}>
-          <span><strong>Only names on my class list</strong> (recommended).
-          {% if mode == 'edit' and counts.roster and not counts.roster_with_email %}Your list has no emails, so students sign in by name and a PIN.{% elif mode == 'edit' and counts.roster and counts.roster_with_email < counts.roster %}{{ counts.roster_with_email }} on your list confirm with an emailed code; the {{ counts.roster - counts.roster_with_email }} without an email sign in with a PIN.{% else %}Students confirm it's them with a code emailed to the address on your list.{% endif %}</span>
+          <span><strong>Only students on my class list</strong> (recommended).
+          {% if mode == 'edit' and counts.roster and not counts.roster_with_email %}Your list has no emails, so students sign in by name and a PIN.{% elif mode == 'edit' and counts.roster and counts.roster_with_email < counts.roster %}{{ counts.roster_with_email }} on your list confirm with an emailed code; the {{ counts.roster - counts.roster_with_email }} without an email sign in with a PIN.{% else %}They confirm it's them with a code we email them.{% endif %}</span>
         </label>
         <label class="choice">
           <input type="radio" name="allow_unlisted" value="1" {{ 'checked' if form.allow_unlisted }}>
-          <span><strong>Anyone with the link.</strong> People not on your list can sign up with their name and a PIN
-          — handy for late adds, but anyone with the link could join.</span>
+          <span><strong>Anyone with the link.</strong> Handy for late adds: they sign up with their name and a PIN
+          (but anyone with the link could join).</span>
         </label>
       </fieldset>
 
@@ -110,9 +110,8 @@
 {% macro f_preview() %}
       <label class="choice">
         <input type="checkbox" name="show_preview" value="1" {{ 'checked' if form.show_preview }}>
-        <span><strong>Let students see everyone's days.</strong> While sign-ups are open they see a draft; after you
-        publish, the final schedule. Classmates will see each other's names and days. (Either way, each student
-        always sees their own day once you publish.)</span>
+        <span><strong>Let classmates see the whole schedule</strong> (names and days). While sign-ups are open it's a
+        draft. Each student always sees their own day once you publish.</span>
       </label>
 {% endmacro %}
 {% block content %}
@@ -174,7 +173,7 @@
       {{ f_capacity() }}
     </section>
     <section class="wizard-step" data-wizard-step="deadline" data-progress-number="{{ setup_progress('deadline').number }}">
-      <h2 class="wizard-q" tabindex="-1">When should students have ranked by? <span class="muted">(optional)</span></h2>
+      <h2 class="wizard-q" tabindex="-1">When do sign-ups close? <span class="muted">(optional)</span></h2>
       {{ f_rank_by() }}
     </section>
     <section class="wizard-step" data-wizard-step="note" data-progress-number="{{ setup_progress('note').number }}">
@@ -192,7 +191,7 @@
       <button type="button" class="btn btn-primary btn-large" data-wizard-next>Next →</button>
       <button type="submit" class="btn btn-primary btn-large" data-wizard-done>Create the sign-up sheet</button>
     </div>
-    <p class="mini-hint">Next you'll add your students, then share the link. You can change all of this later.</p>
+    <p class="mini-hint" data-wizard-last-only>Next you'll add your students, then share the link. You can change all of this later.</p>
 {% else %}
     {% if in_setup %}
     <input type="hidden" name="setup" value="1">

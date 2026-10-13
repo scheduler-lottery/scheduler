@@ -28,8 +28,8 @@
 {% endmacro %}
 {% set why_order_matters %}
       <p>
-        Each day has a limited number of places. After everyone ranks, the site gives each student a day as high
-        on their own list as it can. If more students want a day than it has places,
+        Each day has a few seats. After everyone ranks, each student gets a day as high on their own list as it
+        can. If more students want a day than it has seats,
         {% if sheet.algorithm == 'first_come' %}whoever ranked first gets it{% else %}a fair random draw decides{% endif %}.
       </p>
       <p>
@@ -57,8 +57,8 @@
           If you still need a presentation day, <a href="mailto:{{ sheet.owner_email }}?subject={{ ('I still need to rank — ' ~ sheet.title) | urlencode }}">email your instructor</a>.</p>
       {% elif bidding_open %}
         <p class="subtitle rank-intro-long">
-          Hi <bdi>{{ name }}</bdi> — put all {{ days | length }} days in the order you'd like them, favorite at the
-          top. You'll get a day as high on your list as possible.
+          Hi <bdi>{{ name }}</bdi> — put the {{ days | length }} days in order, favorite first. You'll get a day as
+          high on your list as possible.
         </p>
         <p class="subtitle rank-intro-short">Favorite on top.
           <span class="touch-only">Press and hold a day to move it, or use ▲ ▼. Tap a day for can't-do and notes.</span>
@@ -85,7 +85,7 @@
   </div>
   {% endif %}
   <div class="rank-intro-long">
-  {% call rank_steps() %}Drag the days (or use the ▲▼ buttons) so your favorite is at the top.{% endcall %}
+  {% call rank_steps() %}Drag a day by ⠿, or use the ▲ ▼ buttons.{% endcall %}
 
   <details class="explainer">
     <summary>Why does the order matter?</summary>

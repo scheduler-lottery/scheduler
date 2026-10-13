@@ -473,7 +473,7 @@ def test_unlisted_names_only_when_allowed_and_only_while_open(prof, browser):
     assert "isn't on the class list" in page and "Sign me up as a new person" in page
     r = s.post(f"/c/{open_sid}/login", {"name": "Walk In", "pick": "__new__"})
     assert r.headers["Location"].endswith("/pin")
-    assert "You're not on the class list" in html(s.get(f"/c/{open_sid}/pin"))
+    assert "Pick a PIN so nobody else can sign in as you" in html(s.get(f"/c/{open_sid}/pin"))
     assert "first and last name" in follow(s, s.post(f"/c/{open_sid}/login", {"name": "Prince", "pick": "__new__"}))
 
     prof.post(f"/teach/s/{open_sid}/toggle")  # closed: no new names
@@ -2533,7 +2533,7 @@ def test_nudge_reminds_only_the_students_who_havent_ranked(prof, browser):
     page = html(prof.get(f"/teach/s/{sid}"))
     bcc = re.search(r'data-bcc="([^"]*)" data-subject="Reminder: rank your presentation days', page).group(1)
     assert sorted(bcc.split(", ")) == ["alex@school.edu", "riya@school.edu"]
-    assert "Nudge the 2 who haven't ranked" in text(page)
+    assert "Remind the 2 who haven't ranked" in text(page)
     prof.post(f"/teach/s/{sid}/toggle")  # sign-ups closed: nobody to nudge
     assert "Nudge the" not in text(prof.get(f"/teach/s/{sid}"))
 
@@ -2560,7 +2560,7 @@ def test_each_class_has_class_schedule_and_settings_tabs(prof, browser):
 def test_a_new_sheet_is_set_up_one_question_at_a_time(prof):
     page = text(prof.get("/teach/new"))
     for asked in ("What is your course title?", "Which days can students present?",
-                  "How many presentations fit in one day?", "When should students have ranked by?",
+                  "How many presentations fit in one day?", "When do sign-ups close?",
                   "Anything students should know?", "Who can sign up?"):
         assert asked in page, asked
     assert 'data-wizard-start="name"' in raw(prof.get("/teach/new"))
@@ -2825,14 +2825,14 @@ def test_a_new_sheet_goes_on_to_its_students_and_its_link_with_a_progress_bar(pr
                                              "setup": "1"}, content_type="multipart/form-data")
     assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students")
     page = text(prof.get(r.headers["Location"]))
-    assert "3 students on your list" in page and "Next: share the link" in page
+    assert "Your class list is in!" in page and "Added 3 students" in page and "Next: share the link" in page
     assert "students.csv" in page  # the report on what was read, shown once
 
     # With the list in, the setup page is on its last step: sharing.
     page = html(prof.get(f"/teach/s/{sid}/setup"))
     assert "Step 8 of 8" in page and "Share the link with your class" in page
     assert "How should your 3 students get the link?" in page
-    assert "Send it for me" in page and "Not set up on this site yet" in page  # until the owner's test passes
+    assert "I'll send it myself" in page and "Send it for me" not in page  # (not offered until the owner's test passes)
     assert "I'll send it myself" in page and "Email them myself" in page and "Copy the message" in page
     assert "alex@school.edu, riya@school.edu, sam@school.edu" in page  # the ready-made email's Bcc
     assert "3 students on your list" in text(page) and "Done: go to my class page" in page
@@ -2957,7 +2957,7 @@ def test_students_can_be_added_from_the_class_list_and_sent_the_link(prof):
     page = html(prof.get(r.headers["Location"]))
     assert "Added 2 students: Dana Wu, Eli O" in page
     assert "Send them the link" in page and "dana@school.edu, eli.o@school.edu" in page  # the email's Bcc
-    assert "I'll send it myself" in page and "Not set up on this site yet" in page
+    assert "I'll send it myself" in page and "Send it for me" not in page  # (no option a professor can't use)
     assert "Send them the link" not in html(prof.get(f"/teach/s/{sid}"))  # just once
     said = follow(prof, prof.post(f"/teach/s/{sid}/roster/quick-add", {"people": "dana@school.edu"}))
     assert "all on your list already" in said
@@ -2970,7 +2970,7 @@ def test_workos_sends_invitations_once_the_owner_has_tested_them(prof, browser, 
     owner = browser().sign_in_instructor("owner@gmail.com")
     workos = _use_workos(monkeypatch)
     # Off until the owner's test invitation comes back here.
-    assert "Not set up on this site yet" in html(prof.get(f"/teach/s/{sid}/setup?step=share"))
+    assert "Send it for me" not in html(prof.get(f"/teach/s/{sid}/setup?step=share"))
     said = follow(prof, prof.post(f"/teach/s/{sid}/invite", {"back": "setup"}))
     assert "isn't set up on this site yet" in said and not workos.invitations
     workos.invite_base = "https://example.authkit.app/invite"
@@ -3774,7 +3774,7 @@ def test_the_share_step_counts_everyone_and_names_who_the_emails_miss(prof):
     assert ("<b>Cy</b> Cole has no email address on your list, so the emails below reach only the other 2. Post the "
             "message in Canvas too, or give it to that student yourself.") in said
     assert "&lt;b&gt;Cy&lt;/b&gt; Cole has no email" in page  # escaped
-    assert "WorkOS, the sign-in service this site uses, emails each of your 2 students" in said
+    assert "Send it for me" not in said  # (invitations aren't set up on this site)
     b = prof.create_sheet(title="Big")
     prof.upload(b, "Name,Email\nAna Lima,ana@school.edu\nBo Chen,\nCy Cole,\nDi Dunn,\nEd Ek,\n")
     assert "Bo Chen, Cy Cole, Di Dunn and 1 more have no email address" in text(prof.get(f"/teach/s/{b}/setup?step=share"))

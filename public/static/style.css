@@ -2189,6 +2189,7 @@ section[id], main[id] { scroll-margin-top: 80px; }
 .day-card-warn { margin: 8px 0 0; color: var(--danger); font-weight: 600; }
 
 .ranking-summary { margin: 12px 0 4px; }
+.report-cheer { margin: 0 0 4px; font-family: var(--font-display); font-size: 1.35rem; color: var(--success); }
 details.ranking-summary > summary { cursor: pointer; font-weight: 650; color: var(--accent-strong); }
 .summary-list { margin: 6px 0 0; padding-left: 24px; }
 .summary-list li { margin-bottom: 2px; }

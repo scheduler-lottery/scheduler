@@ -11,7 +11,7 @@
     <div><dt>Who can sign up</dt><dd>{{ 'Anyone with the link' if sheet.allow_unlisted else 'Only names on your class list' }}</dd></div>
     <div><dt>Students can see the draft schedule</dt><dd>{{ 'Yes' if sheet.show_preview else 'No' }}</dd></div>
   </dl>
-  <a class="btn btn-secondary" href="{{ url_for('teach.edit_sheet', sid=sheet.id) }}">Edit days &amp; settings</a>
+  <a class="btn btn-secondary" href="{{ url_for('teach.edit_sheet', sid=sheet.id) }}">Change days &amp; settings</a>
 </section>
 
 {# -------------------------------------------------- emails about progress #}
@@ -73,12 +73,12 @@
   {% endif %}
 
   <details class="more-options">
-    <summary>Restore from a backup file</summary>
+    <summary>Bring back an earlier copy from a file</summary>
     <form method="post" action="{{ url_for('teach.restore_file', sid=sheet.id) }}" enctype="multipart/form-data" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label for="backup-file" class="visually-hidden">Backup file</label>
       <input type="file" id="backup-file" name="backup" accept=".zip,.json" required>
-      <button type="submit" class="btn btn-secondary btn-small">Continue…</button>
+      <button type="submit" class="btn btn-secondary btn-small">Use this backup file…</button>
     </form>
     <p class="field-help">Use the backup file (it ends in .zip) from “Download a backup” or a backup email. You'll see what it holds before anything changes.</p>
   </details>

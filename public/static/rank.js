@@ -170,9 +170,8 @@
     return makeIcon(up ? "M12 6.5l6.5 10h-13z" : "M12 17.5l6.5-10h-13z", "", true);
   }
 
-  function positionLabel(idx, total) {
-    if (idx === 0) return "Top choice";
-    if (idx === total - 1) return "Last choice";
+  // (The list's own ends say Favorite and Least favorite: no second name for them on the rows.)
+  function positionLabel() {
     return "";
   }
 
@@ -1000,13 +999,15 @@
       if (res.ok && data.ok) {
         lastError = null;
         baseVersion = data.saved_at;
+        const first = !hasSubmitted; // (the first save: done, and said so)
         if (!hasSubmitted) {
           hasSubmitted = true;
           if (saveBtn) saveBtn.textContent = "Save now";
         }
         if (!dirty) {
-          setStatus("Saved at " + formatTime(data.saved_at) + ". You can change it until sign-ups close.", "success",
-            savedPill(data.saved_at));
+          setStatus((first ? "You're all set! Saved at " : "Saved at ") + formatTime(data.saved_at)
+            + ". You can change it until sign-ups close.", "success",
+            first ? "You're all set! Saved " + formatTime(data.saved_at) : savedPill(data.saved_at));
         }
       } else {
         dirty = true;
@@ -1049,7 +1050,7 @@
       const at = initData.savedAt ? " (last saved " + formatTime(initData.savedAt) + ")" : "";
       setStatus("Your ranking is saved" + at + ". Changes save by themselves.", "success", savedPill(initData.savedAt));
     } else {
-      setStatus("Not saved yet — if this order is right, press “Save my ranking”.", "warn", "Not saved yet");
+      setStatus("Not saved yet.", "warn", "Not saved yet");
     }
   }
   updateWarning();

@@ -11,7 +11,7 @@
     <div class="quiz-choices">
       <button type="button" class="quiz-choice" data-go="{{ 'canvas' if canvas and canvas.saved else 'school' }}">
         <strong>Yes, my class is in Canvas</strong>
-        <span>We'll walk you through bringing its class list over.</span>
+        <span>We'll import its class list, step by step.</span>
       </button>
       <button type="button" class="quiz-choice" data-go="other">
         <strong>No, I don't use Canvas</strong>
@@ -62,7 +62,7 @@
 
   <section class="quiz-step" data-step="canvas">
     <button type="button" class="quiz-back" data-back>← Back</button>
-    <h3 class="quiz-q" tabindex="-1">Get your class list from Canvas</h3>
+    <h3 class="quiz-q" tabindex="-1">Import your class list from Canvas</h3>
     <p class="quiz-school">Your school's Canvas: <strong data-school-name>{{ canvas.name if canvas else 'not chosen yet' }}</strong>
       <button type="button" class="btn-link" data-go="school">Change</button></p>
     <p class="mini-hint" data-first-only hidden>Not using Canvas for this class? <button type="button" class="btn-link" data-go="other">Other ways to add students</button></p>

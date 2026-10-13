@@ -23,6 +23,7 @@
     <h2 class="wizard-q" id="setup-q">Add your students</h2>
     {% if report %}
     <div class="report{{ ' report-warn' if report.warn }}" tabindex="-1" data-focus-on-load>
+      {% if not report.warn and not report.unchanged and not report.restored %}<p class="report-cheer">Your class list is in!</p>{% endif %}
       <p class="report-main">{{ report.message }}</p>
       {% include "_report_dropped.html" %}
       {% if report.tips %}<ul class="tips">{% for tip in report.tips %}<li>{{ tip }}</li>{% endfor %}</ul>{% endif %}
@@ -31,9 +32,11 @@
     {% endif %}
 
     {% if counts.roster %}
+    {% if not report %}{# (just added: the report above says how many, and their emails) #}
     <p class="lead-line">
       <strong>{{ counts.roster | plural('student') }}</strong> on your list{% if counts.roster_with_email == counts.roster %}, all with email addresses: each confirms it's them with an emailed code.{% elif counts.roster_with_email %}: {{ counts.roster_with_email }} with email addresses (they get an emailed code); the rest sign in with a PIN.{% else %}, without email addresses: they sign in by name and a PIN.{% endif %}
     </p>
+    {% endif %}
     {% with people=on_list, heading="Who's on your list", fix_href=tab_href(sheet.id, 'class-list') %}{% include "_roster_people.html" %}{% endwith %}
     <div class="setup-actions">
       <a class="btn btn-secondary" href="{{ about_url }}"><span aria-hidden="true">←</span> Back</a>
@@ -62,7 +65,6 @@
       {% include "_class_quiz.html" %}
     </details>
     {% else %}
-    <p class="lead-line">A couple of quick questions, and we'll walk you through it.</p>
     {% include "_class_quiz.html" %}
     <p class="privacy-line">Private: only names and emails are kept, everything is encrypted, and only you can see the list. <button type="button" class="btn-link" data-popover-target="privacy-details" aria-haspopup="dialog">How it's protected</button></p>
     {# Shown only on the first question (app.js): after that, the question's own Back is the one to use. #}

@@ -4,9 +4,10 @@
    for everyone on the list), count, back ("setup" or "class"), compose (to,
    bcc, subject, body), copy_from (the id of the message's text box)}. #}
 <div class="send-choices">
+  {% if invites_ready or is_owner %}
   <section class="send-choice" aria-labelledby="send-for-me-{{ send.back }}">
     <h3 class="send-title" id="send-for-me-{{ send.back }}">Send it for me</h3>
-    <p class="send-text">WorkOS, the sign-in service this site uses, emails {{ 'each of your ' ~ (send.count | plural('student')) if send.count > 1 else 'your student' }} an invitation{% if code_sender %}, from {{ code_sender }}{% endif %}. Its button signs them in to this class. WorkOS writes that email, so it won't include your message.</p>
+    <p class="send-text">We email {{ 'each of your ' ~ (send.count | plural('student')) if send.count > 1 else 'your student' }} an invitation{% if code_sender %}, from {{ code_sender }}{% endif %}, with a button that signs them in. (It's a standard invitation, so your message isn't in it.)</p>
     {% if invites_ready %}
     <form method="post" action="{{ url_for('teach.invite', sid=sheet.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -15,9 +16,10 @@
       <button type="submit" class="btn btn-primary" data-confirm="Have WorkOS email {{ send.count | plural('student') }} an invitation now?">Send {{ send.count | plural('invitation') }}</button>
     </form>
     {% else %}
-    <p class="send-off">Not set up on this site yet.{% if is_owner %} <a href="{{ url_for('owner.index') }}#invitations">Set it up</a>{% else %} Whoever runs this site can turn it on.{% endif %}</p>
+    <p class="send-off">Not set up on this site yet. <a href="{{ url_for('owner.index') }}#invitations">Set it up</a></p>
     {% endif %}
   </section>
+  {% endif %}
   <section class="send-choice" aria-labelledby="send-myself-{{ send.back }}">
     <h3 class="send-title" id="send-myself-{{ send.back }}">I'll send it myself</h3>
     <p class="send-text">From your own email, with their addresses in Bcc, or copy the message to post in Canvas.</p>

@@ -127,7 +127,7 @@
       No class list yet: anyone with your link can sign up by name and a PIN. A list lets students confirm it's
       really them with an emailed code, and shows you who hasn't ranked.
     {% else %}
-      <strong>Next, add your students.</strong> A couple of quick questions, and we'll walk you through it.
+      <strong>Next, add your students.</strong>
     {% endif %}
   </p>
 
@@ -353,7 +353,7 @@
   {% endif %}
   {% if nudge %}
   <div class="nudge" id="remind">
-    <p class="nudge-title"><strong>Nudge {{ "the 1 student who hasn't" if nudge.count == 1 else "the " ~ nudge.count ~ " who haven't" }} ranked</strong>{% if nudge.unreachable %} <span class="mini-hint">({{ nudge.unreachable }} more {{ 'has' if nudge.unreachable == 1 else 'have' }} no email on your list)</span>{% endif %} <span class="mini-hint">Each button opens a ready-to-send reminder in your own email, with their addresses in Bcc. Pick the one that fits:</span></p>
+    <p class="nudge-title"><strong>Remind {{ "the 1 student who hasn't" if nudge.count == 1 else "the " ~ nudge.count ~ " who haven't" }} ranked</strong>{% if nudge.unreachable %} <span class="mini-hint">({{ nudge.unreachable }} more {{ 'has' if nudge.unreachable == 1 else 'have' }} no email on your list)</span>{% endif %} <span class="mini-hint">Each button opens a ready-to-send reminder in your own email, with their addresses in Bcc. Pick the one that fits:</span></p>
     <div class="helper-row">
       {% for m in nudge.messages %}
       <a class="btn {{ 'btn-primary' if loop.first else 'btn-secondary' }}" data-compose data-to="{{ nudge.to }}" data-bcc="{{ nudge.bcc }}" data-subject="{{ m.subject }}" data-body="{{ m.body }}"

@@ -857,8 +857,7 @@ def _next_step(sheet, counts, has_schedule, stale, published, without_day=0, stu
     """The one thing to do next, for the card at the top of the sheet page."""
     if not counts["roster"] and not sheet["allow_unlisted"]:
         return {"title": "Add your students", "anchor": "class-list",
-                "text": "A few quick questions walk you through it: from Canvas, a spreadsheet, typing names in, or "
-                        "letting students sign themselves up."}
+                "text": "From Canvas, a spreadsheet, or typed in: we'll walk you through it."}
     if not sheet["bidding_open"] and not counts["submissions"] and not has_schedule:
         return {"title": "Reopen sign-ups so students can rank", "anchor": "signups",
                 "text": "Sign-ups are closed and there are no rankings, so students who open the link can't do "
@@ -1289,7 +1288,7 @@ def _sheet_page(sid, tab):
         {"title": "Create your sign-up sheet", "done": True, "anchor": "top"},
         {"title": "Add your class list", "done": counts["roster"] > 0, "anchor": "class-list",
          "optional": bool(sheet["allow_unlisted"]),
-         "hint": "From Canvas, a spreadsheet, or typed in: a few quick questions walk you through it."},
+         "hint": "From Canvas, a spreadsheet, or typed in: we'll walk you through it."},
         {"title": "See it as a student", "done": bool(sheet["tested_at"] or sheet["shared_at"]), "anchor": "try-it",
          "optional": True, "hint": "Opens in a new tab; this page stays open."},
         {"title": "Share the link", "done": bool(sheet["shared_at"]),
@@ -2997,7 +2996,14 @@ def _make_schedule(sheet, confirmed=False):
         notes.append(f"Your {plural(len(manual), 'hand-made move')} ({moves}) "
                      f"{'was' if len(manual) == 1 else 'were'} replaced by the new schedule.")
     if not sheet["published_at"]:
-        flash("Your schedule is ready. Check it below, then publish it so students can see their day.", "success")
+        # The one number a professor wants: how many got their first choice.
+        first = {s["key"]: s["ranking"][0] for s in inputs.students if s.get("ranking")}
+        got = {key: day for key, _name, day, _how in results}
+        firsts = sum(1 for key, day in first.items() if got.get(key) == day)
+        everyone = all(day for _key, _name, day, _how in results)
+        flash(("Done! Everyone has a day" if everyone else "Done!")
+              + (f", and {firsts} of {len(first)} got their first choice." if first else ".")
+              + " Look it over, then publish it so students can see their day.", "success")
         if notes:
             _offer_undo(sheet, snap_id, " ".join(notes), ["assignments"])
     elif changes and (changes["lose"] or changes["move"] or changes["gain"]):
