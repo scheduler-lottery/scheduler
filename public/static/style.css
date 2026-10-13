@@ -622,6 +622,13 @@ input[type="email"]:focus, input[type="search"]:focus, textarea:focus, select:fo
   background: var(--accent-soft);
   color: var(--accent-strong);
 }
+/* Under a finger, with the keyboard up (name-autocomplete.js): no taller
+   than the room the keyboard leaves, and above the box when there's no
+   room for two names under it. */
+@media (pointer: coarse) {
+  .suggestions-list { max-height: min(240px, var(--suggest-room, 240px)); overscroll-behavior: contain; }
+  .suggestions-list.opens-up { top: auto; bottom: 100%; margin: 0 0 6px; }
+}
 .roster-row { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; flex-wrap: wrap; }
 
 .flash-stack { margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
