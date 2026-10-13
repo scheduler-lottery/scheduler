@@ -1,7 +1,9 @@
 // Fonts first: the page (hidden by theme-init.js) shows once the fonts it
-// uses have loaded, or after 2.5 seconds whatever happens, so text never
-// flashes from a stand-in font to the real one. The fonts are asked for by
-// name, so this works the same in a background tab.
+// uses have loaded, or after half a second whatever happens, so text doesn't
+// flash from a stand-in font to the real one when they're quick to arrive
+// (cached, or a good connection), and a phone on a slow one isn't left
+// looking at a blank page. The fonts are asked for by name, so this works
+// the same in a background tab.
 (function () {
   var root = document.documentElement;
   if (!root.classList.contains("fonts-loading")) return;
@@ -12,9 +14,17 @@
     root.classList.remove("fonts-loading");
     document.dispatchEvent(new Event("page-shown"));
   };
-  setTimeout(show, 2500);
+  setTimeout(show, 450);
+  // The stand-in fonts' stylesheet (theme-init.js) first, so their names
+  // mean something when they're asked for.
+  var css = document.querySelector("link[data-font-css]");
+  var listed = !css || css.hasAttribute("data-loaded") ? Promise.resolve() : new Promise(function (done) {
+    css.addEventListener("load", done);
+    css.addEventListener("error", done);
+  });
   var want = function (face) {
-    return document.fonts.load(face).then(function (found) { return found.length > 0; }, function () { return false; });
+    return listed.then(function () { return document.fonts.load(face); })
+      .then(function (found) { return found.length > 0; }, function () { return false; });
   };
   var choice = root.getAttribute("data-font");
   // Headings: the variable Roslindale, or the single weight that stands in
@@ -101,7 +111,7 @@
       var flashShown = false;
       var once = function () { if (!flashShown) { flashShown = true; arrive(); } };
       document.addEventListener("page-shown", once);
-      setTimeout(once, 3100); // the page shows by itself after 3 seconds
+      setTimeout(once, 700); // the page shows by itself after 0.6 seconds
     }
   }
 
