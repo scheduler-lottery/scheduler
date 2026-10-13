@@ -60,7 +60,7 @@
           Hi <bdi>{{ name }}</bdi> — put the {{ days | length }} days in order, favorite first. You'll get a day as
           high on your list as possible.
         </p>
-        <p class="subtitle rank-intro-short">Favorite on top.
+        <p class="subtitle rank-intro-short">
           <span class="touch-only">Press and hold a day to move it, or use ▲ ▼. Tap a day for can't-do and notes.</span>
           <span class="mouse-only">Drag a day by ⠿, or use ▲ ▼. Click a day for can't-do and notes.</span>
         </p>
@@ -123,10 +123,6 @@
         {{ why_order_matters }}
       </div>
     </details>
-  </div>
-  {% elif has_submitted %}
-  <div class="save-row">
-    <span class="save-status">This is locked in — no changes possible now.</span>
   </div>
   {% endif %}
 

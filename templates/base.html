@@ -451,7 +451,8 @@
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
     </button>
     <h2 id="ranking-help-title" class="modal-title">How it works</h2>
-    <p class="ranking-lead">You rank the days, favorite first. When sign-ups close, you get the highest day on your list that still has a seat.</p>
+    {% set for_prof = instructor and not nav_student %}
+    <p class="ranking-lead">{% if for_prof %}Students rank the days, favorite first. When sign-ups close, each gets the highest day on their list that still has a seat.{% else %}You rank the days, favorite first. When sign-ups close, you get the highest day on your list that still has a seat.{% endif %}</p>
 
     <section class="appearance-group" aria-labelledby="ranking-steps">
       <h3 class="group-label" id="ranking-steps">Step by step</h3>
@@ -464,7 +465,7 @@
         <li class="ranking-step">
           <span class="tile-art"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.2" stroke="currentColor" stroke-width="1.7"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="15.5" r="1.3" fill="currentColor"/></svg><span class="step-num" aria-hidden="true">2</span></span>
           <span class="step-name">Sign-ups close</span>
-          <span class="step-text">At the deadline, or when your instructor closes them.</span>
+          <span class="step-text">{{ 'At the deadline, or when you close them.' if for_prof else 'At the deadline, or when your instructor closes them.' }}</span>
         </li>
         <li class="ranking-step">
           <span class="tile-art"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5" stroke="currentColor" stroke-width="1.7"/><circle cx="8.6" cy="8.6" r="1.35" fill="currentColor"/><circle cx="12" cy="12" r="1.35" fill="currentColor"/><circle cx="15.4" cy="15.4" r="1.35" fill="currentColor"/></svg><span class="step-num" aria-hidden="true">3</span></span>

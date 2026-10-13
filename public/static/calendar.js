@@ -462,7 +462,7 @@
       li.textContent = "No deadline: you'll close sign-ups yourself.";
     }
     chip.appendChild(li);
-    openButton.textContent = dateInput.value ? "Change the date and time" : "Pick a date and time";
+    openButton.textContent = dateInput.value ? "Change the deadline" : "Pick a deadline";
   }
 
   function renderCalendar() {

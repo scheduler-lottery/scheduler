@@ -52,7 +52,7 @@
 
   <form method="post" action="{{ verify_url }}" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label for="code" class="field-label">The {{ code_length }}-digit code from the email</label>
+    <label for="code" class="field-label">The code from the email</label>
     <input type="text" id="code" name="code" class="code-input" placeholder="123456"
            inputmode="numeric" autocomplete="one-time-code" maxlength="{{ code_length + 4 }}" autofocus required
            autocorrect="off" spellcheck="false" enterkeyhint="go">

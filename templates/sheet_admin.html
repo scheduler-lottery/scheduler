@@ -22,12 +22,12 @@
   {# On phones and touch screens there's no hovering: what the pill means
      is printed under it instead (style.css .status-say). #}
   {% if waiting_for_list %}
-  <p class="status-say" aria-hidden="true">Add your students so they can sign in.</p>
+  <p class="status-say" aria-hidden="true">Nobody can sign in yet.</p>
   {% elif sheet.bidding_open %}
   <p class="status-say">Students can rank their days now.{% if deadline.closes_at and not deadline.waiting %} Sign-ups close <time datetime="{{ deadline.closes_at }}" data-local="deadline">{{ deadline.text }}</time>.{% endif %}</p>
   {% elif published %}
   {% else %}
-  <p class="status-say">Rankings can't change now. {{ 'The schedule is made: publish it so students see their day.' if has_schedule else 'Next: make the schedule.' }}</p>
+  <p class="status-say">Rankings can't change now.</p>
   {% endif %}
   {# Phones: one button that opens the phone's own share sheet (app.js
      [data-share-url]; elsewhere it copies), with the links themselves
@@ -174,7 +174,7 @@
     <h2 id="delete-sheet-title" class="modal-title">Delete “{{ sheet.title }}”?</h2>
     <p class="modal-body">
       The student link stops working and everything on this sheet is removed. A backup downloads to you,
-      and you can bring the whole sheet back from your dashboard for 30 days.
+      and you can bring the whole sheet back from My sheets for 30 days.
     </p>
     <form method="post" action="{{ url_for('teach.delete_sheet', sid=sheet.id) }}" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

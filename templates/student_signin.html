@@ -11,8 +11,8 @@
   </div>
   {% else %}
   {% if sheet.bidding_open %}
-  <h1>Welcome</h1>
-  <p class="subtitle">Rank the presentation days for this class. It takes a minute.</p>
+  <h1>Rank your presentation days</h1>
+  <p class="subtitle">It takes a minute.</p>
   {% elif published %}
   <h1>The schedule is out</h1>
   <p class="subtitle">Sign in to see your presentation day.</p>
@@ -29,7 +29,7 @@
       {% if not sheet.bidding_open and not counts.roster %}
       Type the name you signed up with, then your PIN. (Only people who already signed up can sign in now.)
       {% elif counts.roster_with_email %}
-      Pick your name as you type, or type your school email. We'll email you a 6-digit code to confirm it's you.
+      Pick your name as you type, or type your email. We'll email you a code to confirm it's you.
       {% elif counts.roster %}
       Pick your name as you type. The first time, you'll choose a PIN (a number only you know).
       {% else %}

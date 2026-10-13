@@ -878,7 +878,7 @@ def _next_step(sheet, counts, has_schedule, stale, published, without_day=0, stu
         if counts["roster"] and counts["waiting"]:
             return {"title": f"Wait for rankings — {counts['listed_submissions']} of {counts['roster']} so far",
                     "anchor": "signups",
-                    "text": "When everyone's in (or your deadline passes), the Schedule tab makes the schedule in one press."}
+                    "text": "When everyone's in (or your deadline passes), close sign-ups and make the schedule in one press."}
         return {"title": "Close sign-ups and make the schedule", "anchor": "schedule",
                 "text": ("Everyone on your list has ranked." if counts["roster"] else
                          f"{plural(counts['submissions'], 'person has', 'people have')} ranked so far.")
@@ -1286,9 +1286,8 @@ def _sheet_page(sid, tab):
 
     steps = [
         {"title": "Create your sign-up sheet", "done": True, "anchor": "top"},
-        {"title": "Add your class list", "done": counts["roster"] > 0, "anchor": "class-list",
-         "optional": bool(sheet["allow_unlisted"]),
-         "hint": "From Canvas, a spreadsheet, or typed in: we'll walk you through it."},
+        {"title": "Add your students", "done": counts["roster"] > 0, "anchor": "class-list",
+         "optional": bool(sheet["allow_unlisted"])},
         {"title": "See it as a student", "done": bool(sheet["tested_at"] or sheet["shared_at"]), "anchor": "try-it",
          "optional": True, "hint": "Opens in a new tab; this page stays open."},
         {"title": "Share the link", "done": bool(sheet["shared_at"]),
@@ -3000,10 +2999,17 @@ def _make_schedule(sheet, confirmed=False):
         first = {s["key"]: s["ranking"][0] for s in inputs.students if s.get("ranking")}
         got = {key: day for key, _name, day, _how in results}
         firsts = sum(1 for key, day in first.items() if got.get(key) == day)
-        everyone = all(day for _key, _name, day, _how in results)
-        flash(("Done! Everyone has a day" if everyone else "Done!")
-              + (f", and {firsts} of {len(first)} got their first choice." if first else ".")
-              + " Look it over, then publish it so students can see their day.", "success")
+        # Who has no day yet (counted as Publish counts them: students on the list who didn't rank, too).
+        rankers, didnt_rank = sheets.unplaced(sheets.get_assignments(sheet["id"]), inputs.rows,
+                                              sheets.get_roster(sheet["id"]), inputs.days, inputs.tests_counted)
+        missing = len(rankers) + len(didnt_rank)
+        chosen = f"{firsts} of {len(first)} got their first choice" if first else ""
+        if missing:
+            flash(f"Done! {chosen + ', but ' if chosen else ''}{plural(missing, 'student has', 'students have')} "
+                  "no day yet: see below.", "info")
+        else:
+            flash("Done! Everyone has a day" + (f", and {chosen}." if chosen else ".")
+                  + " Look it over, then publish it so students can see their day.", "success")
         if notes:
             _offer_undo(sheet, snap_id, " ".join(notes), ["assignments"])
     elif changes and (changes["lose"] or changes["move"] or changes["gain"]):
@@ -3292,7 +3298,7 @@ def publish(sid):
     rankers, didnt_rank = sheets.unplaced(sheets.get_assignments(sheet["id"]), inputs.rows,
                                           sheets.get_roster(sheet["id"]), inputs.days, inputs.tests_counted)
     nobody = [r["display_name"] for r in rankers + didnt_rank]
-    message = "Published! Post the message below to let your class know."
+    message = "Published! Students can see their day now."
     if nobody:
         message += (f" {plural(len(nobody), 'student has', 'students have')} no day yet and will see that: "
                     f"{_names(nobody)}. Give them a day under Schedule — nobody else has to move.")

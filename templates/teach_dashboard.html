@@ -18,7 +18,7 @@
           <span class="sheet-meta">
             {% if s.first_day %}{{ s.first_day }}{% if s.last_day and s.last_day != s.first_day %} – {{ s.last_day }}{% endif %} · {% endif %}
             {% if s.roster_count %}{{ s.listed_count }} of {{ s.roster_count }} ranked{% else %}{{ s.listed_count + s.unlisted_count }} ranked{% endif %}{% if s.roster_count and s.unlisted_count %} (+{{ s.unlisted_count }} not on the list){% endif %}
-            {% if s.published_at %}· schedule published{% elif s.assigned_count %}· schedule made{% endif %}
+            {% if s.assigned_count and not s.published_at %}· schedule made{% endif %}
             {% if s.same_title %}· link code <code>{{ s.id }}</code>{% endif %}
           </span>
         </span>
@@ -34,7 +34,7 @@
         {% set next = "Done: each student can see their day." %}
         <span class="status-pill open status-tip">Schedule published<span class="tip-bubble" role="tooltip" id="status-{{ s.id }}">{{ next }}</span></span>
         {% else %}
-        {% set next = "Next: publish the schedule, so students see their day." if s.assigned_count else "Next: make the schedule." %}
+        {% set next = "Next: publish the schedule, so students see their day." if s.assigned_count else ("Next: make the schedule." if s.ranked else "Next: reopen sign-ups so students can rank.") %}
         <span class="status-pill closed status-tip">Sign-ups closed<span class="tip-bubble" role="tooltip" id="status-{{ s.id }}">{{ next }}</span></span>
         {% endif %}
         <span class="sheet-next touch-only" aria-hidden="true">{{ next }}</span>

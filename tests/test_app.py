@@ -2831,7 +2831,7 @@ def test_a_new_sheet_goes_on_to_its_students_and_its_link_with_a_progress_bar(pr
     # With the list in, the setup page is on its last step: sharing.
     page = html(prof.get(f"/teach/s/{sid}/setup"))
     assert "Step 8 of 8" in page and "Share the link with your class" in page
-    assert "How should your 3 students get the link?" in page
+    assert "Send your students the link: from your own email, or post the message in Canvas." in page
     assert "I'll send it myself" in page and "Send it for me" not in page  # (not offered until the owner's test passes)
     assert "I'll send it myself" in page and "Email them myself" in page and "Copy the message" in page
     assert "alex@school.edu, riya@school.edu, sam@school.edu" in page  # the ready-made email's Bcc
@@ -3177,7 +3177,7 @@ def test_after_a_list_goes_in_the_instructor_sees_who_came_over(prof):
     sid = prof.create_sheet(allow_unlisted=False)
     prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=3), "setup": "1"})
     setup = text(prof.get(f"/teach/s/{sid}/setup?step=students"))
-    assert "Who's on your list (3)" in setup and "Student 0 s0@u.school.edu" in setup and "Change the list" in setup
+    assert "Who's on it (3)" in setup and "Student 0 s0@u.school.edu" in setup and "Change the list" in setup
     sid = prof.create_sheet(title="Another", allow_unlisted=False)
     prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=3)})
     page = text(prof.get(f"/teach/s/{sid}"))
@@ -3770,7 +3770,7 @@ def test_the_share_step_counts_everyone_and_names_who_the_emails_miss(prof):
     prof.upload(sid, "Name,Email\nAna Lima,ana@school.edu\nBo Chen,bo@school.edu\n<b>Cy</b> Cole,\n")
     page = raw(prof.get(f"/teach/s/{sid}/setup?step=share"))
     said = text(page)
-    assert "How should your 3 students get the link?" in said
+    assert "Send your students the link" in said  # (one way left, so no question)
     assert ("<b>Cy</b> Cole has no email address on your list, so the emails below reach only the other 2. Post the "
             "message in Canvas too, or give it to that student yourself.") in said
     assert "&lt;b&gt;Cy&lt;/b&gt; Cole has no email" in page  # escaped

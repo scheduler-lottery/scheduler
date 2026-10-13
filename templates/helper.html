@@ -26,9 +26,9 @@
       on its class page), a checklist: <strong>1.</strong> add it, <strong>2.</strong> press
       <strong>Import class list</strong> and pick the class, <strong>3.</strong> all done: delete it? The page checks
       each step off as it goes. Added from that step, it carries on by itself.</li>
-    <li>The first time, it opens a small window of its own naming your school's Canvas (say,
+    {% if helper_any() %}<li>The first time, it opens a small window of its own naming your school's Canvas (say,
       canvas.myschool.edu): press <strong>Allow</strong>, then <strong>Allow</strong> again in the box Chrome shows.
-      Once per school. Until then it can read no website at all, which is why adding it asks for nothing.</li>
+      Once per school.</li>{% endif %}
     <li>The helper asks your school's Canvas for your list of courses, then for the students in one course: the one
       your sheet is named for, or, if that isn't clear, the one you pick. It
       does that as you, signed in to Canvas the usual way. If you aren't signed in, Canvas's sign-in page comes up for
@@ -54,8 +54,9 @@
   </ul>
 
   <h2>What your browser will tell you</h2>
-  <p>Adding it asks for nothing. The first time you import a class list, Chrome asks whether it may “read and change
-    your data” on your school's Canvas site. That's the permission it needs to ask Canvas for your class list; it only
+  <p>{% if helper_any() %}Adding it asks for nothing. The first time you import a class list, Chrome asks whether it may
+    “read and change your data” on your school's Canvas site.{% else %}When you add it, Chrome says it can “read and
+    change your data” on canvas.northwestern.edu.{% endif %} That's the permission it needs to ask Canvas for your class list; it only
     ever reads your list of courses and the names and emails of one course's students, and only when you ask. Its code
     is public: <a href="{{ source_url }}/tree/main/extension" rel="noopener">see exactly what it does</a>, and
     <a href="{{ source_url }}/releases" rel="noopener">check the copy in the Chrome Web Store against it</a>.</p>

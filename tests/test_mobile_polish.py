@@ -78,3 +78,19 @@ def test_the_stylesheet_keeps_hover_to_devices_that_hover():
             outside.append(chunk.strip()[:60])
         depth += 1
     assert outside == []
+
+
+def test_making_the_schedule_says_how_many_got_their_first_choice_and_never_that_everyone_has_a_day_when_not(
+        prof, browser):
+    from conftest import day_keys
+
+    from test_app import follow
+
+    sid = prof.create_sheet(capacity=1, days=("Oct 27", "Nov 10"), allow_unlisted=False)
+    prof.upload(sid, "Name,Email\nAna Lima,ana@school.edu\nBo Chen,bo@school.edu\nCy Cole,cy@school.edu\n")
+    days = day_keys(sid)
+    for name in ("Ana Lima", "Bo Chen"):
+        browser().sign_in_student(sid, name).rank(sid, days)
+    said = follow(prof, prof.post(f"/teach/s/{sid}/close-and-schedule"))
+    # Two seats, three students (Cy didn't rank): someone is left without a day, and it says so.
+    assert "1 of 2 got their first choice, but 1 student has no day yet" in said and "Everyone has a day" not in said

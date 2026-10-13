@@ -185,7 +185,7 @@ try {
   words = await visibleText();
   check(await evaluate(me, `document.querySelector("[data-canvas-open]").textContent`) === "Open Canvas",
     "iPhone: the button says Open Canvas");
-  check(words.includes("This part is easiest on a computer") && words.includes("Tap the box below") && words.includes("Browse"),
+  check(words.includes("Easiest on a computer") && words.includes("Tap the box below") && words.includes("Browse"),
     "iPhone: what to do on a phone, and how to get back to this page later");
   check(!words.includes("Safari may turn") && !words.includes("double-click") && !words.includes("on the left of the window"),
     "iPhone: no Mac folder, no double-clicking, no window with Downloads on its left");

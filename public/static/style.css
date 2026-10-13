@@ -407,7 +407,6 @@ html.kb-open .topbar { position: static; }
   }
   /* The class's name is in the top bar: not again just under it. */
   body:has(.topbar-title:not(:empty)) .eyebrow-sheet { display: none; }
-  .center-card { margin-top: 0; }
   .brand { flex: 0 0 auto; padding: 5px; margin: 0 -5px; }
   .brand-name { display: none; }
   .topbar-title {
@@ -1217,8 +1216,8 @@ body.is-dragging .rank-item:not(.dragging) { pointer-events: none; }
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   border-radius: var(--radius-full);
-  width: 28px;
-  height: 28px;
+  width: auto; min-width: 28px; padding: 0 0.3em;
+  height: auto; min-height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1382,14 +1381,14 @@ html.kb-open .save-row { position: static; }
 .day-toggle-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 0 1 auto; }
 .rank-compact .day-label { font-size: 1rem; line-height: 1.25; overflow-wrap: break-word; }
 .day-toggle-chevron { width: 16px; height: 16px; flex-shrink: 0; margin-left: 6px; color: var(--muted); transition: transform 0.15s ease; }
+@media (max-width: 340px) { .rank-compact .drag-handle { display: none; } } /* (press and hold a day, as the intro says) */
 @media (max-width: 380px) {
-  /* (the narrowest windows: press and hold a day to move it, as the intro says, so no grip; tighter edges) */
-  .rank-compact .drag-handle { display: none; }
+  /* (narrow windows: tighter edges, so the date has room) */
   .rank-compact .rank-move { gap: 4px; }
   main.page { padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); }
   main.page > .card:has(.rank-list) { padding-left: 12px; padding-right: 12px; }
 }
-@media (max-width: 400px) { .rank-compact .day-label { white-space: nowrap; overflow-wrap: normal; } }
+@media (max-width: 400px) { html:not(.text-large) .rank-compact .day-label { white-space: nowrap; overflow-wrap: normal; } }
 .rank-item.open .day-toggle-chevron { transform: rotate(180deg); }
 .rank-flags { display: flex; flex-wrap: wrap; gap: 4px 8px; }
 .rank-flags[hidden], .rank-flag[hidden] { display: none; }
@@ -1515,8 +1514,8 @@ html.kb-open .save-row { position: static; }
    a wide table already reads left to right, with arrows. */
 .chip-num { display: none; }
 .tag-why { display: block; margin-top: 3px; font-size: 0.82rem; font-weight: 400; color: var(--muted); }
-@media (min-width: 761px) { .tag-why { display: none; } }
-@media (max-width: 760px) {
+@media (min-width: 901px) { .tag-why { display: none; } }
+@media (max-width: 900px), (horizontal-viewport-segments: 2) {
   /* Sign-ups and the class list as one card per student: each part named
      (data-label), its buttons in a row underneath, Delete last. */
   .table-wrap:has(#signups-table), .table-wrap:has(.roster-table) { overflow: visible; }
@@ -1544,7 +1543,7 @@ html.kb-open .save-row { position: static; }
   .row-actions .row-delete { margin-left: auto; padding-left: 16px; } /* (Delete apart from the rest) */
   .roster-table details.row-edit[open] { display: block; width: 100%; }
   .roster-table details.row-edit[open] form { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
-  .roster-table details.row-edit input { width: 100%; }
+  .roster-table details.row-edit input { width: 100%; flex: 0 0 auto; } /* (in a column, flex: 1 1 200px would make each box 200px tall) */
 }
 .admin-table input { font-size: max(16px, 1rem); } /* (iOS zooms in on a smaller field) */
 
@@ -2201,11 +2200,18 @@ details.ranking-summary > summary { cursor: pointer; font-weight: 650; color: va
 
 .sheet-row { display: flex; gap: 8px; align-items: stretch; }
 .sheet-row .sheet-item { flex: 1 1 auto; }
-.sheet-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-.sheet-actions > [data-popover-target^="delete-"] { margin-left: 12px; } /* (Delete apart from the rest) */
+.sheet-actions { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; justify-content: flex-end; }
 .sheet-next { display: block; margin-top: 4px; font-size: 0.86rem; color: var(--muted); }
+@media (pointer: coarse) {
+  .sheet-actions { gap: 8px; }
+  .sheet-actions > [data-popover-target^="delete-"] { margin-left: 12px; } /* (Delete apart from the rest) */
+  /* (NEW-3: what's next, on a line of its own under the name and status) */
+  .sheet-item { flex-wrap: wrap; }
+  .sheet-item > .sheet-main { flex: 1 1 12em; min-width: 0; }
+  .sheet-next { flex: 1 0 100%; margin-top: 0; }
+}
 .sheet-actions form { margin: 0; }
-@media (max-width: 560px) {
+@media (max-width: 760px), (horizontal-viewport-segments: 2) {
   .sheet-row { flex-direction: column; }
 }
 .short-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
@@ -2727,6 +2733,13 @@ h4 { font-size: 1.1rem; line-height: 1.15; font-weight: calc(var(--w-h4) + var(-
   margin: 0 0 16px; cursor: pointer;
 }
 .theme-auto-text { grid-column: 2 / -1; min-width: 0; }
+@media (hover: hover) and (pointer: fine) {
+  /* (on a computer, Automatic is one compact line, so the whole window fits) */
+  .theme-auto { grid-template-columns: 56px 1fr; gap: 10px; margin-bottom: 12px; }
+  .theme-auto .theme-preview { width: 56px; height: 34px; }
+  .theme-auto-text { grid-column: 2; }
+  .theme-auto-hint { display: none; }
+}
 .theme-auto .choice-name { margin: 0; font-size: 0.95rem; text-align: left; }
 .theme-auto-hint { display: block; margin-top: 2px; font-family: var(--font-small); font-size: 0.84rem; line-height: 1.4; color: var(--muted); }
 @media (hover: hover) { .theme-auto:hover .theme-preview { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(17, 17, 26, 0.12); } }
@@ -3425,11 +3438,12 @@ button.icon-dock-label { border: 0; background: none; font-family: inherit; curs
    backu") behind a strip that scrolls without saying so. */
 @media (max-width: 640px) {
   .sheet-tabs {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.5em), 1fr)); gap: 4px; margin: 16px 0 0; padding: 4px;
+    display: flex; flex-wrap: wrap; gap: 4px; margin: 16px 0 0; padding: 4px;
     border: 1px solid var(--border); border-radius: 14px; background: var(--surface-soft); overflow: visible;
   }
   .sheet-tab {
     display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 6px 4px; margin: 0;
+    flex: 1 1 0; min-width: max-content;
     border: 0; border-radius: 10px; text-align: center; white-space: normal; overflow-wrap: normal; word-break: normal; line-height: 1.15;
   }
   .sheet-tab.is-current {
@@ -3437,6 +3451,7 @@ button.icon-dock-label { border: 0; background: none; font-family: inherit; curs
   }
 }
 .page-jump { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 4px 4px 14px; font-size: 0.9rem; }
+@media (max-width: 640px) { .page-jump { display: none; } } /* (on a phone its sections are right below: a third list of them) */
 .page-jump a { color: var(--muted); }
 @media (hover: hover) { .page-jump a:hover { color: var(--accent-strong); } }
 .tab-lead { margin: 4px 4px 16px; color: var(--muted); }
@@ -3500,6 +3515,12 @@ button.icon-dock-label { border: 0; background: none; font-family: inherit; curs
   font-weight: calc(var(--w-h3) + var(--display-boost)); color: var(--text);
 }
 .draft-note { margin: 0; font-family: var(--font-small); font-size: 0.86rem; color: var(--muted); }
+@media (max-width: 640px) {
+  .draft-note { display: none; } /* (the Draft pill says it) */
+  .setup-parts { display: none; } /* (the step's own heading names it: "Step N of 8" and the bar stay) */
+}
+/* NEW-7: a message after making the schedule sits above its sticky Publish bar. */
+@media (max-width: 640px) { body:has(.next-bar) .toast-dock, body:has(.next-bar) .flash-stack { margin-bottom: 72px; } }
 .setup-part a { color: inherit; text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 0.2em; }
 @media (hover: hover) { .setup-part a:hover { color: var(--accent-strong); text-decoration-color: currentColor; } }
 
@@ -4101,7 +4122,9 @@ details.guide:not([open]) { padding-bottom: 20px; }
   .icon-dock-btn .dock-word { font: 600 0.68rem/1 var(--font-sans); }
 }
 @media (vertical-viewport-segments: 2) {
-  .modal-overlay { bottom: auto; height: env(viewport-segment-height 0 0, 50vh); }
+  /* (the lower screen is the dimmed backdrop: a tap there closes the window, as elsewhere) */
+  .modal-overlay { bottom: 0; height: auto; align-items: flex-start; padding-bottom: calc(100dvh - env(viewport-segment-bottom 0 0, 50vh)); }
+  #day-calendar .cal-sheet-body > .modal-body, #deadline-calendar .cal-sheet-body > .modal-body { display: none; }
   .modal-overlay > .modal-dialog, #day-calendar .modal-dialog, #deadline-calendar .modal-dialog {
     max-height: calc(env(viewport-segment-height 0 0, 50vh) - 24px); overflow-y: auto;
   }
@@ -4110,4 +4133,12 @@ details.guide:not([open]) { padding-bottom: 20px; }
 /* Very large text (Appearance, 150% and up): one month at a time in the
    calendars, with day cells that grow with the text. */
 html.text-large #day-calendar .cal-month + .cal-month, html.text-large #deadline-calendar .cal-month + .cal-month { display: none; }
-html.text-large .cal-day { min-width: 2.4em; min-height: 2.4em; }
+html.text-large .cal-day { min-width: 2.4em; min-height: 1.9em; height: auto; aspect-ratio: auto; }
+html.text-large #day-calendar .cal-sheet-body > .modal-body, html.text-large #deadline-calendar .cal-sheet-body > .modal-body { display: none; }
+
+/* Phones: sign-in cards start right under the top bar (after the base
+   rules above, so this wins). */
+@media (max-width: 640px) {
+  .center-card { margin-top: 0; }
+  .mode-frame:has(> .center-card) { margin-top: 8px; }
+}

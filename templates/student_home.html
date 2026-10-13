@@ -75,7 +75,7 @@
   {% include "_deadline_note.html" %}
 
   <div class="action-tiles">
-    {% if sheet.bidding_open or has_submitted %}
+    {% if sheet.bidding_open or (has_submitted and not published) %}
     <a href="{{ url_for('student.rank', sid=sheet.id) }}" class="action-tile{{ ' home-tile-tabbed' if has_submitted }}">
       <span class="action-tile-icon">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">

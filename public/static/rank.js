@@ -46,7 +46,7 @@
 
   // Wide screens get the whole sentence; phones, where the Save bar has to
   // stay small, a short version of it (`short`, when there is one).
-  function setStatus(text, cls, short) {
+  function setStatus(text, cls, short, stay) {
     if (!saveStatus) return;
     saveStatus.className = "save-status" + (cls ? " " + cls : "");
     if (!short || short === text) {
@@ -69,7 +69,8 @@
       saveRow.classList.toggle("saved", hasSubmitted && !stopped && cls !== "error");
       clearTimeout(quietTimer);
       saveRow.classList.remove("quiet");
-      if (cls === "success") quietTimer = setTimeout(() => saveRow.classList.add("quiet"), 2500);
+      // (The first save's "You're all set!" stays until the next change: `stay`.)
+      if (cls === "success" && !stay) quietTimer = setTimeout(() => saveRow.classList.add("quiet"), 2500);
     }
   }
 
@@ -998,7 +999,7 @@
         if (!dirty) {
           setStatus((first ? "You're all set! Saved at " : "Saved at ") + formatTime(data.saved_at)
             + ". You can change it until sign-ups close.", "success",
-            first ? "You're all set! Saved " + formatTime(data.saved_at) : savedPill(data.saved_at));
+            first ? "You're all set! Saved " + formatTime(data.saved_at) : savedPill(data.saved_at), first);
         }
       } else {
         dirty = true;

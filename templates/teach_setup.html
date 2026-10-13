@@ -37,7 +37,7 @@
       <strong>{{ counts.roster | plural('student') }}</strong> on your list{% if counts.roster_with_email == counts.roster %}, all with email addresses: each confirms it's them with an emailed code.{% elif counts.roster_with_email %}: {{ counts.roster_with_email }} with email addresses (they get an emailed code); the rest sign in with a PIN.{% else %}, without email addresses: they sign in by name and a PIN.{% endif %}
     </p>
     {% endif %}
-    {% with people=on_list, heading="Who's on your list", fix_href=tab_href(sheet.id, 'class-list') %}{% include "_roster_people.html" %}{% endwith %}
+    {% with people=on_list, heading="Who's on it" if report else "Who's on your list", fix_href=tab_href(sheet.id, 'class-list') %}{% include "_roster_people.html" %}{% endwith %}
     <div class="setup-actions">
       <a class="btn btn-secondary" href="{{ about_url }}"><span aria-hidden="true">←</span> Back</a>
       <a class="btn btn-primary btn-large" href="{{ url_for('teach.setup', sid=sheet.id, step='share') }}">Next: share the link <span aria-hidden="true">→</span></a>
@@ -85,7 +85,7 @@
     </div>
     {% else %}
     {% if invite %}
-    <p class="lead-line">How should your {{ counts.roster | plural('student') }} get the link?</p>
+    <p class="lead-line">{% if invites_ready or is_owner %}How should your {{ counts.roster | plural('student') }} get the link?{% else %}Send your students the link: from your own email, or post the message in Canvas.{% endif %}</p>
     {% if invite.no_email %}{% set n = invite.no_email | length %}
     <p class="warn-line">{{ invite.no_email[:3] | join(', ') }}{% if n > 3 %} and {{ n - 3 }} more{% endif %} {{ 'has' if n == 1 else 'have' }} no email address on your list, so the emails below reach only the other {{ invite.count }}. Post the message in Canvas too, or give it to {{ 'that student' if n == 1 else 'them' }} yourself.</p>
     {% endif %}
