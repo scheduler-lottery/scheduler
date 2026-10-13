@@ -1,7 +1,9 @@
-// The day picker on the create/edit form: a calendar in a pop-up. Click a
-// date to add or remove it; press on one date and drag to another to add (or
-// remove) every day in between. The picked days show on the form as a list,
-// carried by hidden inputs — and the server checks each is a real date.
+// The day picker on the create/edit form: a calendar in a pop-up. Click or
+// tap a date to add or remove it. To add (or remove) every day in between,
+// press on one date and drag to another with a mouse; on a touch screen,
+// press and hold a date, then slide to another (a quick swipe scrolls, as it
+// does anywhere else). The picked days show on the form as a list, carried
+// by hidden inputs — and the server checks each is a real date.
 (function () {
   var field = document.querySelector("[data-day-field]");
   var dialog = document.getElementById("day-calendar");
@@ -11,6 +13,7 @@
   var openButton = field.querySelector("[data-day-open]");
   var months = dialog.querySelector("[data-calendar]");
   var summary = dialog.querySelector("[data-cal-summary]");
+  var doneButton = dialog.querySelector("[data-cal-done]");
   var MAX = parseInt(field.getAttribute("data-max"), 10) || 30;
   var DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   var MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September",
@@ -43,6 +46,9 @@
 
   function pickedDates() { return Object.keys(picked).sort(); }
   function count() { return pickedDates().length + undated.length; }
+  // A day that has passed can't be added; one that was already on the
+  // sheet can still be taken off (and put back).
+  function closed(iso) { return iso < TODAY && !(iso in picked) && !(iso in knownKeys); }
 
   var first = pickedDates()[0];
   var view = first ? dateOf(first) : new Date();
@@ -91,9 +97,12 @@
       list.appendChild(empty);
     }
     if (openButton) openButton.textContent = rows.length ? "Change the days" : "Pick days on a calendar";
+    // (The new-sheet form keeps answers in progress: app.js listens.)
+    list.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
-  // The calendar in the pop-up: two months side by side (stacked on a phone).
+  // The calendar in the pop-up: two months side by side (one at a time on
+  // a phone, style.css).
   function renderCalendar() {
     months.innerHTML = "";
     for (var m = 0; m < 2; m++) {
@@ -127,24 +136,47 @@
         cell.setAttribute("data-date", iso);
         cell.setAttribute("aria-pressed", iso in picked ? "true" : "false");
         cell.setAttribute("aria-label", labelOf(iso) + (iso < TODAY ? " (already passed)" : ""));
+        cell.disabled = closed(iso);
         cell.textContent = d;
         grid.appendChild(cell);
       }
       box.appendChild(grid);
       months.appendChild(box);
     }
+    renderSummary();
+  }
+
+  // What's picked, under the calendar, and on Done ("Done (5 days)").
+  function renderSummary() {
     var n = count();
     summary.textContent = n
       ? n + (n === 1 ? " day" : " days") + " picked: " + pickedDates().map(labelOf).concat(
           undated.map(function (d) { return d.label; })).join(" · ")
       : "No days picked yet.";
     if (n >= MAX) summary.textContent += " (That's the most a sheet can have.)";
+    if (doneButton) doneButton.textContent = n ? "Done (" + n + (n === 1 ? " day)" : " days)") : "Done";
   }
 
   function refreshCells() {
     Array.prototype.forEach.call(months.querySelectorAll(".cal-day"), function (cell) {
-      cell.setAttribute("aria-pressed", cell.getAttribute("data-date") in picked ? "true" : "false");
+      var iso = cell.getAttribute("data-date");
+      cell.setAttribute("aria-pressed", iso in picked ? "true" : "false");
+      cell.disabled = closed(iso);
     });
+  }
+
+  // After a pick: the list on the form, the calendar's days and its summary
+  // (the calendar itself stays, so whatever has focus keeps it).
+  function picksChanged() {
+    renderList();
+    refreshCells();
+    renderSummary();
+  }
+
+  function toggle(iso) {
+    if (iso in picked) delete picked[iso];
+    else if (!closed(iso) && count() < MAX) picked[iso] = knownKeys[iso] || "";
+    picksChanged();
   }
 
   function datesBetween(a, b) {
@@ -158,15 +190,23 @@
   }
 
   // Pressing on a day starts a drag: everything from there to wherever the
-  // pointer goes is added (or, starting on a picked day, removed).
+  // pointer goes is added (or, starting on a picked day, removed). A mouse
+  // starts it at once; a finger only after holding still on a day for a
+  // moment, so a swipe across the dates scrolls instead.
   var drag = null;
   var dragged = false;
+  var press = null; // a finger on a day, before it's a tap or a hold
+  var lastPointer = 0; // when a mouse or finger last picked here (its click is already done)
+  var HOLD = 350; // ms
+  var SLOP = 8; // px a finger can wander and still be tapping
 
   function apply(target) {
     var next = Object.assign({}, drag.before);
     datesBetween(drag.anchor, target).forEach(function (iso) {
       if (drag.adding) {
-        if (!(iso in next) && Object.keys(next).length + undated.length < MAX) next[iso] = knownKeys[iso] || "";
+        if (!(iso in next) && !(iso < TODAY && !(iso in knownKeys)) && Object.keys(next).length + undated.length < MAX) {
+          next[iso] = knownKeys[iso] || "";
+        }
       } else {
         delete next[iso];
       }
@@ -175,47 +215,94 @@
     refreshCells();
   }
 
-  months.addEventListener("pointerdown", function (e) {
-    var cell = e.target.closest(".cal-day");
-    if (!cell || e.button > 0) return;
-    e.preventDefault();
-    var iso = cell.getAttribute("data-date");
+  function startDrag(iso) {
     drag = { anchor: iso, adding: !(iso in picked), before: Object.assign({}, picked), last: iso };
     dragged = false;
     apply(iso);
-    if (months.setPointerCapture) months.setPointerCapture(e.pointerId);
+  }
+
+  function cancelPress() {
+    if (press) clearTimeout(press.timer);
+    press = null;
+  }
+
+  months.addEventListener("pointerdown", function (e) {
+    var cell = e.target.closest(".cal-day");
+    if (!cell || cell.disabled || e.button > 0 || drag) return;
+    var iso = cell.getAttribute("data-date");
+    if (e.pointerType === "mouse") {
+      e.preventDefault();
+      startDrag(iso);
+      if (months.setPointerCapture) months.setPointerCapture(e.pointerId);
+      return;
+    }
+    // A finger (or a pen): a tap if it lifts soon without moving; a range
+    // if it holds still; a scroll (the browser's) if it moves first.
+    cancelPress();
+    press = { id: e.pointerId, x: e.clientX, y: e.clientY, iso: iso };
+    press.timer = setTimeout(function () {
+      if (!press) return;
+      var held = press.iso;
+      press = null;
+      startDrag(held);
+      if (navigator.vibrate) { try { navigator.vibrate(10); } catch (err) { /* fine */ } }
+    }, HOLD);
   });
 
   months.addEventListener("pointermove", function (e) {
+    if (press && press.id === e.pointerId) {
+      if (Math.abs(e.clientX - press.x) > SLOP || Math.abs(e.clientY - press.y) > SLOP) cancelPress();
+      return;
+    }
     if (!drag) return;
     var under = document.elementFromPoint(e.clientX, e.clientY);
     var cell = under && under.closest(".cal-day");
-    if (!cell || cell.getAttribute("data-date") === drag.last) return;
+    if (!cell || !months.contains(cell) || cell.getAttribute("data-date") === drag.last) return;
     drag.last = cell.getAttribute("data-date");
     dragged = true;
     apply(drag.last);
   });
 
+  // While a finger is picking a range, it doesn't scroll the pop-up.
+  months.addEventListener("touchmove", function (e) {
+    if (drag && e.cancelable) e.preventDefault();
+  }, { passive: false });
+  // (Nor does holding a day bring up the phone's menu for it.)
+  months.addEventListener("contextmenu", function (e) {
+    if (drag || press) e.preventDefault();
+  });
+
   function endDrag() {
     if (!drag) return;
     drag = null;
-    renderList();
-    renderCalendar();
+    lastPointer = Date.now();
+    picksChanged();
   }
-  months.addEventListener("pointerup", endDrag);
-  months.addEventListener("pointercancel", endDrag);
-  months.addEventListener("lostpointercapture", endDrag);
+  months.addEventListener("pointerup", function (e) {
+    if (press && press.id === e.pointerId) {
+      var tapped = press.iso;
+      cancelPress();
+      lastPointer = Date.now();
+      toggle(tapped);
+      return;
+    }
+    endDrag();
+  });
+  months.addEventListener("pointercancel", function (e) {
+    if (press && press.id === e.pointerId) cancelPress(); // the browser took it: a scroll
+    endDrag();
+  });
+  months.addEventListener("lostpointercapture", function (e) {
+    if (e.target === months) endDrag();
+  });
 
-  // Keyboard: Enter or Space on a date toggles it (mouse and touch already
-  // did their work on pointerdown).
+  // Keyboard (and screen readers): Enter or Space on a date toggles it. A
+  // mouse or finger has already done its work by the time its click comes.
   months.addEventListener("click", function (e) {
     var cell = e.target.closest(".cal-day");
-    if (!cell || e.detail !== 0) return;
+    if (!cell || Date.now() - lastPointer < 800) return;
     var iso = cell.getAttribute("data-date");
-    if (iso in picked) delete picked[iso];
-    else if (count() < MAX) picked[iso] = knownKeys[iso] || "";
-    renderList();
-    renderCalendar();
+    toggle(iso);
     var again = months.querySelector('.cal-day[data-date="' + iso + '"]');
     if (again) again.focus();
   });
@@ -239,8 +326,7 @@
   });
   dialog.querySelector("[data-cal-clear]").addEventListener("click", function () {
     picked = {};
-    renderList();
-    renderCalendar();
+    picksChanged();
   });
 
   renderList();
@@ -248,9 +334,9 @@
 })();
 
 // The deadline picker: the same calendar, one month at a time, for one
-// date, and beside it the times as a list to scroll and click. It fills
-// the form's plain date box and time menu, which stay as they are when
-// JavaScript is off.
+// date, and beside it the times as a list to scroll and pick from (under
+// it on a phone), with quick picks above. It fills the form's plain date
+// box and time menu, which stay as they are when JavaScript is off.
 (function () {
   var field = document.querySelector("[data-deadline-field]");
   var dialog = document.getElementById("deadline-calendar");
@@ -300,6 +386,56 @@
 
   function changed() {
     dateInput.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  // Quick picks, counted back from the first presentation day still ahead:
+  // a week before it, the evening before, and the end of the day before.
+  // Only those still to come show, and only once there are days.
+  var presetBox = dialog.querySelector("[data-dcal-presets]");
+  var presetList = dialog.querySelector("[data-dcal-preset-list]");
+  function shifted(iso, days) {
+    var d = dateOf(iso);
+    return isoOf(new Date(d.getFullYear(), d.getMonth(), d.getDate() + days));
+  }
+  function renderPresets() {
+    if (!presetBox) return;
+    var first = Array.prototype.map.call(document.querySelectorAll('[data-day-chips] input[name="day_date"]'),
+      function (input) { return input.value; }).filter(function (iso) { return iso >= TODAY; }).sort()[0];
+    var now = new Date();
+    var clock = pad(now.getHours()) + ":" + pad(now.getMinutes());
+    var picks = !first ? [] : [
+      { date: shifted(first, -7), time: "17:00", says: "a week before the first day" },
+      { date: shifted(first, -1), time: "17:00", says: "the evening before the first day" },
+      { date: shifted(first, -1), time: "23:59", says: "the end of the day before" },
+    ].filter(function (pick) {
+      return (pick.date > TODAY || (pick.date === TODAY && pick.time > clock))
+        && timeSelect.querySelector('option[value="' + pick.time + '"]');
+    });
+    presetList.innerHTML = "";
+    picks.forEach(function (pick, i) {
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "dcal-preset";
+      button.setAttribute("aria-pressed", pick.date === dateInput.value && pick.time === timeSelect.value ? "true" : "false");
+      var when = document.createElement("strong");
+      when.textContent = labelOf(pick.date) + ", " + timeSelect.querySelector('option[value="' + pick.time + '"]').textContent.trim();
+      var says = document.createElement("small");
+      says.textContent = pick.says;
+      button.appendChild(when);
+      button.appendChild(says);
+      button.addEventListener("click", function () {
+        dateInput.value = pick.date;
+        timeSelect.value = pick.time;
+        timeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+        view = new Date(dateOf(pick.date).getFullYear(), dateOf(pick.date).getMonth(), 1);
+        changed();
+        render();
+        showChosenTime();
+        if (presetList.children[i]) presetList.children[i].focus();
+      });
+      presetList.appendChild(button);
+    });
+    presetBox.hidden = !picks.length;
   }
 
   function renderChip() {
@@ -380,6 +516,7 @@
     renderChip();
     renderCalendar();
     renderTime();
+    renderPresets();
   }
 
   months.addEventListener("click", function (e) {
@@ -396,11 +533,17 @@
   timeList.addEventListener("change", function (e) {
     if (e.target.name !== "deadline-time") return;
     timeSelect.value = e.target.value;
+    timeSelect.dispatchEvent(new Event("change", { bubbles: true }));
     renderChip();
     renderTime();
+    renderPresets();
   });
-  // Opening the picker: the chosen time in view (once the window shows).
-  openButton.addEventListener("click", function () { setTimeout(showChosenTime, 0); });
+  // Opening the picker: quick picks from the days as they are now, and the
+  // chosen time in view (once the window shows).
+  openButton.addEventListener("click", function () {
+    renderPresets();
+    setTimeout(showChosenTime, 0);
+  });
 
   dialog.querySelector("[data-dcal-prev]").addEventListener("click", function () {
     view = new Date(view.getFullYear(), view.getMonth() - 1, 1);
@@ -420,4 +563,34 @@
   chip.hidden = false;
   openButton.hidden = false;
   render();
+})();
+
+// Both calendars: on a touch screen, a quick sideways swipe across the
+// dates shows the next month (or the one before), as Later and Earlier do.
+// (Holding a date first is picking a run of days, not a swipe.)
+(function () {
+  [["[data-calendar]", "[data-cal-prev]", "[data-cal-next]"],
+   ["[data-deadline-calendar]", "[data-dcal-prev]", "[data-dcal-next]"]].forEach(function (parts) {
+    var months = document.querySelector(parts[0]);
+    var dialog = months && months.closest(".modal-dialog");
+    if (!dialog) return;
+    var start = null;
+    months.addEventListener("pointerdown", function (e) {
+      start = e.pointerType === "mouse" ? null : { id: e.pointerId, x: e.clientX, y: e.clientY, t: Date.now() };
+    });
+    months.addEventListener("pointermove", function (e) {
+      if (!start || start.id !== e.pointerId || start.moved !== undefined) return;
+      if (Math.abs(e.clientX - start.x) > 8 || Math.abs(e.clientY - start.y) > 8) start.moved = Date.now() - start.t;
+    });
+    months.addEventListener("pointercancel", function () { start = null; });
+    months.addEventListener("pointerup", function (e) {
+      if (!start || start.id !== e.pointerId) return;
+      var dx = e.clientX - start.x;
+      var dy = e.clientY - start.y;
+      var swiped = start.moved !== undefined && start.moved < 300 && Date.now() - start.t < 800
+        && Math.abs(dx) >= 60 && Math.abs(dx) > 2 * Math.abs(dy);
+      start = null;
+      if (swiped) dialog.querySelector(dx < 0 ? parts[2] : parts[1]).click();
+    });
+  });
 })();

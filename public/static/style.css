@@ -1834,10 +1834,26 @@ details.guide:not([open]) { padding-bottom: 20px; }
 .chip-remove:hover, .chip-remove:focus-visible { background: var(--surface-strong); }
 .noscript-day { display: inline-block; margin: 0 8px 8px 0; }
 .modal-calendar { max-width: 640px; }
+/* Each calendar pop-up: a header, a middle that scrolls, and a footer with
+   Done, so Done is always in view however short the window. */
+#day-calendar .modal-dialog, #deadline-calendar .modal-dialog {
+  display: flex; flex-direction: column; overflow: hidden;
+  max-height: 88vh; max-height: min(88vh, calc(100dvh - 40px));
+}
+.cal-sheet-head, .cal-sheet-foot { flex: none; }
+.cal-sheet-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  margin: 0 -6px; padding: 0 6px; /* (room for a focused date's outline) */
+}
 .cal-nav { display: flex; justify-content: space-between; margin: 12px 0 4px; }
-.cal-months { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 18px; user-select: none; }
+/* A swipe up or down on the dates scrolls; picking a run of them by touch
+   starts with a hold (calendar.js). */
+.cal-months {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 18px;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: pan-y;
+}
 .cal-title { margin: 4px 0 8px; font-size: 1.05rem; text-align: center; }
-.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; touch-action: none; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; touch-action: pan-y; }
 .cal-head { text-align: center; font-size: 0.8rem; color: var(--muted); padding-bottom: 2px; }
 .cal-day {
   aspect-ratio: 1 / 1; min-height: 34px; border-radius: 10px;
@@ -1853,6 +1869,92 @@ details.guide:not([open]) { padding-bottom: 20px; }
   border-color: transparent; color: var(--on-accent); font-weight: 700;
 }
 .cal-summary { margin: 14px 0 6px; color: var(--muted); line-height: 1.5; }
+/* Words for the way days are picked: "tap" on a touch screen, "click" and
+   "drag" with a mouse. */
+@media (pointer: coarse) { .when-mouse { display: none; } }
+@media not all and (pointer: coarse) { .when-touch { display: none; } }
+
+/* Touch: every date at least 44px tall, with no grey flash on a tap. */
+@media (pointer: coarse) {
+  .cal-grid { gap: 2px; }
+  .cal-day { aspect-ratio: auto; min-height: 44px; height: 48px; -webkit-tap-highlight-color: transparent; }
+  .cal-nav .btn, .cal-sheet-foot .btn { min-height: 44px; }
+}
+/* (Without a mouse, a tapped Earlier or Later doesn't stay lit up red.) */
+@media (hover: none) {
+  .cal-nav .btn-ghost:hover, .cal-sheet-foot .btn-ghost:hover {
+    background: var(--card-bg); border-color: var(--border-strong); color: var(--muted);
+  }
+}
+/* Tablets and unfolded foldables: a wider pop-up, so the two months fit
+   side by side with dates that size; where they can't, one month at a
+   time. */
+@media (pointer: coarse) and (min-width: 641px) {
+  #day-calendar, #deadline-calendar { padding: 12px; }
+  #day-calendar .modal-dialog { max-width: 760px; padding: 20px; }
+}
+@media (pointer: coarse) and (min-width: 641px) and (max-width: 739px) {
+  #day-calendar .modal-dialog { max-width: 480px; }
+  #day-calendar .cal-month + .cal-month { display: none; }
+}
+/* Phones: each calendar fills the screen and shows one month at a time;
+   only the middle scrolls, between the title and Done. */
+@media (max-width: 640px) {
+  #day-calendar, #deadline-calendar { padding: 0; align-items: stretch; }
+  #day-calendar .modal-dialog, #deadline-calendar .modal-dialog {
+    max-width: none; height: 100vh; height: 100dvh; max-height: none;
+    padding: 0; border: 0; border-radius: 0; box-shadow: none;
+    background: var(--card-bg); -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+  .cal-sheet-head {
+    position: relative; border-bottom: 1px solid var(--border);
+    padding: calc(12px + env(safe-area-inset-top, 0px)) calc(58px + env(safe-area-inset-right, 0px)) 10px
+      calc(12px + env(safe-area-inset-left, 0px));
+  }
+  #day-calendar .modal-close, #deadline-calendar .modal-close {
+    top: calc(4px + env(safe-area-inset-top, 0px)); right: calc(6px + env(safe-area-inset-right, 0px));
+    width: 44px; height: 44px;
+  }
+  #day-calendar .modal-title, #deadline-calendar .modal-title {
+    margin: 0; padding: 0; font-size: 1.3rem; line-height: 1.2;
+  }
+  .cal-sheet-body {
+    margin: 0;
+    padding: 10px calc(12px + env(safe-area-inset-right, 0px)) 14px calc(12px + env(safe-area-inset-left, 0px));
+  }
+  .cal-sheet-body > .modal-body { font-size: 0.95rem; line-height: 1.45; }
+  .cal-sheet-foot {
+    border-top: 1px solid var(--border);
+    padding: 8px calc(12px + env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px))
+      calc(12px + env(safe-area-inset-left, 0px));
+  }
+  .cal-sheet-foot .cal-summary {
+    margin: 0 0 8px; font-size: 0.92rem; line-height: 1.4;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  }
+  .cal-sheet-foot .btn-primary { flex: 1 1 auto; max-width: 260px; text-align: center; }
+  .cal-nav { margin: 8px 0 2px; }
+  .cal-months { grid-template-columns: minmax(0, 1fr); }
+  .cal-month + .cal-month { display: none; }
+}
+/* Short screens (a phone on its side): the same, with the summary beside
+   Done, so the dates get the room. */
+@media (max-height: 500px) {
+  #day-calendar, #deadline-calendar { padding: 0 12px; }
+  #day-calendar .modal-dialog, #deadline-calendar .modal-dialog {
+    height: 100vh; height: 100dvh; max-height: none; border-radius: 0; padding: 10px 20px 0;
+  }
+  .cal-sheet-foot {
+    display: flex; align-items: center; gap: 4px 16px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+  .cal-sheet-foot .cal-summary {
+    flex: 1 1 0; min-width: 0; margin: 0; font-size: 0.9rem; line-height: 1.35;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  }
+  .cal-sheet-foot .dialog-actions { flex: none; gap: 10px; margin: 6px 0; }
+  #day-calendar .modal-title, #deadline-calendar .modal-title { margin: 0 0 4px; font-size: 1.2rem; }
+}
 
 /* Class list: privacy, and the list's two states */
 .privacy-panel {
@@ -2834,6 +2936,32 @@ form[data-wizard] .wizard-step #title { width: 100%; }
 }
 .wizard-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .wizard-actions [hidden] { display: none; }
+/* Phones: the setup's progress as one line over a thin bar, the question
+   near the top, and Back and Next held at the bottom of the screen (over
+   the tab bar), where a thumb reaches them. While the keyboard is up they
+   stay in place under the question, so they don't cover what's typed. */
+@media (max-width: 640px) {
+  .setup-progress {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px;
+    margin: 0 0 4px; padding: 0; border: 0; border-radius: 0; background: none;
+  }
+  .setup-progress-top { order: 1; }
+  .setup-parts { order: 2; }
+  .setup-part:not(.is-now) { display: none; }
+  .setup-bar { order: 3; flex: 0 0 100%; height: 5px; margin: 6px 0 0; }
+  .wizard-top { margin: -6px 0 2px; }
+  form[data-wizard] .wizard-q { margin: 6px 0 12px; font-size: 1.6rem; line-height: 1.1; }
+  .wizard-actions {
+    position: sticky; bottom: var(--tabbar-h, 0px); z-index: 5;
+    padding: 10px 0 calc(10px + var(--safe-bottom, 0px));
+    border-top: 1px solid var(--border); background: var(--card-bg);
+  }
+  .wizard-actions .btn-large { flex: 1 1 auto; text-align: center; }
+  html.kb-open .wizard-actions { position: static; }
+}
+@media (max-width: 380px) {
+  form[data-wizard] .wizard-q { font-size: 1.45rem; }
+}
 
 /* The deadline: picker, warning, and what the instructor sees about it. */
 .deadline-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
@@ -2865,11 +2993,14 @@ input[type="date"] {
   margin: 0 0 10px; padding: 0; font-weight: 650;
 }
 .dcal-time-head .muted { font-family: var(--font-small); font-size: 0.85rem; font-weight: 400; }
+/* (Positioned, so the hidden radio buttons inside sit in the list, not
+   stretch the pop-up into blank space below Done.) */
 .time-list {
+  position: relative;
   display: grid; gap: 8px; max-height: 336px; overflow-y: auto; overscroll-behavior: contain;
   padding: 3px 6px 3px 3px; scroll-padding: 6px;
 }
-.time-slot { display: block; cursor: pointer; }
+.time-slot { position: relative; display: block; cursor: pointer; }
 .time-slot > span {
   display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 44px;
   padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 12px; background: var(--card-bg);
@@ -2881,9 +3012,30 @@ input[type="date"] {
 .choice-input:checked + span { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .choice-input:checked + span small { color: inherit; opacity: 0.85; }
 .choice-input:focus-visible + span { outline: 3px solid var(--accent); outline-offset: 2px; }
+/* Quick picks (a week before the first day, the evening before…), above
+   the month. */
+.dcal-presets { margin: 14px 0 4px; }
+.dcal-presets[hidden] { display: none; }
+.dcal-presets-head { margin: 0 0 8px; font-weight: 650; }
+.dcal-preset-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+.dcal-preset {
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: 44px;
+  padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 12px; background: var(--card-bg);
+  color: var(--accent-strong); font: inherit; font-weight: 650; line-height: 1.25; text-align: left; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.dcal-preset small { font-family: var(--font-small); font-size: 0.8rem; font-weight: 400; color: var(--muted); }
+.dcal-preset:hover { border-color: var(--accent); }
+.dcal-preset:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.dcal-preset[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.dcal-preset[aria-pressed="true"] small { color: inherit; opacity: 0.85; }
+[data-theme^="contrast"] .dcal-preset { border: 2px solid var(--border); }
+/* Phones: the times under the month, two to a row, scrolling with the
+   rest of the pop-up (not a scrolling box inside a scrolling box). */
 @media (max-width: 640px) {
   .dcal-layout { grid-template-columns: 1fr; gap: 16px; }
-  .time-list { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 220px; }
+  .time-list { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: none; overflow: visible; padding: 3px; }
+  .dcal-preset-list { grid-template-columns: minmax(0, 1fr); }
 }
 .cal-day:disabled { cursor: default; opacity: 0.55; }
 .cal-day:disabled:hover { border-color: var(--border); }
