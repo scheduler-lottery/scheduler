@@ -74,6 +74,9 @@ Click **New item** and upload `dist/scheduler-helper.zip`. Then fill in each tab
 - **Language:** English
 - **Icon:** `dist/scheduler-helper/icon-128.png`
 - **Screenshots:** the three in `dist/store/`, which are 1280×800
+- **Marquee promo tile:** `dist/chrome-web-store-upload/marquee-1400x560.png` (1400×560, no
+  transparency), made from `docs/store-marquee.html`:
+  `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars --force-device-scale-factor=1 --window-size=1400,560 --screenshot=marquee-1400x560.png docs/store-marquee.html`
 - **Homepage:** <https://scheduler-lottery.vercel.app/helper>
 
 **Privacy**
