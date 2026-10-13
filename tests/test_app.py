@@ -2709,7 +2709,7 @@ def test_my_sheets_is_greyed_out_until_there_is_a_sheet(browser):
     assert "No sheets yet" not in page
     assert re.search(r'data-tip="My sign-up sheets" aria-label="My sign-up sheets" aria-current="page"', page)  # you're on it
     page = raw(newcomer.get("/teach/new"))
-    assert page.count('aria-current="page"') == 1 and re.search(r'aria-label="New sign-up sheet" aria-current="page"', page)
+    assert page.split('<nav class="tabbar"')[0].count('aria-current="page"') == 1 and re.search(r'aria-label="New sign-up sheet" aria-current="page"', page)
 
 
 def test_settings_is_a_window_with_who_you_are_and_sign_out(prof, browser):

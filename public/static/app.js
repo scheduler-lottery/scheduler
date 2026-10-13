@@ -416,6 +416,64 @@
     });
   });
 
+  // Share buttons: data-share-url, with data-share-title and data-share-text
+  // if wanted. On a phone or tablet, the phone's own share sheet (Messages,
+  // Mail, the Canvas app…). With a mouse, or if sharing fails, the link is
+  // copied, said the way a copy button says it: an icon's tip, else the
+  // button's words (its [data-share-label], if it has a picture too) read
+  // "Copied" for a moment. Like a copy button, data-mark-shared is told.
+  var touchScreen = window.matchMedia ? window.matchMedia("(pointer: coarse)") : { matches: false };
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest && e.target.closest("[data-share-url]");
+    if (!btn) return;
+    e.preventDefault();
+    var url = btn.getAttribute("data-share-url");
+    var shared = function () {
+      var markUrl = btn.getAttribute("data-mark-shared");
+      if (markUrl) fetch(markUrl, { method: "POST", headers: { "X-CSRF-Token": CSRF } }).catch(function () {});
+    };
+    var copied = function () {
+      clearTimeout(btn.shareBack);
+      if (btn.hasAttribute("data-tip")) {
+        var tip = btn.getAttribute("data-tip-was") || btn.getAttribute("data-tip");
+        btn.setAttribute("data-tip-was", tip);
+        btn.setAttribute("data-tip", "Copied");
+        btn.classList.add("tip-show");
+        btn.shareBack = setTimeout(function () { btn.setAttribute("data-tip", tip); btn.classList.remove("tip-show"); }, 1800);
+      } else {
+        var words = btn.querySelector("[data-share-label]") || btn;
+        if (!words.hasAttribute("data-share-was")) words.setAttribute("data-share-was", words.textContent);
+        words.textContent = "Copied";
+        btn.shareBack = setTimeout(function () { words.textContent = words.getAttribute("data-share-was"); }, 1800);
+      }
+      shared();
+    };
+    var copy = function () {
+      var byHand = function () { // (an older browser, or the clipboard refused)
+        var box = document.createElement("textarea");
+        box.value = url;
+        box.setAttribute("readonly", "");
+        box.className = "visually-hidden";
+        document.body.appendChild(box);
+        box.select();
+        try { document.execCommand("copy"); } catch (err) { /* nothing more to try */ }
+        box.remove();
+        copied();
+      };
+      if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(url).then(copied, byHand);
+      else byHand();
+    };
+    var what = { url: url, title: btn.getAttribute("data-share-title") || document.title };
+    if (btn.hasAttribute("data-share-text")) what.text = btn.getAttribute("data-share-text");
+    if (touchScreen.matches && navigator.share && (!navigator.canShare || navigator.canShare(what))) {
+      navigator.share(what).then(shared, function (err) {
+        if (!err || err.name !== "AbortError") copy(); // (closed without sharing: nothing to do)
+      });
+    } else {
+      copy();
+    }
+  });
+
   // Cards that fold away remember it on this computer (per card, per
   // class); one holding something to deal with opens anyway.
   document.querySelectorAll("details[data-fold]").forEach(function (card) {
@@ -1989,6 +2047,100 @@
     input.addEventListener("pointerdown", unlock);
     if (document.activeElement === input) unlock();
   });
+})();
+
+// Phones and tablets: html.kb-open while the on-screen keyboard is up, so
+// the tab bar steps aside and bars pinned to the bottom of the screen go
+// back into the page, leaving what's being typed in view (style.css). Set
+// as a box to type in is tapped, and whenever the visible part of the
+// window shrinks by a quarter (the keyboard, or iOS's wheel for a list);
+// cleared a moment after the focus leaves (not as it moves on to the next
+// box), and as soon as the window grows back, even with the box still
+// focused (Android's Back button closes just the keyboard). With a mouse,
+// nothing changes.
+(function () {
+  if (!window.matchMedia) return;
+  var root = document.documentElement;
+  var touchScreen = window.matchMedia("(pointer: coarse)");
+  var viewport = window.visualViewport;
+  var notTyped = /^(checkbox|radio|range|button|submit|reset|file|color|image|hidden|date|time|datetime-local|month|week)$/;
+  var typing = function () {
+    var el = document.activeElement;
+    if (!el) return false;
+    if (el.isContentEditable) return true;
+    if (el.disabled || el.readOnly) return false;
+    return el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && !notTyped.test(el.type));
+  };
+  // Against the tallest it's been at this width, measured as on the screen,
+  // so a page zoomed in or out isn't taken for the keyboard.
+  var tallest = 0;
+  var wide = 0;
+  var squeezed = function () {
+    if (!viewport) return false;
+    var high = viewport.height * viewport.scale;
+    var across = Math.round(viewport.width * viewport.scale);
+    if (across !== wide) { wide = across; tallest = 0; } // (turned sideways, or unfolded)
+    tallest = Math.max(tallest, high);
+    return high < 0.75 * tallest;
+  };
+  var wasSqueezed = false;
+  var dismissed = false; // the keyboard went away, the box still focused
+  // A box focused by the page itself (on arrival, say) brings no keyboard
+  // on a phone: only a tap's does, so only that counts before the window
+  // shrinks.
+  var tappedAt = 0;
+  var byTap = false;
+  var later = null;
+  var sync = function () {
+    clearTimeout(later);
+    var small = touchScreen.matches && squeezed();
+    if (wasSqueezed && !small) dismissed = true;
+    wasSqueezed = small;
+    var open = small || (!dismissed && byTap && touchScreen.matches && typing());
+    if (open !== root.classList.contains("kb-open")) root.classList.toggle("kb-open", open);
+  };
+  document.addEventListener("pointerdown", function () { tappedAt = Date.now(); }, true);
+  // (a beat later, once a read-only name box has unlocked on focus)
+  document.addEventListener("focusin", function () {
+    dismissed = false;
+    byTap = Date.now() - tappedAt < 1000;
+    clearTimeout(later);
+    later = setTimeout(sync, 0);
+  });
+  document.addEventListener("focusout", function () { clearTimeout(later); later = setTimeout(sync, 100); });
+  if (viewport) viewport.addEventListener("resize", sync);
+  squeezed(); // (the window's full height, before any keyboard)
+})();
+
+// Phones on a short screen (on its side, or sharing the screen with another
+// app): the tab bar tucks away while the page scrolls down and comes back
+// as soon as it scrolls up, or near the top. Not while a day is dragged
+// (the bars under it would jump).
+(function () {
+  if (!document.querySelector(".tabbar") || !window.matchMedia) return;
+  var root = document.documentElement;
+  var short = window.matchMedia("(max-width: 640px) and (max-height: 500px)");
+  var last = window.scrollY;
+  var waiting = false;
+  var tuck = function (on) {
+    if (on !== root.classList.contains("tabbar-tucked")) root.classList.toggle("tabbar-tucked", on);
+  };
+  var look = function () {
+    waiting = false;
+    var y = window.scrollY;
+    if (document.body.classList.contains("is-dragging")) { last = y; return; }
+    if (!short.matches || y < 40) tuck(false);
+    else if (y > last + 8) tuck(true);
+    else if (y < last - 8) tuck(false);
+    else return; // (a few pixels: wait for more)
+    last = y;
+  };
+  window.addEventListener("scroll", function () {
+    if (waiting) return;
+    waiting = true;
+    requestAnimationFrame(look);
+  }, { passive: true });
+  if (short.addEventListener) short.addEventListener("change", function () { if (!short.matches) tuck(false); });
 })();
 
 // The site's one bit of motion: blocks further down a page rise in as

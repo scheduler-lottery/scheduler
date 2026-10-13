@@ -349,8 +349,144 @@ select,
 .dock-tip.tip-end::after { left: auto; right: 0; transform: translateY(-3px); }
 .dock-tip.tip-end:hover::after, .dock-tip.tip-end:focus-visible::after, .dock-tip.tip-end.tip-show::after { transform: none; }
 .dock-tip[aria-expanded="true"]::after { display: none; }
-@media (hover: none) { .dock-tip:hover:not(.tip-show)::after { opacity: 0; visibility: hidden; } }
+/* Touch screens: no tips (a tap acts at once, and the names show as words,
+   below); "Copied" still shows. */
+@media (hover: none) { .dock-tip:not(.tip-show)::after { display: none; } }
 @media (prefers-reduced-motion: reduce) { .dock-tip::after { transition: none; } }
+
+/* ---------------------------------------------------------------
+   The top bar on touch screens, where there's no hover to show a
+   tip: each icon's name as a word. Tablets: a word beside each icon,
+   in 44px pills; where they don't all fit, How ranking works and
+   Appearance fold into the gear, renamed More (both are tiles in
+   its window). Phones: the bar scrolls away with the page and holds
+   the brand mark (Home) and the class or page you're on; the places
+   move to the tab bar along the bottom (below). Pages without the
+   tab bar (signed out, signing in) keep Help and Appearance up here,
+   each with a word under it.
+   --------------------------------------------------------------- */
+.topbar-title, .dock-word, .word-more { display: none; }
+@media (pointer: coarse) and (min-width: 641px) {
+  .topbar-inner { padding-top: 7px; padding-bottom: 7px; }
+  .icon-dock { gap: 4px; }
+  .icon-dock-btn { width: auto; min-width: 44px; height: 44px; gap: 6px; padding: 0 13px 0 11px; border-radius: var(--radius-full); }
+  .icon-dock-btn .dock-word { display: inline; font: 600 0.8rem/1 var(--font-sans); letter-spacing: 0; white-space: nowrap; }
+  /* (signed in: the words need the brand name's room) */
+  .topbar:has([data-dock="fold"]) .brand-name { display: none; }
+}
+@media (pointer: coarse) and (min-width: 641px) and (max-width: 800px) {
+  .icon-dock [data-dock="fold"], .word-settings { display: none; }
+  .word-more { display: inline; }
+}
+/* Short screens (a phone on its side) and while typing on a touch screen:
+   the top bar scrolls away with the page, leaving the room to what's being
+   read or typed. */
+@media (pointer: coarse) and (max-height: 500px) { .topbar { position: static; } }
+html.kb-open .topbar { position: static; }
+@media (max-width: 640px) {
+  .topbar { position: static; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .topbar-inner { min-height: 51px; padding: 3px 12px; gap: 8px; }
+  .brand { flex: 0 0 auto; padding: 5px; margin: 0 -5px; }
+  .brand-name { display: none; }
+  .topbar-title {
+    display: block; flex: 1 1 auto; min-width: 0; margin-right: auto;
+    font-family: var(--font-display); font-size: 1.15rem; line-height: 1.2; letter-spacing: -0.01em;
+    font-weight: calc(var(--w-brand) + var(--display-boost)); color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  body.has-tabbar .icon-dock, .icon-dock [data-dock="nav"], .dock-sep { display: none; }
+  .icon-dock {
+    flex-wrap: nowrap; gap: 2px; padding: 0; border: 0; background: none; box-shadow: none;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+  }
+  .icon-dock-btn { flex-direction: column; width: auto; min-width: 48px; height: 44px; gap: 3px; padding: 2px 4px; border-radius: 12px; }
+  .icon-dock-btn svg { width: 20px; height: 20px; }
+  .icon-dock-btn .dock-word { display: block; font: 600 0.68rem/1 var(--font-sans); letter-spacing: 0; white-space: nowrap; }
+}
+
+/* ---------------------------------------------------------------
+   The tab bar: a phone's main places along the bottom of the
+   screen, within reach of a thumb, each a picture over its name.
+   Bars pinned to the bottom of the screen (Save, Back and Next)
+   sit just above it with bottom: var(--tabbar-h), and pad
+   themselves with var(--safe-bottom): the iPhone's home bar, when
+   there's no tab bar under them. It steps aside while the
+   on-screen keyboard is up (html.kb-open, set by app.js), while a
+   day is being dragged, and on short screens while the page
+   scrolls down (html.tabbar-tucked, app.js). An open window
+   covers it.
+   --------------------------------------------------------------- */
+:root { --tabbar-h: 0px; --safe-bottom: env(safe-area-inset-bottom, 0px); }
+.tabbar { display: none; }
+@media (max-width: 640px) {
+  body.has-tabbar {
+    --tabbar-h: calc(56px + env(safe-area-inset-bottom, 0px));
+    --safe-bottom: 0px;
+    /* (the end of the page, footer and all, clear of the bar) */
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+  .tabbar {
+    display: flex; position: fixed; z-index: 50; left: 0; right: 0; bottom: 0;
+    height: calc(56px + env(safe-area-inset-bottom, 0px));
+    padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+    background: var(--card-bg);
+    border-top: 1px solid var(--border);
+    transition: transform 0.2s ease, visibility 0s linear 0s;
+  }
+  .tabbar-item {
+    flex: 1 1 0; min-width: 0; height: 56px; margin: 0; padding: 0 2px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    border: 0; border-radius: 0; background: none; color: var(--muted);
+    font: 600 clamp(11.5px, 0.7rem, 15px)/1.15 var(--font-sans); letter-spacing: 0;
+    text-decoration: none; cursor: pointer;
+    -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
+  }
+  .tabbar-icon {
+    display: flex; align-items: center; justify-content: center;
+    width: 52px; height: 28px; border-radius: 14px; transition: background-color 0.15s ease;
+  }
+  .tabbar-icon svg { width: 22px; height: 22px; }
+  .tabbar-label { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tabbar-item[aria-current], .tabbar-item[aria-expanded="true"] { color: var(--accent-strong); }
+  .tabbar-item[aria-current] .tabbar-icon { background: var(--accent-soft); }
+  .tabbar-item:active .tabbar-icon { background: var(--surface-strong); }
+  .tabbar-item:focus-visible { outline-offset: -3px; }
+  html.kb-open body.has-tabbar { --tabbar-h: 0px; --safe-bottom: env(safe-area-inset-bottom, 0px); }
+  html.kb-open .tabbar, body.is-dragging .tabbar {
+    transform: translateY(100%); visibility: hidden; transition: transform 0.2s ease, visibility 0s linear 0.2s;
+  }
+}
+@media (max-width: 640px) and (max-height: 500px) {
+  html.tabbar-tucked body.has-tabbar { --tabbar-h: 0px; --safe-bottom: env(safe-area-inset-bottom, 0px); }
+  html.tabbar-tucked .tabbar {
+    transform: translateY(100%); visibility: hidden; transition: transform 0.2s ease, visibility 0s linear 0.2s;
+  }
+}
+[data-theme^="contrast"] .tabbar { border-top-width: 2px; }
+
+/* ---------------------------------------------------------------
+   Two screens with a hinge between them (Surface Duo, a foldable
+   spanned across its fold). Side by side: the page keeps to the
+   left screen, and windows and messages open there, so no line of
+   text or button straddles the hinge; the top bar folds its words
+   as on a small tablet. One above the other (a foldable half open,
+   like a laptop): windows open on the top screen.
+   --------------------------------------------------------------- */
+@media (horizontal-viewport-segments: 2) {
+  .topbar-inner, body:has(.page-wide) .topbar-inner, main.page, .site-footer {
+    max-width: env(viewport-segment-width 0 0, 50vw); margin-left: 0; margin-right: auto;
+  }
+  .modal-overlay { right: auto; width: env(viewport-segment-width 0 0, 50vw); }
+  .flash-stack, .toast-dock { left: calc(env(viewport-segment-width 0 0, 50vw) / 2); width: calc(env(viewport-segment-width 0 0, 50vw) - 32px); }
+}
+@media (horizontal-viewport-segments: 2) and (pointer: coarse) {
+  .icon-dock [data-dock="fold"], .word-settings { display: none; }
+  .word-more { display: inline; }
+}
+@media (vertical-viewport-segments: 2) {
+  .modal-overlay { bottom: auto; height: env(viewport-segment-height 0 0, 50vh); }
+  .modal-dialog { max-height: calc(env(viewport-segment-height 0 0, 50vh) - 24px); overflow-y: auto; }
+}
 
 /* Text-label dock buttons — used where a bare pictogram (an eye, a list)
    would be ambiguous, e.g. Rank vs Results. Same footprint/behavior as
@@ -1217,7 +1353,6 @@ body.is-dragging .rank-item:not(.dragging) { pointer-events: none; }
   .day-label { font-size: 1rem; }
   .steps { grid-template-columns: 1fr; }
   .brand-name { display: none; }
-  .icon-dock-btn { width: 36px; height: 36px; }
   .icon-dock-label { height: 34px; padding: 0 10px; font-size: 0.78rem; }
   .popover-dropdown { right: -6px; min-width: 190px; }
 }
@@ -1680,10 +1815,15 @@ section[id], main[id] { scroll-margin-top: 80px; }
    Added with the plain-language pass: next steps, undo, warnings,
    the student's day, and the confirm pages.
    ============================================================= */
+/* Out of sight above the window until it has the keyboard's focus: moved
+   up by its own height, so at any text size it never hangs over the top
+   bar (where it would take the taps meant for the bar's buttons). */
 .skip-link {
   position: absolute;
   left: 12px;
-  top: -60px;
+  top: 12px;
+  max-width: calc(100vw - 24px);
+  transform: translateY(calc(-100% - 24px));
   z-index: 100;
   padding: 8px 14px;
   border-radius: var(--radius-sm);
@@ -1691,7 +1831,7 @@ section[id], main[id] { scroll-margin-top: 80px; }
   color: var(--accent-strong);
   box-shadow: var(--shadow-md);
 }
-.skip-link:focus { top: 12px; }
+.skip-link:focus { transform: none; }
 
 .preview-banner {
   background: var(--amber-soft);
