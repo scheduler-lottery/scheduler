@@ -27,12 +27,18 @@
   <form method="post" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="mode" value="choose">
+    {# A new PIN: a box of dots that isn't a password box, so phones offer
+       the number pad, not a made-up "strong password" (app.js makes it a
+       password box where a browser can't draw the dots). #}
     <label for="pin" class="field-label">Your new PIN</label>
-    <input type="password" id="pin" name="pin" class="code-input" inputmode="numeric" autocomplete="new-password"
+    <input type="text" id="pin" name="pin" class="code-input pin-input" inputmode="numeric" autocomplete="off"
+           autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="next" data-pin
            maxlength="{{ max_digits }}" placeholder="{{ min_digits }}–{{ max_digits }} digits" required autofocus>
     <label for="pin-again" class="field-label">Type it again</label>
-    <input type="password" id="pin-again" name="pin_again" class="code-input" inputmode="numeric"
-           autocomplete="new-password" maxlength="{{ max_digits }}" placeholder="same PIN again" required>
+    <input type="text" id="pin-again" name="pin_again" class="code-input pin-input" inputmode="numeric" autocomplete="off"
+           autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" data-pin
+           maxlength="{{ max_digits }}" placeholder="same PIN again" required>
+    <button type="button" class="btn-link pin-show" data-pin-show hidden>Show the PIN</button>
     <label class="choice choice-small"><input type="checkbox" name="shared" value="1">
       <span>This is a shared or library computer — sign me out after 20 minutes of not using it.</span></label>
     <button class="btn btn-primary" type="submit">Save my PIN and continue</button>
@@ -43,9 +49,12 @@
   <form method="post" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="mode" value="enter">
+    {# (A password box, so the browser can remember the PIN for this site.) #}
     <label for="pin" class="field-label">Your PIN</label>
     <input type="password" id="pin" name="pin" class="code-input" inputmode="numeric" autocomplete="current-password"
+           autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" data-pin
            maxlength="{{ max_digits }}" required autofocus>
+    <button type="button" class="btn-link pin-show" data-pin-show hidden>Show the PIN</button>
     <label class="choice choice-small"><input type="checkbox" name="shared" value="1">
       <span>This is a shared or library computer — sign me out after 20 minutes of not using it.</span></label>
     <button class="btn btn-primary" type="submit">Continue</button>

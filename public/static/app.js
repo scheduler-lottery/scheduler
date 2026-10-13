@@ -1820,6 +1820,42 @@
     input.addEventListener("pointerdown", unlock);
     if (document.activeElement === input) unlock();
   });
+
+  // PIN boxes show dots, not digits. A new PIN's boxes aren't password
+  // boxes (there, phones offer a made-up "strong password" instead of the
+  // number pad), so the style draws their dots; a browser that can't gets a
+  // password box instead. "Show the PIN" lets a student check what they
+  // typed, and the keyboard's Next key in the first box moves to the second.
+  var pinBoxes = Array.prototype.slice.call(document.querySelectorAll("input[data-pin]"));
+  var dots = !!(window.CSS && CSS.supports && CSS.supports("-webkit-text-security", "disc"));
+  pinBoxes.forEach(function (input, i) {
+    if (input.type === "text" && !dots) input.type = "password";
+    var next = pinBoxes[i + 1];
+    if (!next || next.form !== input.form) return;
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && !e.isComposing) {
+        e.preventDefault();
+        next.focus();
+      }
+    });
+  });
+  document.querySelectorAll("[data-pin-show]").forEach(function (btn) {
+    var boxes = pinBoxes.filter(function (input) { return input.form === btn.form; });
+    var label = btn.textContent;
+    var shown = false;
+    var show = function (on) {
+      shown = on;
+      boxes.forEach(function (input) {
+        if (input.classList.contains("pin-input") && dots) input.classList.toggle("is-shown", on);
+        else input.type = on ? "text" : "password";
+      });
+      btn.textContent = on ? "Hide the PIN" : label;
+    };
+    btn.hidden = false;
+    btn.addEventListener("click", function () { show(!shown); });
+    // Sent as dots, so a browser that offers to remember the PIN still can.
+    if (btn.form) btn.form.addEventListener("submit", function () { if (shown) show(false); });
+  });
 })();
 
 // The site's one bit of motion: blocks further down a page rise in as

@@ -704,6 +704,13 @@ input[type="email"]:focus, input[type="search"]:focus, textarea:focus, select:fo
   background: var(--card-bg);
   box-shadow: 0 0 0 4px var(--accent-soft);
 }
+/* A new PIN's boxes: dots, as in a password box, without being one (so
+   phones don't offer a "strong password" there). "Show the PIN" sits under
+   them, on the right. */
+.pin-input { -webkit-text-security: disc; }
+.pin-input.is-shown { -webkit-text-security: none; }
+.pin-show { align-self: flex-end; margin-top: -4px; }
+.pin-show[hidden] { display: none; }
 .verify-actions {
   display: flex;
   justify-content: space-between;
