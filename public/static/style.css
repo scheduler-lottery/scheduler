@@ -2582,7 +2582,9 @@ button.icon-dock-label { border: 0; background: none; font-family: inherit; curs
 }
 .ranking-step { display: block; text-align: center; }
 .ranking-step .tile-art { margin-bottom: 9px; }
-.step-num {
+/* (Only the tiles' numbers sit in a corner: the numbered steps on the
+   ranking page and the empty dashboard keep theirs beside each step.) */
+.tile-art .step-num {
   position: absolute; top: 6px; left: 6px; display: flex; align-items: center; justify-content: center;
   width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--on-accent);
   font-family: var(--font-small); font-size: 0.74rem; font-weight: 700; line-height: 1;
