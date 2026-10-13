@@ -60,6 +60,7 @@
 
   root.setAttribute("data-font", font);
   root.style.setProperty("--text-scale", String(scale / 100));
+  root.classList.toggle("text-large", scale >= 150); // (calendars then show one month at a time)
 
   // The free stand-in fonts this font choice can use (the site's own fonts
   // come from its stylesheet), from Google Fonts. Asked for from here rather

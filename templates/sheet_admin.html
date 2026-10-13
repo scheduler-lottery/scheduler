@@ -5,7 +5,7 @@
 {% set waiting_for_list = not counts.roster and not sheet.allow_unlisted %}
 
 {# ------------------------------------------------------------------ header #}
-<section class="card sheet-head">
+<section class="card sheet-head{{ ' on-class' if tab == 'class' }}">
   <p class="eyebrow"><a href="{{ url_for('teach.dashboard') }}" class="link-muted">← My sheets</a></p>
   <div class="admin-header">
     <h1>{{ sheet.title }}</h1>
@@ -32,6 +32,7 @@
   {# Phones: one button that opens the phone's own share sheet (app.js
      [data-share-url]; elsewhere it copies), with the links themselves
      folded under it. Larger screens keep the link and its Copy button. #}
+  {% if not waiting_for_list %}{# (nobody to share it with yet) #}
   <div class="share-phone">
     <button type="button" class="btn btn-primary share-btn" data-share-url="{{ share_url }}" data-share-title="{{ sheet.title }}"
             data-share-text="Rank your presentation days for {{ sheet.title }}:"
@@ -56,6 +57,7 @@
       {% endif %}
     </details>
   </div>
+  {% endif %}
   <div class="share-row">
     <label for="share-url" class="visually-hidden">Student link</label>
     <input id="share-url" type="text" readonly value="{{ share_url }}" class="share-input">

@@ -2741,7 +2741,7 @@ def test_time_zones_are_named_plainly():
 
 def test_how_ranking_works_is_a_word_button_with_its_own_window(browser):
     page = raw(browser().get("/"))
-    assert 'data-popover-target="ranking-help"' in page and "How ranking works" in page
+    assert 'data-popover-target="ranking-help"' in page and "How it works" in page
     assert 'aria-label="How days are assigned"' not in page  # the puzzling icon is gone
     window = page[page.index('<div id="ranking-help"'):]
     assert 'role="dialog"' in window and "Ties get a fair draw" in window and 'href="/how-it-works"' in window

@@ -6,7 +6,7 @@
 {% set about_url = url_for('teach.edit_sheet', sid=sheet.id, setup=1) %}
 <div class="card setup-card">
   <div class="admin-header">
-    <h1>New sign-up sheet</h1>
+    <h1 class="visually-hidden">New sign-up sheet</h1>{# (the step's own question is the heading people read) #}
     <a class="link-muted" href="{{ url_for('teach.sheet', sid=sheet.id) }}">Finish later</a>
   </div>
   {% with draft_title = sheet.title %}{% include "_draft_name.html" %}{% endwith %}
@@ -99,8 +99,8 @@
     <label for="announcement" class="visually-hidden">Message for your students</label>
     <textarea id="announcement" rows="11" class="announcement">{{ announcement }}</textarea>
     <div class="helper-row">
-      <button class="btn btn-primary" type="button" data-copy="#announcement"
-              data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}">Copy the message</button>
+      <button class="btn btn-primary" type="button" data-copy="#announcement" data-share-message
+              data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}"><span class="mouse-only">Copy the message</span><span class="touch-only">Share the message</span></button>
     </div>
     {% endif %}
     <p class="mini-hint">Students can also type the code <strong>{{ sheet.id }}</strong> on the {{ app_name }} home page.</p>

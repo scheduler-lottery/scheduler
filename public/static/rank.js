@@ -170,10 +170,6 @@
     return makeIcon(up ? "M12 6.5l6.5 10h-13z" : "M12 17.5l6.5-10h-13z", "", true);
   }
 
-  // (The list's own ends say Favorite and Least favorite: no second name for them on the rows.)
-  function positionLabel() {
-    return "";
-  }
 
   // Keeps the #n badges, the Top/Last captions, and the disabled state of the
   // end-of-list arrows in sync after any reorder.
@@ -182,8 +178,6 @@
     children.forEach((child, idx) => {
       const badge = child.querySelector(".rank-badge");
       if (badge) badge.textContent = "#" + (idx + 1);
-      const caption = child.querySelector(".rank-pos-label");
-      if (caption) caption.textContent = positionLabel(idx, children.length);
       const first = idx === 0;
       const last = idx === children.length - 1;
       child.querySelectorAll(".move-up, .move-top").forEach((b) => { b.disabled = first; });
@@ -385,10 +379,7 @@
       const badge = document.createElement("span");
       badge.className = "rank-badge";
       badge.textContent = "#";
-      const caption = document.createElement("span");
-      caption.className = "rank-pos-label";
-      pos.appendChild(badge);
-      pos.appendChild(caption);
+      pos.appendChild(badge); // (the list's ends say Favorite and Least favorite: no second name on the rows)
 
       const label = document.createElement("span");
       label.className = "day-label";

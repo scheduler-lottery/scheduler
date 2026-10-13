@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}How days are assigned — {{ app_name }}{% endblock %}
+{% block title %}How it works — {{ app_name }}{% endblock %}
 {% block content %}
 <div class="card prose">
-  <h1>How days are assigned</h1>
+  <h1>How it works</h1>
   {% if algorithm == 'first_come' %}
   <p class="subtitle">In this class, whoever ranks first gets first pick: each student, in the order they first ranked, is placed on the best day still open on their list.</p>
   {% elif algorithm == 'rank_max' %}
@@ -13,27 +13,26 @@
 
   <div class="note-box">
     <p class="note-box-label">Summary for students</p>
-    <p>Rank the days in your true order of preference, with your first choice at the top.</p>
+    <p>Rank the days in your true order, favorite first.</p>
     {% if algorithm == 'first_come' %}
-    <p>When sign-ups close, each student receives the highest-ranked day that still has room. When more students want a day than it has seats, whoever ranked first gets it.</p>
+    <p>When sign-ups close, you get the highest day on your list that still has a seat. If too many want a day, whoever ranked first gets it.</p>
     {% else %}
-    <p>When sign-ups close, each student receives the highest-ranked day that still has room. When more students want a day than it has seats, a random draw decides.</p>
+    <p>When sign-ups close, you get the highest day on your list that still has a seat. If too many want a day, a fair random draw decides.</p>
     {% endif %}
     {% if algorithm == 'first_come' %}
-    <p>In this class, ranking early helps: when more students want a day than it has seats, whoever ranked first gets it, and changing your ranking later keeps your place.</p>
+    <p>In this class, ranking early helps: changing your ranking later keeps your place in line.</p>
     {% elif algorithm == 'rank_max' %}
-    <p>In this class, the schedule gives as many students as it can their first choice. Honest ranking is the safe choice, and submitting early confers no advantage.</p>
+    <p>In this class, the schedule gives as many students as it can their first choice. Honest ranking is the safe choice, and ranking early doesn't help.</p>
     {% else %}
-    <p>Submitting early confers no advantage{% if not algorithm %} (unless your instructor chose “First come, first served”){% endif %}, and ranking a day above where you truly want it cannot improve your result.</p>
+    <p>Ranking early doesn't help{% if not algorithm %} (unless your instructor chose “First come, first served”){% endif %}, and ranking a day higher than you want it never helps.</p>
     {% endif %}
   </div>
 
-  <h2>Days you cannot attend</h2>
+  <h2>Days you can't make</h2>
   <p>
-    Mark a day “I really can't do this day” only for a genuine conflict. You will never be assigned a day you have
-    marked. If every day you can attend is full, your instructor assigns you a day personally, with your note in
-    front of them. No other student is moved to make room, so marking a day you could attend offers no advantage.
-    Notes are visible only to your instructor.
+    Mark “I really can't do this day” only for a real conflict. You'll never be given a day you marked. If every day
+    you can do is full, your instructor picks one for you, with your note in front of them. Nobody else is moved to
+    make room, so marking a day you could do doesn't help. Only your instructor sees notes.
   </p>
 
   <h2>Fairness</h2>

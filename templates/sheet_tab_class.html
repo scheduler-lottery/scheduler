@@ -286,7 +286,7 @@
   <label for="announcement-published" class="visually-hidden">Message for students</label>
   <textarea id="announcement-published" rows="5" class="announcement">{{ publish_announcement }}</textarea>
   <div class="helper-row">
-    <button class="btn btn-primary" type="button" data-copy="#announcement-published">Copy the schedule-is-ready message</button>
+    <button class="btn btn-primary" type="button" data-copy="#announcement-published" data-share-message><span class="mouse-only">Copy the schedule-is-ready message</span><span class="touch-only">Share the schedule-is-ready message</span></button>
   </div>
   {% elif not sheet.bidding_open %}
   <p class="muted">Sign-ups are closed, so the sign-up message isn't shown. Once you publish the schedule, a “schedule is ready” message appears here.</p>
@@ -295,8 +295,8 @@
   <label for="announcement" class="visually-hidden">Announcement</label>
   <textarea id="announcement" rows="11" class="announcement">{{ announcement }}</textarea>
   <div class="helper-row">
-    <button class="btn btn-primary" type="button" data-copy="#announcement"
-            data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}">Copy the sign-up message</button>
+    <button class="btn btn-primary" type="button" data-copy="#announcement" data-share-message
+            data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}"><span class="mouse-only">Copy the sign-up message</span><span class="touch-only">Share the sign-up message</span></button>
     <span class="field-help">Students can also type the code <strong>{{ sheet.id }}</strong> on the {{ app_name }} home page.</span>
   </div>
   {% if counts.roster %}<p class="mini-hint">When someone types three letters of a name on the sign-in page, matching names from your list appear (never emails).</p>{% endif %}

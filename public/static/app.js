@@ -375,13 +375,31 @@
     });
   });
 
-  // Copy buttons: data-copy="#selector-of-input-or-textarea".
+  // Copy buttons: data-copy="#selector-of-input-or-textarea". A message
+  // (data-share-message) opens the phone's own share sheet on a touch
+  // screen, with its words, and is copied anywhere else.
   document.querySelectorAll("[data-copy]").forEach(function (btn) {
-    var label = btn.textContent;
+    var label = btn.innerHTML; // (its own words, which may differ for touch and mouse)
     var back = null;
+    var markShared = function () { // (sharing or copying the link counts as sharing it: the checklist says so)
+      var markUrl = btn.getAttribute("data-mark-shared");
+      if (markUrl) fetch(markUrl, { method: "POST", headers: { "X-CSRF-Token": CSRF } }).catch(function () {});
+    };
     btn.addEventListener("click", function () {
       var source = document.querySelector(btn.getAttribute("data-copy"));
       if (!source) return;
+      var text = source.value;
+      if (btn.hasAttribute("data-share-message") && navigator.share && window.matchMedia
+          && window.matchMedia("(pointer: coarse)").matches) {
+        navigator.share({ text: text }).then(markShared, function (err) {
+          if (!err || err.name !== "AbortError") copyIt(); // (no share sheet after all: copied instead)
+        });
+        return;
+      }
+      copyIt();
+    });
+    var copyIt = function () {
+      var source = document.querySelector(btn.getAttribute("data-copy"));
       var text = source.value;
       var done = function () {
         clearTimeout(back);
@@ -393,14 +411,11 @@
           back = setTimeout(function () { btn.setAttribute("data-tip", tip); btn.classList.remove("tip-show"); }, 1800);
         } else {
           btn.textContent = "Copied";
-          back = setTimeout(function () { btn.textContent = label; }, 1800);
+          back = setTimeout(function () { btn.innerHTML = label; }, 1800);
         }
         var said = btn.parentNode.querySelector("[data-copy-said]"); // (what's next, where it stays)
         if (said) said.textContent = said.getAttribute("data-copy-said");
-        var markUrl = btn.getAttribute("data-mark-shared");
-        if (markUrl) {
-          fetch(markUrl, { method: "POST", headers: { "X-CSRF-Token": CSRF } }).catch(function () {});
-        }
+        markShared();
       };
       if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(text).then(done, function () {
@@ -413,7 +428,7 @@
         document.execCommand("copy");
         done();
       }
-    });
+    };
   });
 
   // Share buttons: data-share-url, with data-share-title and data-share-text
@@ -781,6 +796,28 @@
       var answers = null;
       try { answers = JSON.parse(sessionStorage.getItem(WIZARD_KEY) || "null"); } catch (e) { /* fine */ }
       if (!answers) return;
+      // Come back to New (not a reload, not Back) with a sheet left half made: said, with a way to start
+      // afresh. (Not when the page itself brings answers back, after a problem with them.)
+      var nav = window.performance && performance.getEntriesByType ? performance.getEntriesByType("navigation")[0] : null;
+      var fromServer = !!(field("title") && field("title").defaultValue);
+      if (nav && nav.type === "navigate" && !fromServer && (answers.title || (answers.days && answers.days.length))) {
+        var note = document.createElement("p");
+        note.className = "wizard-restored";
+        note.setAttribute("role", "status");
+        note.textContent = answers.title ? "Picking up your unfinished sheet, “" + answers.title + "”. "
+          : "Picking up your unfinished sheet. ";
+        var fresh = document.createElement("button");
+        fresh.type = "button";
+        fresh.className = "btn-link";
+        fresh.textContent = "Start a new one instead";
+        fresh.addEventListener("click", function () {
+          sent = true;
+          try { sessionStorage.removeItem(WIZARD_KEY); } catch (e) { /* fine */ }
+          location.reload();
+        });
+        note.appendChild(fresh);
+        form.insertBefore(note, form.firstChild);
+      }
       KEPT.forEach(function (name) {
         var el = field(name);
         var value = answers[name];

@@ -28,8 +28,8 @@
          data-subject="{{ send.compose.subject }}" data-body="{{ send.compose.body }}"
          data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}"
          href="mailto:{{ send.compose.to }}?bcc={{ send.compose.bcc | replace(' ', '') }}&amp;subject={{ send.compose.subject | urlencode }}&amp;body={{ send.compose.body | urlencode }}">Email {{ 'them' if send.count > 1 else 'it' }} myself</a>
-      <button class="btn btn-secondary" type="button" data-copy="#{{ send.copy_from }}"
-              data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}">Copy the message</button>
+      <button class="btn btn-secondary" type="button" data-copy="#{{ send.copy_from }}" data-share-message
+              data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}"><span class="mouse-only">Copy the message</span><span class="touch-only">Share the message</span></button>
     </div>
     {% with picker_id="send-" ~ send.back, mail_why="It's picked to match your email address.", mail_account=me %}{% include "_mail_picker.html" %}{% endwith %}
   </section>

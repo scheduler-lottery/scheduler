@@ -72,6 +72,7 @@
   function applyScale(percent) {
     percent = Math.max(50, Math.min(200, Math.round(percent / 5) * 5));
     root.style.setProperty("--text-scale", String(percent / 100));
+    root.classList.toggle("text-large", percent >= 150);
     range.value = percent;
     range.style.setProperty("--fill", ((percent - 50) / 150) * 100 + "%");
     readout.textContent = percent + "%";

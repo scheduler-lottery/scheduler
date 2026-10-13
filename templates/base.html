@@ -108,7 +108,7 @@
        have no hover, so there the name shows as a word (dock-word): beside
        the icon on tablets, under it on phones. Phones move the places
        (data-dock="nav") to the tab bar along the bottom. Where the words
-       don't all fit, How ranking works and Appearance (data-dock="fold")
+       don't all fit, How it works and Appearance (data-dock="fold")
        fold into the gear, renamed More: both are tiles in its window. #}
     <nav class="icon-dock" aria-label="Quick links">
       {# Home: a student's class page (or its sign-in), else the site's front page. #}
@@ -165,9 +165,9 @@
       {% endif %}
 
       <span class="dock-sep" aria-hidden="true"></span>
-      {# Opens the "How ranking works" window; the page of the same subject
+      {# Opens the "How it works" window; the page of the same subject
          is the fallback without scripts. #}
-      <a href="{{ url_for('how_it_works') }}" class="icon-dock-btn dock-tip" data-tip="How ranking works" aria-label="How ranking works" data-popover-target="ranking-help" aria-haspopup="dialog" aria-expanded="false"{% if has_settings %} data-dock="fold"{% endif %}>
+      <a href="{{ url_for('how_it_works') }}" class="icon-dock-btn dock-tip" data-tip="How it works" aria-label="How it works" data-popover-target="ranking-help" aria-haspopup="dialog" aria-expanded="false"{% if has_settings %} data-dock="fold"{% endif %}>
         {{ nav_icon('help') }}<span class="dock-word" aria-hidden="true">{{ nav_words.help }}</span>
       </a>
       <button type="button" class="icon-dock-btn dock-tip tip-end" data-tip="Appearance: contrast, colors, text size" data-popover-target="appearance" aria-haspopup="dialog" aria-expanded="false" aria-label="Appearance: contrast, colors, text size"{% if has_settings %} data-dock="fold"{% endif %}>
@@ -228,7 +228,7 @@
 {% if has_tabbar %}
 {# Phones: the main places along the bottom of the screen, within reach of
    a thumb, each a picture over its name. More opens the Settings window,
-   which also holds Appearance and How ranking works. #}
+   which also holds Appearance and How it works. #}
 <nav class="tabbar" aria-label="Main">
   {% if tabbar_for == 'student' %}
   <a class="tabbar-item" href="{{ url_for('student.home', sid=nav_sheet.id) }}"{% if request.endpoint == 'student.home' %} aria-current="page"{% endif %}><span class="tabbar-icon">{{ nav_icon('home') }}</span><span class="tabbar-label">{{ nav_words.home }}</span></a>
@@ -252,10 +252,10 @@
 {% endif %}
 
 <footer class="site-footer">
-  {% if nav_sheet and nav_sheet.owner_email %}
+  {% if nav_sheet and nav_sheet.owner_email and not contact_in_page %}
   <p class="footer-contact">Questions about this sign-up? <a href="mailto:{{ nav_sheet.owner_email }}?subject={{ ('Question about ' ~ nav_sheet.title) | urlencode }}">Email your instructor</a></p>
   {% endif %}
-  <a href="{{ url_for('how_it_works') }}">How days are assigned</a>
+  <a href="{{ url_for('how_it_works') }}">How it works</a>
   <span aria-hidden="true">·</span>
   <a href="{{ url_for('privacy') }}">Privacy</a>
   {% if source_url %}
@@ -416,7 +416,7 @@
         </button>
         <button type="button" class="settings-tile" data-popover-target="ranking-help">
           <span class="tile-art"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><circle cx="5" cy="6" r="1.7" fill="currentColor"/><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="5" cy="18" r="1.7" fill="currentColor"/><path d="M9.5 6h10M9.5 12h7M9.5 18h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
-          <span class="choice-name">How ranking works</span>
+          <span class="choice-name">How it works</span>
         </button>
         <a class="settings-tile" href="{{ url_for('privacy') }}">
           <span class="tile-art"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.2" stroke="currentColor" stroke-width="1.7"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="15.5" r="1.3" fill="currentColor"/></svg></span>
@@ -443,14 +443,14 @@
 </div>
 {% endif %}
 
-{# How ranking works, in brief: the same promises as the full page. #}
+{# How it works, in brief: the same promises as the full page. #}
 {% set page_algo = (nav_sheet or sheet or {}).algorithm if (nav_sheet or sheet) else None %}
 <div id="ranking-help" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="ranking-help-title">
   <div class="modal-dialog appearance-dialog ranking-dialog">
     <button type="button" class="modal-close" data-popover-close aria-label="Close">
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
     </button>
-    <h2 id="ranking-help-title" class="modal-title">How ranking works</h2>
+    <h2 id="ranking-help-title" class="modal-title">How it works</h2>
     <p class="ranking-lead">You rank the days, favorite first. When sign-ups close, you get the highest day on your list that still has a seat.</p>
 
     <section class="appearance-group" aria-labelledby="ranking-steps">

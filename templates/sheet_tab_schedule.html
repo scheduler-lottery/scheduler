@@ -246,7 +246,7 @@
       <label for="publish-message" class="visually-hidden">Message for students</label>
       <textarea id="publish-message" rows="5" class="announcement">{{ publish_announcement }}</textarea>
       <div class="helper-row">
-        <button class="btn btn-primary" type="button" data-copy="#publish-message">Copy the schedule-is-ready message</button>
+        <button class="btn btn-primary" type="button" data-copy="#publish-message" data-share-message><span class="mouse-only">Copy the schedule-is-ready message</span><span class="touch-only">Share the schedule-is-ready message</span></button>
         <form method="post" action="{{ url_for('teach.unpublish', sid=sheet.id) }}" data-confirm="Hide the schedule from students again?">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn btn-ghost btn-small">Hide it from students</button>

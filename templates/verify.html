@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set contact_in_page = True %}{# (the page itself says how to reach the instructor) #}
 {% block title %}Enter your code — {{ app_name }}{% endblock %}
 {% block content %}
 <div class="card center-card">
@@ -68,8 +69,8 @@
     <li>Not there after a minute? Look in your spam or junk folder{% if sender %} for an email from <strong>{{ sender }}</strong>{% endif %}.</li>
     <li>Asked more than once? Use the code in the <strong>newest</strong> email.</li>
     {% if for_student %}
-    <li>Is that email address wrong, or not yours? <a href="mailto:{{ sheet.owner_email }}?subject={{ ('My email for ' ~ sheet.title) | urlencode }}">Email your instructor</a> to fix it.</li>
-    {% if ask %}<li>Still nothing? <a data-compose data-to="{{ ask.to }}" data-subject="{{ ask.subject }}" data-body="{{ ask.body }}" href="mailto:{{ ask.to }}?subject={{ ask.subject | urlencode }}&amp;body={{ ask.body | urlencode }}">Ask your instructor</a> to send you a sign-in link from their own email.</li>{% endif %}
+    {% if ask %}<li>Wrong address, or still nothing? <a data-compose data-to="{{ ask.to }}" data-subject="{{ ask.subject }}" data-body="{{ ask.body }}" href="mailto:{{ ask.to }}?subject={{ ask.subject | urlencode }}&amp;body={{ ask.body | urlencode }}">Email your instructor</a>: they can fix it, or send you a sign-in link from their own email.</li>
+    {% else %}<li>Is that email address wrong, or not yours? <a href="mailto:{{ sheet.owner_email }}?subject={{ ('My email for ' ~ sheet.title) | urlencode }}">Email your instructor</a> to fix it.</li>{% endif %}
     {% endif %}
   </ul>
   {% endif %}

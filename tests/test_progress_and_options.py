@@ -173,7 +173,7 @@ def test_the_top_bar_has_a_home_button(prof):
     prof.create_sheet()
     page = raw(prof.get("/teach/"))
     assert re.search(r'<a href="/" class="icon-dock-btn dock-tip" data-tip="Home" aria-label="Home"', page)
-    for tip in ("My sheets", "New sign-up sheet", "Sign-ups at a glance", "How ranking works",
+    for tip in ("My sheets", "New sign-up sheet", "Sign-ups at a glance", "How it works",
                 "Appearance: contrast, colors, text size", "Settings and sign out"):
         assert re.search(f'data-tip="{re.escape(tip)}"[^>]*aria-label="{re.escape(tip)}"', page), tip
 
@@ -307,8 +307,8 @@ def test_how_it_works_tells_a_first_come_class_that_ranking_early_helps(prof, br
     prof.post(f"/teach/s/{sid}/algorithm", {"algorithm": "first_come"})
     student = browser().sign_in_student(sid, "Sam Lee")
     page = text(student.get("/how-it-works"))
-    assert "In this class, ranking early helps" in page and "Submitting early confers no advantage" not in page
-    assert "Submitting early confers no advantage" in text(browser().get("/how-it-works"))
+    assert "In this class, ranking early helps" in page and "Ranking early doesn't help" not in page
+    assert "Ranking early doesn't help" in text(browser().get("/how-it-works"))
 
 
 def test_how_it_works_headline_and_answers_follow_the_class_option(prof, browser):
@@ -317,7 +317,7 @@ def test_how_it_works_headline_and_answers_follow_the_class_option(prof, browser
     prof.post(f"/teach/s/{sid}/algorithm", {"algorithm": "first_come"})
     page = text(browser().sign_in_student(sid, "Sam Lee").get("/how-it-works"))
     assert "whoever ranks first gets first pick" in page and "the students who ranked first receive it" in page
-    assert "Does ranking early help?" in page and "than it has seats, a random draw decides." not in page
+    assert "Does ranking early help?" in page and "a fair random draw decides." not in page
     prof.post(f"/teach/s/{sid}/algorithm", {"algorithm": "rank_max"})
     page = text(browser().sign_in_student(sid, "Sam Lee").get("/how-it-works"))
     assert "as many students as it can their first choice, then their second" in page
