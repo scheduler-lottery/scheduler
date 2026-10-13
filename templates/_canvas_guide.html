@@ -199,7 +199,8 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         {% if setup %}<input type="hidden" name="setup" value="1">{% endif %}
         <label for="canvas-pasted-{{ sheet.id }}" class="field-help">One student per line: their name, then a comma and their school email. You can also copy the whole table from Canvas's <strong>People</strong> page and paste it here.</label>
-        <textarea id="canvas-pasted-{{ sheet.id }}" name="pasted" rows="6" placeholder="Alex Johnson, alex.johnson@school.edu&#10;Sam Lee, sam.lee@school.edu"></textarea>
+        <textarea id="canvas-pasted-{{ sheet.id }}" name="pasted" rows="6" autocorrect="off" spellcheck="false"
+                  placeholder="Alex Johnson, alex.johnson@school.edu&#10;Sam Lee, sam.lee@school.edu"></textarea>
         <button class="btn btn-secondary" type="submit">{{ 'Compare with my list' if has_list else 'Use these names' }}</button>
       </form>
     </details>

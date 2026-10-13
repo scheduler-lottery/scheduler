@@ -27,7 +27,8 @@
   <details class="paste-box">
     <summary>Or paste names (and emails) instead</summary>
     <label for="pasted" class="field-help">One student per line: their name, then a comma and their email. You can also copy the whole table from Canvas → People.</label>
-    <textarea id="pasted" name="pasted" rows="6" placeholder="Alex Johnson, alex.johnson@school.edu&#10;Sam Lee, sam.lee@school.edu"></textarea>
+    <textarea id="pasted" name="pasted" rows="6" autocorrect="off" spellcheck="false"
+              placeholder="Alex Johnson, alex.johnson@school.edu&#10;Sam Lee, sam.lee@school.edu"></textarea>
     <button class="btn btn-secondary btn-small" type="submit">Use these names</button>
   </details>
   {% endif %}

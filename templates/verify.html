@@ -53,7 +53,8 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label for="code" class="field-label">The {{ code_length }}-digit code{% if for_student %} for {{ sheet.title }}{% endif %}</label>
     <input type="text" id="code" name="code" class="code-input" placeholder="123456"
-           inputmode="numeric" autocomplete="one-time-code" maxlength="{{ code_length + 4 }}" autofocus required>
+           inputmode="numeric" autocomplete="one-time-code" maxlength="{{ code_length + 4 }}" autofocus required
+           autocorrect="off" spellcheck="false" enterkeyhint="go">
     {% if for_student %}
     <label class="choice choice-small"><input type="checkbox" name="shared" value="1">
       <span>This is a shared or library computer — sign me out after 20 minutes of not using it.</span></label>
