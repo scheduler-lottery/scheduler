@@ -946,10 +946,10 @@
     return isNaN(when) ? "" : when.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
 
-  // "Saved 7:44 PM ✓ · changes save by themselves", for the phone's pill.
+  // "Saved 7:44 PM · changes save by themselves", for the phone's pill.
   function savedPill(iso) {
     const at = iso ? formatTime(iso) : "";
-    return "Saved" + (at ? " " + at : "") + " ✓ · changes save by themselves";
+    return "Saved" + (at ? " " + at : "") + " · changes save by themselves";
   }
 
   function scheduleSave(delay) {
@@ -990,7 +990,7 @@
           if (saveBtn) saveBtn.textContent = "Save now";
         }
         if (!dirty) {
-          setStatus("Saved at " + formatTime(data.saved_at) + " ✅ You can change it until sign-ups close.", "success",
+          setStatus("Saved at " + formatTime(data.saved_at) + ". You can change it until sign-ups close.", "success",
             savedPill(data.saved_at));
         }
       } else {
