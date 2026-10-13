@@ -2,14 +2,25 @@
 <html lang="en" data-theme="paper" data-mode="light"{% if nav_sheet and (nav_sheet.theme or nav_sheet.font) %} data-course-theme="{{ nav_sheet.theme or '' }}" data-course-font="{{ nav_sheet.font or '' }}"{% endif %}>
 <head>
 <meta charset="utf-8">
+{# viewport-fit=cover: the page runs edge to edge on phones with a notch or
+   a home bar, and the bars along the edges pad themselves with the safe
+   area (env(safe-area-inset-*), in style.css). #}
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+{# Light or dark to match the device, and the browser's own bars tinted to
+   the page; theme-init.js sets these to the theme in use. #}
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#faf8f3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0f1e" media="(prefers-color-scheme: dark)">
 <script src="{{ url_for('static', filename='theme-init.js') }}"></script>
-<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <title>{% block title %}{{ app_name }}{% endblock %}</title>
 <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=Fraunces:ital,opsz,wght@0,9..144,200..700;1,9..144,200..700&family=Crimson+Pro:ital,wght@0,400;0,700;1,400;1,700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+{# The free stand-in fonts: theme-init.js asks for just the ones the reader's
+   font choice uses, without holding up the page. Without scripts, all of
+   them, here. #}
+<noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=Fraunces:ital,opsz,wght@0,9..144,200..700;1,9..144,200..700&family=Crimson+Pro:ital,wght@0,400;0,700;1,400;1,700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet"></noscript>
 {% for href in preload_fonts %}<link rel="preload" href="{{ href }}" as="font" type="font/woff2" crossorigin>
 {% endfor %}<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -135,8 +146,9 @@
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
       {# What just happened. With scripts on, these come up in the upper part
-         of the window over the page, blurred for a moment (app.js); good
-         news fades after a while, and problems stay until closed. #}
+         of the window over the page, blurred for a moment (app.js), or on a
+         phone along the bottom of the screen; good news fades after a
+         while, and problems stay until closed. #}
       <div class="flash-stack" role="status" data-flash-stack>
       {% for category, message in messages %}
         <div class="flash flash-{{ category }}">
@@ -198,8 +210,21 @@
     <p class="appearance-note">Your instructor picked this class's look. Anything you change here applies just to you.</p>
     {% endif %}
 
-    <fieldset class="appearance-group">
+    <fieldset class="appearance-group" data-theme-group>
       <legend>Theme</legend>
+      {# The standard: the class's look (or Paper), dark when the device is. #}
+      <label class="theme-auto">
+        <input type="radio" name="appearance-theme" value="auto" class="choice-input">
+        <span class="theme-preview preview-auto" aria-hidden="true">
+          <span class="tp-bar"></span>
+          <span class="tp-card"><span class="tp-line"></span><span class="tp-line tp-short"></span><span class="tp-pill"></span></span>
+          <span class="tp-check"></span>
+        </span>
+        <span class="theme-auto-text">
+          <span class="choice-name">Automatic (match my device)</span>
+          <span class="theme-auto-hint">Light, or dark when your phone or computer is set to dark</span>
+        </span>
+      </label>
       <div class="theme-cards">
         {% for value, label, group in theme_choices %}
         <label class="theme-card">
@@ -215,7 +240,7 @@
       </div>
     </fieldset>
 
-    <fieldset class="appearance-group">
+    <fieldset class="appearance-group" data-size-group>
       <legend>Text size <output class="size-readout" data-size-readout>100%</output></legend>
       <div class="size-control">
         <button type="button" class="size-btn" data-size-step="-10" aria-label="Smaller text"><span aria-hidden="true" class="size-glyph size-glyph-small">A</span></button>

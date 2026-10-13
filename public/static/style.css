@@ -9,25 +9,27 @@
 
 /* The site's fonts: the reader's installed copy if they have one, otherwise
    the file the site's owner uploaded on /owner (served at /fonts/...).
-   Until it's uploaded, the next font in each stack stands in. */
+   Until it's uploaded, the next font in each stack stands in. While a file
+   is still on its way, the text shows in the next font and switches when it
+   arrives (font-display: swap), rather than staying invisible. */
 /* Roslindale Display Condensed as one variable font: every weight from 200
    to 900, italics (its "ital" axis) and optical sizes (finer when big,
    sturdier when small). The static Regular stands in until it's uploaded. */
-@font-face { font-family: "Roslindale"; src: url("/fonts/roslindale-variable.woff2") format("woff2"); font-weight: 200 900; font-style: normal; font-display: block; }
-@font-face { font-family: "Roslindale"; src: url("/fonts/roslindale-variable.woff2") format("woff2"); font-weight: 200 900; font-style: italic; font-display: block; }
-@font-face { font-family: "Roslindale Display Condensed"; src: local("Roslindale Display Condensed Regular"), local("Roslindale-DisplayCondensedRegular"), url("/fonts/roslindale-display-condensed-regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
-@font-face { font-family: "YaleNew"; src: local("YaleNew Regular"), local("YaleNew-Roman"), url("/fonts/yalenew-roman.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
-@font-face { font-family: "YaleNew"; src: local("YaleNew Italic"), local("YaleNew-Italic"), url("/fonts/yalenew-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: block; }
-@font-face { font-family: "YaleNew"; src: local("YaleNew Bold"), local("YaleNew-Bold"), url("/fonts/yalenew-bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: block; }
-@font-face { font-family: "YaleNew"; src: local("YaleNew Bold Italic"), local("YaleNew-BoldItalic"), url("/fonts/yalenew-bolditalic.woff2") format("woff2"); font-weight: 700; font-style: italic; font-display: block; }
-@font-face { font-family: "Old Style 7"; src: local("Old Style 7 Std Roman"), local("OldStyle7Std"), url("/fonts/oldstyle7-roman.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+@font-face { font-family: "Roslindale"; src: url("/fonts/roslindale-variable.woff2") format("woff2"); font-weight: 200 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Roslindale"; src: url("/fonts/roslindale-variable.woff2") format("woff2"); font-weight: 200 900; font-style: italic; font-display: swap; }
+@font-face { font-family: "Roslindale Display Condensed"; src: local("Roslindale Display Condensed Regular"), local("Roslindale-DisplayCondensedRegular"), url("/fonts/roslindale-display-condensed-regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "YaleNew"; src: local("YaleNew Regular"), local("YaleNew-Roman"), url("/fonts/yalenew-roman.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "YaleNew"; src: local("YaleNew Italic"), local("YaleNew-Italic"), url("/fonts/yalenew-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "YaleNew"; src: local("YaleNew Bold"), local("YaleNew-Bold"), url("/fonts/yalenew-bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "YaleNew"; src: local("YaleNew Bold Italic"), local("YaleNew-BoldItalic"), url("/fonts/yalenew-bolditalic.woff2") format("woff2"); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: "Old Style 7"; src: local("Old Style 7 Std Roman"), local("OldStyle7Std"), url("/fonts/oldstyle7-roman.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
 
 /* "Scheduler Text" is Old Style 7, which has only a roman, borrowing
    YaleNew's real italic and bold rather than letting browsers fake them. */
-@font-face { font-family: "Scheduler Text"; src: local("Old Style 7 Std Roman"), local("OldStyle7Std"), url("/fonts/oldstyle7-roman.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
-@font-face { font-family: "Scheduler Text"; src: local("YaleNew Italic"), local("YaleNew-Italic"), url("/fonts/yalenew-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: block; }
-@font-face { font-family: "Scheduler Text"; src: local("YaleNew Bold"), local("YaleNew-Bold"), url("/fonts/yalenew-bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: block; }
-@font-face { font-family: "Scheduler Text"; src: local("YaleNew Bold Italic"), local("YaleNew-BoldItalic"), url("/fonts/yalenew-bolditalic.woff2") format("woff2"); font-weight: 700; font-style: italic; font-display: block; }
+@font-face { font-family: "Scheduler Text"; src: local("Old Style 7 Std Roman"), local("OldStyle7Std"), url("/fonts/oldstyle7-roman.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Scheduler Text"; src: local("YaleNew Italic"), local("YaleNew-Italic"), url("/fonts/yalenew-italic.woff2") format("woff2"); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: "Scheduler Text"; src: local("YaleNew Bold"), local("YaleNew-Bold"), url("/fonts/yalenew-bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Scheduler Text"; src: local("YaleNew Bold Italic"), local("YaleNew-BoldItalic"), url("/fonts/yalenew-bolditalic.woff2") format("woff2"); font-weight: 700; font-style: italic; font-display: swap; }
 
 :root {
   /* Fonts: Roslindale for every heading and large figure, light, slim and
@@ -457,24 +459,58 @@ select,
   z-index: 80;
   background: rgba(10, 12, 30, 0.45);
   align-items: center;
+  align-items: safe center; /* a window taller than the screen starts at its top */
   justify-content: center;
   padding: 20px;
 }
 .modal-overlay.open { display: flex; }
-/* The page behind an open window doesn't scroll (popover.js). */
+/* The page behind an open window doesn't scroll (popover.js), nor pull to
+   refresh. */
 .page-frozen, .page-frozen body { overflow: hidden; }
-.page-frozen body { padding-right: var(--scrollbar-gap, 0px); }
+.page-frozen { overscroll-behavior: none; }
+.page-frozen body { padding-right: calc(var(--scrollbar-gap, 0px) + env(safe-area-inset-right, 0px)); }
 .modal-dialog { overscroll-behavior: contain; }
+/* No taller than the screen as it is now (100dvh: with the phone browser's
+   bars showing), scrolling inside when there's more. */
 .modal-dialog {
+  --dialog-pad: 26px;
   position: relative;
   width: 100%;
   max-width: 420px;
+  max-height: calc(100vh - 40px);
+  max-height: min(90vh, calc(100dvh - 40px));
+  overflow-y: auto;
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
-  padding: 26px;
+  padding: var(--dialog-pad);
 }
+/* A window's buttons along its bottom (Done) stay in sight while the rest
+   scrolls: they stick to its bottom edge, on the window's own color, so
+   what scrolls under them is hidden. */
+.modal-dialog:has(> .appearance-foot, > .dialog-actions) { padding-bottom: 0; }
+.modal-dialog > .appearance-foot,
+.modal-dialog > .dialog-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-left: calc(-1 * var(--dialog-pad));
+  margin-right: calc(-1 * var(--dialog-pad));
+  padding-left: var(--dialog-pad);
+  padding-right: var(--dialog-pad);
+  padding-bottom: var(--dialog-pad);
+  background: linear-gradient(var(--glass-bg), var(--glass-bg)), var(--bg);
+}
+.modal-dialog > .appearance-foot {
+  border-top: 0;
+  padding-top: 17px; /* the 1px line is drawn inside it */
+  background:
+    linear-gradient(var(--border), var(--border)) var(--dialog-pad) 0 / calc(100% - 2 * var(--dialog-pad)) 1px no-repeat,
+    linear-gradient(var(--glass-bg), var(--glass-bg)), var(--bg);
+}
+html.kb-open .modal-dialog > .appearance-foot,
+html.kb-open .modal-dialog > .dialog-actions { position: static; }
 .modal-close {
   position: absolute;
   top: 14px;
@@ -491,9 +527,69 @@ select,
   cursor: pointer;
 }
 .modal-close:hover { background: var(--surface-strong); color: var(--text); }
+.modal-close:active { background: var(--surface-strong); }
 .modal-close svg { width: 16px; height: 16px; }
 .modal-title { margin: 0 0 10px; font-size: 1.2rem; font-weight: 650; padding-right: 26px; }
 .modal-body { margin: 0; color: var(--muted); line-height: 1.6; font-size: 1rem; }
+
+/* Phones: every window is a sheet that comes up from the bottom of the
+   screen, the full width, with a grab handle on top. The handle, the title
+   and the close button stay at the top and the buttons (Done) at the
+   bottom while the middle scrolls. A swipe down on the top closes it
+   (popover.js), as do Back, a tap above it and Escape. The sheet is solid
+   (no frosted glass), which is quicker to draw on modest phones. */
+@media (max-width: 640px) {
+  .modal-overlay { align-items: flex-end; padding: 0; }
+  .modal-overlay > .modal-dialog {
+    --dialog-pad: 16px;
+    max-width: none;
+    max-height: calc(100vh - 12px);
+    max-height: calc(100dvh - 12px - env(safe-area-inset-top, 0px));
+    padding: 0 max(var(--dialog-pad), env(safe-area-inset-right, 0px)) 0 max(var(--dialog-pad), env(safe-area-inset-left, 0px));
+    border-width: 1px 0 0;
+    border-radius: 20px 20px 0 0;
+    background: var(--card-bg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: 0 -12px 40px rgba(17, 17, 26, 0.18);
+    overscroll-behavior: none;
+    transform: translateY(var(--sheet-drag, 0px));
+    transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+    animation: sheet-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .modal-overlay > .modal-dialog.is-dragged { transition: none; }
+  .modal-overlay > .modal-dialog.is-leaving { transform: translateY(100%); transition-duration: 0.18s; }
+  /* The grab handle, on a band that stays at the top. */
+  .modal-overlay > .modal-dialog::before {
+    content: ""; position: sticky; top: 0; z-index: 3; display: block; height: 20px;
+    margin: 0 calc(-1 * var(--dialog-pad));
+    background: linear-gradient(var(--border-strong), var(--border-strong)) 50% 8px / 40px 5px no-repeat, var(--card-bg);
+  }
+  .modal-overlay > .modal-dialog > .modal-close {
+    position: sticky; top: 20px; right: auto; z-index: 4; margin: 0 -6px -44px auto; width: 44px; height: 44px;
+  }
+  .modal-overlay > .modal-dialog > .modal-title {
+    position: sticky; top: 20px; z-index: 3;
+    margin: 0 calc(-1 * var(--dialog-pad)) 8px; padding: 6px 58px 10px var(--dialog-pad);
+    background: var(--card-bg); font-size: min(1.45rem, 34px); overflow-wrap: anywhere;
+  }
+  .modal-overlay > .modal-dialog > .appearance-foot,
+  .modal-overlay > .modal-dialog > .dialog-actions {
+    flex-wrap: wrap;
+    margin-top: 16px;
+    padding-top: 12px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    background: var(--card-bg);
+    border-top: 1px solid var(--border);
+  }
+  /* Room under the last thing in a window with no buttons along its
+     bottom, clear of the home bar. */
+  .modal-overlay > .modal-dialog::after {
+    content: ""; display: block; height: calc(20px + env(safe-area-inset-bottom, 0px));
+  }
+  .modal-overlay > .modal-dialog:has(> .appearance-foot, > .dialog-actions)::after { content: none; }
+}
+@keyframes sheet-in { from { transform: translateY(100%); } }
 
 /* Kept for any inline glass buttons still in use on individual pages */
 .icon-btn.glass {
@@ -1523,7 +1619,7 @@ section[id], main[id] { scroll-margin-top: 80px; }
 .guide-tips p { margin: 0 0 8px; }
 .guide-tips p:last-child { margin-bottom: 0; }
 .canvas-open { margin: 14px 0 6px; }
-.modal-wide { max-width: 620px; max-height: 88vh; overflow-y: auto; }
+.modal-wide { max-width: 620px; max-height: 88vh; max-height: min(88vh, calc(100dvh - 40px)); }
 
 .announcement { width: 100%; font-size: 0.95rem; line-height: 1.5; }
 .count-inline { font-size: 1rem; }
@@ -2058,7 +2154,7 @@ h4 { font-size: 1.1rem; line-height: 1.15; font-weight: calc(var(--w-h4) + var(-
 /* =============================================================
    The Appearance window: theme cards, a size slider, font cards
    ============================================================= */
-.appearance-dialog { max-width: 640px; max-height: 90vh; overflow-y: auto; padding: 28px; }
+.appearance-dialog { --dialog-pad: 28px; max-width: 640px; }
 .appearance-note {
   margin: -2px 0 14px; padding: 10px 12px; border-radius: var(--radius-sm);
   background: var(--accent-soft); color: var(--accent-strong); font-size: 0.9rem; line-height: 1.45;
@@ -2084,6 +2180,17 @@ h4 { font-size: 1.1rem; line-height: 1.15; font-weight: calc(var(--w-h4) + var(-
   outline: 2px solid transparent; outline-offset: 3px;
 }
 .theme-card:hover .theme-preview { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(17, 17, 26, 0.12); }
+/* "Automatic (match my device)": a row of its own above the cards, its
+   picture half light and half dark, lined up with the first column. */
+.theme-auto {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: center;
+  margin: 0 0 16px; cursor: pointer;
+}
+.theme-auto-text { grid-column: 2 / -1; min-width: 0; }
+.theme-auto .choice-name { margin: 0; font-size: 0.95rem; text-align: left; }
+.theme-auto-hint { display: block; margin-top: 2px; font-family: var(--font-small); font-size: 0.84rem; line-height: 1.4; color: var(--muted); }
+.theme-auto:hover .theme-preview { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(17, 17, 26, 0.12); }
+.theme-card:active .theme-preview, .theme-auto:active .theme-preview, .font-card:active .font-sample { transform: scale(0.97); }
 .choice-input:checked + .theme-preview { outline-color: var(--accent); }
 .choice-input:focus-visible + .theme-preview,
 .choice-input:focus-visible + .font-sample { outline: 3px solid var(--accent); outline-offset: 3px; }
@@ -2112,6 +2219,11 @@ h4 { font-size: 1.1rem; line-height: 1.15; font-weight: calc(var(--w-h4) + var(-
 .preview-solarized-dark { --p-bg: #002b36; --p-card: #073642; --p-border: #0f4a58; --p-text: #93a1a1; --p-accent: #268bd2; }
 .preview-contrast-light { --p-bg: #ffffff; --p-card: #ffffff; --p-border: #000000; --p-text: #000000; --p-accent: #0000c8; }
 .preview-contrast-dark { --p-bg: #000000; --p-card: #000000; --p-border: #ffffff; --p-text: #ffffff; --p-accent: #ffe600; }
+.preview-auto {
+  --p-border: #a9a49a; --p-text: #8b8a96; --p-accent: #9a5520;
+  background: linear-gradient(90deg, #f6f2e9 50%, #0d0f1e 50%);
+}
+.preview-auto .tp-bar, .preview-auto .tp-card { background: linear-gradient(90deg, #fffdf8 50%, #161930 50%); }
 
 /* Text size: a slider that fills as it moves, plus one-tap sizes. */
 .size-readout { font-size: 0.95rem; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--text); }
@@ -2170,9 +2282,25 @@ h4 { font-size: 1.1rem; line-height: 1.15; font-weight: calc(var(--w-h4) + var(-
 .appearance-foot { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--border); padding-top: 16px; }
 .appearance-status { flex: 1; font-size: 0.85rem; color: var(--muted); }
 
-@media (max-width: 560px) {
-  .appearance-dialog { padding: 20px; }
-  .theme-cards, .font-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* Phones: Text size first (theme.js moves it), then the themes and fonts as
+   small swatches, four to a row, so the whole window fits in about a
+   screen and a half. */
+@media (max-width: 640px) {
+  .appearance-group { margin-bottom: 20px; }
+  .theme-cards, .font-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 8px; }
+  .theme-auto { gap: 8px; margin-bottom: 12px; }
+  .theme-preview { height: 48px; padding: 11px 6px 6px; border-radius: 10px; }
+  .theme-preview .tp-bar { height: 6px; }
+  .theme-preview .tp-card { padding: 5px 6px; border-radius: 5px; }
+  .theme-preview .tp-line { height: 3px; margin-bottom: 3px; }
+  .theme-preview .tp-pill { width: 20px; height: 5px; }
+  .theme-preview .tp-check { top: 3px; right: 3px; }
+  .choice-input:checked + .theme-preview .tp-check { transform: scale(0.8); }
+  .choice-name { margin-top: 5px; font-size: 0.76rem; line-height: 1.25; }
+  .theme-auto .choice-name { font-size: 0.9rem; }
+  .theme-auto-hint { font-size: 0.8rem; }
+  .font-sample { height: 52px; font-size: 1.4rem; }
+  .font-sample-mixed { font-size: 1.75rem; }
 }
 
 /* =============================================================
@@ -2654,12 +2782,13 @@ button.icon-dock-label { border: 0; background: none; font-family: inherit; curs
 }
 
 /* =============================================================
-   Fonts first. Nothing shows until the page's fonts are in (app.js
-   lifts .fonts-loading; after 3 seconds the page shows regardless),
-   so text never flashes from a stand-in font to Roslindale or
-   YaleNew, and the blocks rise in once, together, when it appears.
+   Fonts first, briefly. Nothing shows until the page's fonts are in
+   (app.js lifts .fonts-loading) or half a second has passed (0.6s
+   here, in case app.js is slow to arrive), so text doesn't flash from
+   a stand-in font to Roslindale or YaleNew when they're quick to come,
+   and the blocks rise in once, together, when it appears.
    ============================================================= */
-.fonts-loading body { visibility: hidden; animation: show-page 0s 3s forwards; }
+.fonts-loading body { visibility: hidden; animation: show-page 0s 0.6s forwards; }
 @keyframes show-page { to { visibility: visible; } }
 .fonts-loading :is(main, .mode-frame) > .card { animation-play-state: paused; }
 
@@ -2925,6 +3054,7 @@ input[type="date"] {
   background: none; color: var(--muted); font: inherit; font-size: 1.4rem; line-height: 1; cursor: pointer;
 }
 .flash-close:hover { background: var(--surface-soft); color: var(--text); }
+.flash-close:active { background: var(--surface-strong); }
 :not(.js) > body .flash-close { display: none; }
 .flash-veil {
   position: fixed; inset: 0; z-index: 74; pointer-events: none;
@@ -2935,6 +3065,23 @@ input[type="date"] {
 [data-mode="dark"] .flash-veil { background: rgba(5, 6, 15, 0.42); }
 [data-theme^="contrast"] .flash-veil { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(0, 0, 0, 0.2); }
 @keyframes flash-veil { 0% { opacity: 0; } 12% { opacity: 1; } 68% { opacity: 1; } 100% { opacity: 0; } }
+/* Phones: a bar along the bottom of the screen, just above the tab bar (and
+   clear of the home bar), rising in; the page isn't blurred. With the
+   keyboard up, at the top instead, where it can be seen. */
+@media (max-width: 640px) {
+  .js .flash-stack {
+    top: auto;
+    bottom: calc(12px + var(--tabbar-h, 0px) + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
+    width: calc(100% - 24px);
+  }
+  .js.kb-open .flash-stack { top: calc(8px + env(safe-area-inset-top, 0px)); bottom: auto; }
+  .flash-stack .flash { gap: 10px; padding: 10px 4px 10px 14px; font-size: 0.98rem; }
+  .js .flash-stack .flash { animation-name: flash-up; }
+  .flash-stack .flash.leaving { transform: translateY(10px); }
+  .flash-icon { margin-top: 2px; }
+  .flash-veil { display: none; }
+}
+@keyframes flash-up { from { opacity: 0; transform: translateY(14px) scale(0.98); } }
 @media (prefers-reduced-motion: reduce) {
   .js .flash-stack .flash { animation: none; }
 }

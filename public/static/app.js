@@ -1,7 +1,9 @@
 // Fonts first: the page (hidden by theme-init.js) shows once the fonts it
-// uses have loaded, or after 2.5 seconds whatever happens, so text never
-// flashes from a stand-in font to the real one. The fonts are asked for by
-// name, so this works the same in a background tab.
+// uses have loaded, or after half a second whatever happens, so text doesn't
+// flash from a stand-in font to the real one when they're quick to arrive
+// (cached, or a good connection), and a phone on a slow one isn't left
+// looking at a blank page. The fonts are asked for by name, so this works
+// the same in a background tab.
 (function () {
   var root = document.documentElement;
   if (!root.classList.contains("fonts-loading")) return;
@@ -12,9 +14,17 @@
     root.classList.remove("fonts-loading");
     document.dispatchEvent(new Event("page-shown"));
   };
-  setTimeout(show, 2500);
+  setTimeout(show, 450);
+  // The stand-in fonts' stylesheet (theme-init.js) first, so their names
+  // mean something when they're asked for.
+  var css = document.querySelector("link[data-font-css]");
+  var listed = !css || css.hasAttribute("data-loaded") ? Promise.resolve() : new Promise(function (done) {
+    css.addEventListener("load", done);
+    css.addEventListener("error", done);
+  });
   var want = function (face) {
-    return document.fonts.load(face).then(function (found) { return found.length > 0; }, function () { return false; });
+    return listed.then(function () { return document.fonts.load(face); })
+      .then(function (found) { return found.length > 0; }, function () { return false; });
   };
   var choice = root.getAttribute("data-font");
   // Headings: the variable Roslindale, or the single weight that stands in
@@ -48,9 +58,13 @@
   }
 
   // Messages about what just happened: once the page shows, they come up in
-  // the upper part of the window, the page behind blurred for a moment.
-  // Good news fades after a while; problems stay until they're closed.
+  // the upper part of the window, the page behind blurred for a moment. On
+  // a phone, they come up along the bottom of the screen instead (style.css),
+  // with no blur, so the page stays readable. Good news fades after a while
+  // (sooner on a phone, where it sits over the page); problems stay until
+  // they're closed.
   var stack = document.querySelector("[data-flash-stack]");
+  var phoneFlash = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
   // A problem with a file, back at the box it was chosen in: said under
   // that box, where the professor is looking, not over the page.
   var hashed = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)));
@@ -83,15 +97,17 @@
       document.body.appendChild(stack);
       notes.forEach(function (note) { note.remove(); });
       setTimeout(function () {
-        var veil = document.createElement("div");
-        veil.className = "flash-veil";
-        veil.setAttribute("aria-hidden", "true");
-        document.body.appendChild(veil);
-        veil.addEventListener("animationend", function () { veil.remove(); });
-        setTimeout(function () { veil.remove(); }, 3000);
+        if (!phoneFlash) {
+          var veil = document.createElement("div");
+          veil.className = "flash-veil";
+          veil.setAttribute("aria-hidden", "true");
+          document.body.appendChild(veil);
+          veil.addEventListener("animationend", function () { veil.remove(); });
+          setTimeout(function () { veil.remove(); }, 3000);
+        }
         notes.forEach(function (note) {
           stack.appendChild(note);
-          if (!note.classList.contains("flash-error")) setTimeout(function () { dismiss(note); }, 8000);
+          if (!note.classList.contains("flash-error")) setTimeout(function () { dismiss(note); }, phoneFlash ? 4000 : 8000);
         });
       }, 50);
     };
@@ -101,7 +117,7 @@
       var flashShown = false;
       var once = function () { if (!flashShown) { flashShown = true; arrive(); } };
       document.addEventListener("page-shown", once);
-      setTimeout(once, 3100); // the page shows by itself after 3 seconds
+      setTimeout(once, 700); // the page shows by itself after 0.6 seconds
     }
   }
 
