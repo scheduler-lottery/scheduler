@@ -1,0 +1,15 @@
+{
+  "name": "Scheduler",
+  "short_name": "Scheduler",
+  "description": "Presentation days: rank the days you can do, and get a fair schedule.",
+  "scope": "/",
+  "display": "standalone",
+  "theme_color": "#7d4317",
+  "background_color": "#faf8f3",
+  "icons": [
+    { "src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/static/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
