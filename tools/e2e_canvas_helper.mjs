@@ -238,7 +238,7 @@ try {
   const sent = await evaluate(me.session, `sessionStorage.getItem("sent") || ""`);
   check(sent.includes("2026FA_BUSCOM_615_SEC1 (2026 Fall)") && !/login_id|sortable_name|"id"/.test(sent) && sent.endsWith("how=helper"),
     "only names and emails went to Scheduler");
-  check(await until(me.session, `document.body.innerText.includes("Who's on your list (57)")`), "and shows who they are");
+  check(await until(me.session, `document.body.innerText.includes("Who's on it (57)")`), "and shows who they are");
 
   // Next time (signed in now, and the sheet knows its course): one click, no picking.
   await go(me.session, `${SITE}/teach/s/${sid}`);

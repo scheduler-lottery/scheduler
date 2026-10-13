@@ -234,7 +234,7 @@ try {
   await send("DOM.setFileInputFiles", { nodeId, files: [csv] }, me); // (as choosing it does: the page sends it at once)
   check(await until(me, `document.readyState === "complete" && /Added 2 students/.test(document.body.innerText)`, 10000),
     "the downloaded file goes in: 2 students");
-  check(await until(me, `document.body.innerText.includes("Who's on your list (2)")`), "named, right there");
+  check(await until(me, `document.body.innerText.includes("Who's on it (2)")`), "named, right there");
   check(await until(me, `document.activeElement && document.activeElement.hasAttribute("data-focus-on-load")`, 4000),
     "and the report of what was added has the focus (so it's read out)");
 

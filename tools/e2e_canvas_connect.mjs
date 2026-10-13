@@ -149,7 +149,7 @@ try {
   await press(me, "2026FA_BUSCOM_615_SEC1");
   check(await until(me, `document.readyState === "complete" && /Added 57 students/.test(document.body.innerText)`, 10000),
     "one click on the course: 57 students on the sheet");
-  check(await until(me, `document.body.innerText.includes("Who's on your list (57)")`), "named, right there");
+  check(await until(me, `document.body.innerText.includes("Who's on it (57)")`), "named, right there");
 
   // The wrong course? "Pick a different Canvas course" (connect?pick=1): the courses again, not the one remembered.
   await send("Page.navigate", { url: `${SITE}/teach/s/${sid}/canvas/connect?pick=1&setup=1` }, me);
