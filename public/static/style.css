@@ -1427,6 +1427,34 @@ fieldset.field { border: none; margin: 0; padding: 0; min-width: 0; }
 .sheet-head h1 { margin-bottom: 4px; }
 .share-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 4px; }
 .share-input { flex: 1 1 260px; min-width: 0; font-variant-numeric: tabular-nums; }
+/* Phones: the sheet's title in two lines at most, what its status means
+   printed under the pill (nothing to hover on a touch screen), and one
+   button that shares the student link, with the links folded under it. */
+.status-say, .share-phone { display: none; }
+.status-say { margin: 4px 0 0; color: var(--muted); font-family: var(--font-small); font-size: 0.9rem; line-height: 1.45; }
+.share-phone { margin: 14px 0 0; }
+.share-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 48px; }
+.share-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+.share-links > summary { cursor: pointer; padding: 12px 0; color: var(--accent-strong); font-weight: 600; font-size: 0.92rem; }
+.share-link-item { display: flex; align-items: center; gap: 8px 12px; margin: 0 0 8px; }
+.share-link-text {
+  flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums;
+  -webkit-user-select: all; user-select: all;
+}
+.share-links .mini-hint { margin: 4px 0 2px; }
+@media (max-width: 640px), (pointer: coarse) {
+  .status-say { display: block; }
+  .status-tip { cursor: default; }
+  .status-tip .tip-bubble { display: none; }
+}
+@media (max-width: 640px) {
+  .sheet-head h1 {
+    font-size: clamp(1.4rem, 6vw, 2rem); line-height: 1.12; margin-bottom: 0; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  }
+  .sheet-head .share-row, .sheet-head .short-row { display: none; }
+  .share-phone { display: block; }
+}
 .section-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
 .section-nav a {
   padding: 4px 12px;
@@ -2480,8 +2508,16 @@ summary.card-heading::marker, summary.card-heading::-webkit-details-marker { fon
 .students-elsewhere { margin: 4px 0 18px; text-align: left; }
 .students-elsewhere p { margin: 0; }
 @media (max-width: 640px) {
-  .mode-frame { padding: 28px 10px 12px; border-radius: 22px; }
-  .mode-label { margin-top: -40px; }
+  /* Phones: the frame is just a line across the top with the label on it
+     as a small badge, and cards pad 16px, so the page's width goes to the
+     words and tables (not to a frame, its padding, and the card's). */
+  .mode-frame { padding: 22px 0 0; margin-top: 8px; border: 0; border-top: 2px solid var(--text); border-radius: 0; }
+  .mode-label { margin: -33px 0 14px; padding: 4px 10px; font-size: 0.68rem; }
+  .mode-frame .card { padding: 16px; }
+  .mode-frame .publish-box { padding: 14px 16px; }
+}
+@media (max-width: 380px) {
+  .page:has(> .mode-frame) { padding-left: 12px; padding-right: 12px; }
 }
 
 /* =============================================================
@@ -2745,6 +2781,22 @@ button.icon-dock-label { border: 0; background: none; font-family: inherit; curs
 }
 .sheet-tab:hover { color: var(--text); }
 .sheet-tab.is-current { color: var(--text); border-bottom-color: var(--text); }
+/* Phones: the three tabs share the width as one segmented control, each
+   a 44px target with its short name, so none is cut off ("Settings &
+   backu") behind a strip that scrolls without saying so. */
+@media (max-width: 640px) {
+  .sheet-tabs {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin: 16px 0 0; padding: 4px;
+    border: 1px solid var(--border); border-radius: 14px; background: var(--surface-soft); overflow: visible;
+  }
+  .sheet-tab {
+    display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 6px 4px; margin: 0;
+    border: 0; border-radius: 10px; text-align: center; white-space: normal; overflow-wrap: anywhere; line-height: 1.15;
+  }
+  .sheet-tab.is-current {
+    background: var(--card-bg); box-shadow: 0 1px 3px rgba(17, 17, 26, 0.12), inset 0 0 0 1px var(--border);
+  }
+}
 .page-jump { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 4px 4px 14px; font-size: 0.9rem; }
 .page-jump a { color: var(--muted); }
 .page-jump a:hover { color: var(--accent-strong); }
@@ -2964,7 +3016,7 @@ input[type="date"] {
 .send-off { margin: 0; font-family: var(--font-small); font-size: 0.9rem; color: var(--muted); }
 .setup-message-label { display: block; margin: 4px 0 6px; }
 .just-added .send-choices { margin-bottom: 4px; }
-@media (max-width: 640px) { .send-choices { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .send-choices { grid-template-columns: 1fr; } .send-choice { padding: 12px; } }
 
 /* The class list's own "Add students" box. */
 .quick-add { margin: 16px 0 6px; }

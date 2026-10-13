@@ -19,6 +19,44 @@
     <span class="status-pill closed">Sign-ups closed</span>
     {% endif %}
   </div>
+  {# On phones and touch screens there's no hovering: what the pill means
+     is printed under it instead (style.css .status-say). #}
+  {% if waiting_for_list %}
+  <p class="status-say" aria-hidden="true">Waiting for your class list, so students can't sign in yet. You're on setup step 7 of 8: add your students.</p>
+  {% elif sheet.bidding_open %}
+  <p class="status-say">Students can rank their days now{% if counts.roster %}: {{ counts.listed_submissions }} of {{ counts.roster }} have{% endif %}.{% if deadline.closes_at and not deadline.waiting %} Sign-ups close <time datetime="{{ deadline.closes_at }}" data-local="deadline">{{ deadline.text }}</time>.{% endif %}</p>
+  {% elif published %}
+  <p class="status-say">Each student can see their day on the class page.</p>
+  {% else %}
+  <p class="status-say">Rankings can't change now. {{ 'The schedule is made: publish it so students see their day.' if has_schedule else 'Next: make the schedule.' }}</p>
+  {% endif %}
+  {# Phones: one button that opens the phone's own share sheet (app.js
+     [data-share-url]; elsewhere it copies), with the links themselves
+     folded under it. Larger screens keep the link and its Copy button. #}
+  <div class="share-phone">
+    <button type="button" class="btn btn-primary share-btn" data-share-url="{{ share_url }}" data-share-title="{{ sheet.title }}"
+            data-share-text="Rank your presentation days for {{ sheet.title }}:"
+            data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      Share the student link
+    </button>
+    <details class="share-links">
+      <summary>See the link{{ 's' if short_url }}</summary>
+      <p class="share-link-item">
+        <span class="share-link-text">{{ share_url }}</span>
+        <button class="btn btn-secondary btn-small" type="button" data-copy="#share-url" aria-label="Copy the student link"
+                data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}">Copy</button>
+      </p>
+      {% if short_url %}
+      <p class="mini-hint">Short link, for a slide or the board:</p>
+      <p class="share-link-item">
+        <span class="share-link-text">{{ short_url | replace('https://', '') }}</span>
+        <button class="btn btn-secondary btn-small" type="button" data-copy="#short-url" aria-label="Copy the short link"
+                data-mark-shared="{{ url_for('teach.mark_shared', sid=sheet.id) }}">Copy</button>
+      </p>
+      {% endif %}
+    </details>
+  </div>
   <div class="share-row">
     <label for="share-url" class="visually-hidden">Student link</label>
     <input id="share-url" type="text" readonly value="{{ share_url }}" class="share-input">
@@ -36,7 +74,7 @@
   <nav class="sheet-tabs" aria-label="This class">
     <a class="sheet-tab{{ ' is-current' if tab == 'class' }}" href="{{ url_for('teach.sheet', sid=sheet.id) }}"{% if tab == 'class' %} aria-current="page"{% endif %}>Class</a>
     <a class="sheet-tab{{ ' is-current' if tab == 'schedule' }}" href="{{ url_for('teach.schedule_page', sid=sheet.id) }}"{% if tab == 'schedule' %} aria-current="page"{% endif %}>Schedule</a>
-    <a class="sheet-tab{{ ' is-current' if tab == 'settings' }}" href="{{ url_for('teach.settings_page', sid=sheet.id) }}"{% if tab == 'settings' %} aria-current="page"{% endif %}>Settings &amp; backups</a>
+    <a class="sheet-tab{{ ' is-current' if tab == 'settings' }}" href="{{ url_for('teach.settings_page', sid=sheet.id) }}"{% if tab == 'settings' %} aria-current="page"{% endif %}>Settings<span class="label-long"> &amp; backups</span></a>
   </nav>
 </section>
 
