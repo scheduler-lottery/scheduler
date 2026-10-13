@@ -365,6 +365,7 @@ select,
    --------------------------------------------------------------- */
 .topbar-title, .dock-word, .word-more { display: none; }
 @media (pointer: coarse) and (min-width: 641px) {
+  .topbar-inner { padding-top: 7px; padding-bottom: 7px; }
   .icon-dock { gap: 4px; }
   .icon-dock-btn { width: auto; min-width: 44px; height: 44px; gap: 6px; padding: 0 13px 0 11px; border-radius: var(--radius-full); }
   .icon-dock-btn .dock-word { display: inline; font: 600 0.8rem/1 var(--font-sans); letter-spacing: 0; white-space: nowrap; }
