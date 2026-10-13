@@ -1522,6 +1522,11 @@ section[id], main[id] { scroll-margin-top: 80px; }
 .dropzone-status:empty { display: none; }
 /* Phones and tablets can't drag a file onto the box: no need to say so. */
 @media (hover: none) and (pointer: coarse) { .dropzone-drag { display: none; } }
+/* Words for the way the page is used, anywhere on the site: "Tap" under a
+   finger (phones, tablets, iPads), "Click" with a mouse or trackpad. No
+   script needed, and the hidden word isn't read out either. */
+@media (pointer: coarse) { .mouse-only { display: none !important; } }
+@media not all and (pointer: coarse) { .touch-only { display: none !important; } }
 .paste-box { margin-top: 10px; }
 .paste-box > summary { cursor: pointer; color: var(--accent-strong); font-size: 0.92rem; padding: 4px 0; }
 .paste-box textarea { width: 100%; margin: 6px 0 8px; }

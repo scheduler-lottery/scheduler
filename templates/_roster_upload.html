@@ -1,5 +1,6 @@
-{# The box for a class-list file: click it to choose the file (or drag the
-   file onto it), and it goes in at once (app.js). `drop_id` tells two such
+{# The box for a class-list file: click or tap it to choose the file (or
+   drag the file onto it), and it goes in at once (app.js). It says "Tap"
+   on a touch screen, "Click" with a mouse (.touch-only, .mouse-only). `drop_id` tells two such
    boxes on one page apart (and is sent as `box`, so a wrong file comes back
    to the same box); `from_canvas` words it for Canvas's student file;
    `replacing` says the professor came here to replace a wrong list;
@@ -14,10 +15,10 @@
          aria-labelledby="{{ drop_id }}-title" aria-describedby="{{ drop_id }}-sub">
   <label class="dropzone" for="{{ drop_id }}">
     {% if from_canvas is defined and from_canvas %}
-    <span class="dropzone-title" id="{{ drop_id }}-title">Click here to choose Canvas's file</span>
+    <span class="dropzone-title" id="{{ drop_id }}-title"><span class="mouse-only">Click</span><span class="touch-only">Tap</span> here to choose Canvas's file</span>
     <span class="dropzone-sub" id="{{ drop_id }}-sub"><span data-not-safari>The file Canvas just saved in your Downloads folder.</span><span data-safari-only hidden>In Downloads: the newest folder, then the file with “student” in its name.</span>{% if counts.roster %} You'll see what changes before anything is replaced.{% endif %}</span>
     {% else %}
-    <span class="dropzone-title" id="{{ drop_id }}-title">{{ 'Click here to choose the new class list' if counts.roster else 'Click here to choose your class list' }}</span>
+    <span class="dropzone-title" id="{{ drop_id }}-title"><span class="mouse-only">Click</span><span class="touch-only">Tap</span> here to choose {{ 'the new class list' if counts.roster else 'your class list' }}</span>
     <span class="dropzone-sub" id="{{ drop_id }}-sub">An Excel or CSV file, or Canvas's file of your students (.zip).<span class="dropzone-drag"> Or drag it onto this box.</span>{% if counts.roster %} You'll see what changes before anything is replaced.{% endif %}</span>
     {% endif %}
   </label>

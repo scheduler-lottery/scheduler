@@ -11,8 +11,11 @@
    from Canvas" (data-has-list: a list that comes is compared, not added).
    Lines marked data-safari-only/-not-safari, data-phone-only/-desktop-only,
    data-windows-only/-not-windows and data-picker-downloads/-plain are shown
-   or hidden by app.js for the professor's computer. `guide_hl`: the level
-   of its headings (h4 under a question, h3 under "Update from Canvas"). #}
+   or hidden by app.js for the professor's computer; Canvas's file's steps
+   say "Tap" on a touch screen, "Click" with a mouse (`press`: .touch-only,
+   .mouse-only, by style.css alone). `guide_hl`: the level of its headings
+   (h4 under a question, h3 under "Update from Canvas"). #}
+{% macro press(first=False) %}<span class="mouse-only">{{ 'Click' if first else 'click' }}</span><span class="touch-only">{{ 'Tap' if first else 'tap' }}</span>{% endmacro %}
 {% set canvas_host = canvas.domain if canvas else 'canvas.instructure.com' %}
 {% set connect_here = canvas_connect and (not canvas or canvas.domain == canvas_connect_host) %}
 {% set has_list = counts and counts.roster %}
@@ -108,7 +111,7 @@
     <p class="mini-hint" data-phone-only hidden>Canvas opens on top of this page, and this page stays open underneath. Once Canvas has saved its file, come back here: open your browser's list of open pages, and tap this one. Can't find it? Open {{ app_name }} again: you're still signed in, and this sheet is under My sheets.</p>
     <ol class="canvas-steps" data-canvas-steps>
     <li class="canvas-step" data-canvas-step="signin">
-      <p><strong>Click this class's card</strong> on your Canvas Dashboard. No card for this class? Click <strong>Courses</strong> in the column of icons down the far left side of Canvas, then the class's name (still not there? click <strong>All Courses</strong> at the top of that list). If Canvas asks you to sign in first, sign in there as usual: {{ app_name }} never sees your password.</p>
+      <p><strong>{{ press(True) }} this class's card</strong> on your Canvas Dashboard. No card for this class? {{ press(True) }} <strong>Courses</strong> in the column of icons down the far left side of Canvas, then the class's name (still not there? {{ press() }} <strong>All Courses</strong> at the top of that list). If Canvas asks you to sign in first, sign in there as usual: {{ app_name }} never sees your password.</p>
       <svg class="canvas-pic" viewBox="0 0 360 132" role="img" aria-label="Canvas's Dashboard: the card for your course, to click">
         <rect class="pic-frame" x="0.5" y="0.5" width="359" height="131" rx="10"/>
         <rect class="pic-nav" x="0.5" y="0.5" width="38" height="131" rx="10"/>
@@ -122,7 +125,7 @@
       </svg>
     </li>
     <li class="canvas-step" data-canvas-step="analytics">
-      <p><strong>Click Course Analytics</strong> in the course's menu on the left (at some schools it's called <strong>New Analytics</strong>).<span data-phone-only hidden> On a phone or tablet, that menu is hidden: tap your course's name at the top of Canvas to open it.</span></p>
+      <p><strong>{{ press(True) }} Course Analytics</strong> in the course's menu on the left (at some schools it's called <strong>New Analytics</strong>).<span data-phone-only hidden> On a phone or tablet, that menu is hidden: tap your course's name at the top of Canvas to open it.</span></p>
       <svg class="canvas-pic" viewBox="0 0 360 150" role="img" aria-label="The course menu, with Course Analytics near the bottom, to click">
         <rect class="pic-frame" x="0.5" y="0.5" width="359" height="149" rx="10"/>
         <rect class="pic-nav" x="0.5" y="0.5" width="38" height="149" rx="10"/>
@@ -138,7 +141,7 @@
       </svg>
     </li>
     <li class="canvas-step" data-canvas-step="list">
-      <p><strong>Click Students, then the download button</strong> (the arrow pointing down, next to Chart Options). Canvas saves one file in your <strong>Downloads</strong> folder<span data-not-safari><span data-not-windows>; its name ends in .zip</span><span data-windows-only hidden>; Windows shows it as a zipped folder</span>. You don't need to open it</span>.<span data-safari-only hidden> If Safari asks whether to allow downloads from Canvas, click <strong>Allow</strong>. Safari then opens Canvas's file into a folder in your Downloads. That's fine: your list is inside.</span><span data-desktop-only> Your browser shows it at the top right of its window once it's saved. Then come back to this page: click “<span data-page-title>{{ sheet.title }}</span>” at the top of the window.</span><span data-phone-only hidden> If you're asked whether to download it, tap <strong>Download</strong>.</span></p>
+      <p><strong>{{ press(True) }} Students, then the download button</strong> (the arrow pointing down, next to Chart Options). Canvas saves one file in your <strong>Downloads</strong> folder<span data-not-safari><span data-not-windows>; its name ends in .zip</span><span data-windows-only hidden>; Windows shows it as a zipped folder</span>. You don't need to open it</span>.<span data-safari-only hidden> If Safari asks whether to allow downloads from Canvas, click <strong>Allow</strong>. Safari then opens Canvas's file into a folder in your Downloads. That's fine: your list is inside.</span><span data-desktop-only> Your browser shows it at the top right of its window once it's saved. Then come back to this page: click “<span data-page-title>{{ sheet.title }}</span>” at the top of the window.</span><span data-phone-only hidden> If you're asked whether to download it, tap <strong>Download</strong>.</span></p>
       <svg class="canvas-pic" viewBox="0 0 360 120" role="img" aria-label="Course Analytics: first the Students tab, then the download button next to Chart Options">
         <rect class="pic-frame" x="0.5" y="0.5" width="359" height="119" rx="10"/>
         <text class="pic-heading" x="14" y="27">Course Analytics</text>
@@ -192,7 +195,7 @@
       {% with drop_id='canvas-file-' ~ sheet.id, from_canvas=True, paste_box=False %}{% include "_roster_upload.html" %}{% endwith %}
     </li>
     </ol>
-    <p class="mini-hint">No download button? Click <strong>Reports</strong> instead, then <strong>Run Report</strong> next to <strong>Class Roster</strong>, and choose that file in the last step.</p>
+    <p class="mini-hint">No download button? {{ press(True) }} <strong>Reports</strong> instead, then <strong>Run Report</strong> next to <strong>Class Roster</strong>, and choose that file in the last step.</p>
     <details class="canvas-paste" id="canvas-paste-{{ sheet.id }}">
       <summary>Or paste your own list</summary>
       <form method="post" action="{{ url_for('teach.upload_roster', sid=sheet.id) }}" class="stack">
