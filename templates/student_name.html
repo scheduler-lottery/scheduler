@@ -9,7 +9,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label for="name" class="field-label">Your first and last name</label>
     <input type="text" id="name" name="name" value="{{ typed }}" maxlength="120" autocomplete="name" required
-           placeholder="e.g., Alex Johnson">
+           autocapitalize="words" autocorrect="off" spellcheck="false" enterkeyhint="go" placeholder="e.g., Alex Johnson">
     <button type="submit" class="btn btn-primary">Continue</button>
   </form>
   <p class="hint">Your instructor sees it with your ranking, and once the schedule is published, your classmates may see it next to your day.</p>

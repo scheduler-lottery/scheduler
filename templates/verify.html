@@ -31,17 +31,17 @@
   {% endif %}
   {% elif from_instructor %}
   <p class="hint">Type the code your instructor gave you. It works until
-    <time datetime="{{ expires_at }}" data-local="time">{{ expires_at[11:16] }}</time>. Or click the sign-in link in their email.</p>
+    <time datetime="{{ expires_at }}" data-local="time">{{ expires_at[11:16] }}</time>. Or open the sign-in link in their email.</p>
   {% elif locked %}
   <div class="disclaimer disclaimer-yellow">That code was cancelled after too many wrong tries. Press “Send a new code” below.</div>
   {% elif expired %}
-  <div class="disclaimer disclaimer-yellow">That code has expired. Press “Send a new code” below.{% if for_student and links %} (The one-click sign-in link in the email works for {{ link_hours }} hours — try that.){% endif %}</div>
+  <div class="disclaimer disclaimer-yellow">That code has expired. Press “Send a new code” below.{% if for_student and links %} (The sign-in link in the email works for {{ link_hours }} hours — try that.){% endif %}</div>
   {% else %}
   <p class="hint">
     {% if for_student %}We emailed a {{ code_length }}-digit code to <strong>{{ shown_email }}</strong>. {% endif %}
     {% if sent_at %}Sent at <time datetime="{{ sent_at }}" data-local="time">{{ sent_at[11:16] }}</time>; it works until
     <time datetime="{{ expires_at }}" data-local="time">{{ expires_at[11:16] }}</time>.{% endif %}
-    {% if for_student and links %}Or just click the sign-in link in that email.{% endif %}
+    {% if for_student and links %}Or just open the sign-in link in that email.{% endif %}
   </p>
   {% endif %}
 
@@ -53,7 +53,8 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label for="code" class="field-label">The {{ code_length }}-digit code{% if for_student %} for {{ sheet.title }}{% endif %}</label>
     <input type="text" id="code" name="code" class="code-input" placeholder="123456"
-           inputmode="numeric" autocomplete="one-time-code" maxlength="{{ code_length + 4 }}" autofocus required>
+           inputmode="numeric" autocomplete="one-time-code" maxlength="{{ code_length + 4 }}" autofocus required
+           autocorrect="off" spellcheck="false" enterkeyhint="go">
     {% if for_student %}
     <label class="choice choice-small"><input type="checkbox" name="shared" value="1">
       <span>This is a shared or library computer — sign me out after 20 minutes of not using it.</span></label>

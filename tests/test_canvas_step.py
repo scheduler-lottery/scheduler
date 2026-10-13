@@ -39,7 +39,7 @@ def test_the_canvas_step_has_words_for_each_kind_of_computer(prof):
     assert "its name ends in .zip" in words and "Downloads" in words
     assert "Drag in" not in words and "Drag in" not in text(prof.get("/"))
     # The grades in Canvas's file: said before the file is chosen, not after.
-    assert words.index("It has grades in it too") < words.index("Click here to choose Canvas's file")
+    assert words.index("It has grades in it too") < words.index("here to choose Canvas's file")
 
 
 def test_the_pages_about_canvas_say_what_happens_on_this_site(prof, monkeypatch):

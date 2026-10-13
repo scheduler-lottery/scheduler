@@ -1945,7 +1945,7 @@ def test_the_class_list_steps_aside_once_it_is_in(prof):
     assert "Replace it with a new file" in page and "Delete this list and start over" in page
     assert "Drag your class list here" not in page  # the big drop box is gone
     page = text(follow(prof, prof.post(f"/teach/s/{sid}/roster/clear")))
-    assert "Click here to choose your class list" in page  # start over
+    assert "here to choose your class list" in page  # start over
 
 
 def test_new_codes_are_long_and_never_reuse_a_deleted_sheets(prof, monkeypatch):
@@ -2251,7 +2251,7 @@ def test_workos_emails_the_code_and_the_site_checks_it(prof, browser, monkeypatc
     assert sam.post(f"/c/{sid}/login", {"name": "Sam Lee"}).headers["Location"].endswith("/verify")
     assert workos.sent[-1][0] == "sam@school.edu" and len(sam.outbox) == emailed  # WorkOS sent it, not the mailbox
     page = text(sam.get(f"/c/{sid}/verify"))
-    assert "access@workos-mail.com" in page and "click the sign-in link" not in page  # WorkOS's email has no link
+    assert "access@workos-mail.com" in page and "open the sign-in link" not in page  # WorkOS's email has no link
     assert "That code isn't right" in text(sam.post(f"/c/{sid}/verify", {"code": "000000"}))
     assert sam.post(f"/c/{sid}/verify", {"code": workos.sent[-1][1]}).headers["Location"].endswith("/home")
     assert workos.deleted == ["user_sam@school.edu"]  # WorkOS's record goes once Sam is in
@@ -2906,7 +2906,7 @@ def test_messages_can_be_closed_and_canvas_steps_pick_up_after_signing_in(prof, 
     page = html(prof.get(f"/teach/s/{sid}"))
     assert "Open Canvas" in page and 'data-canvas-went="signin"' in page  # in a tab of its own, where downloads show
     assert "popup=" not in raw(prof.get("/static/app.js"))  # (not a small window with no downloads to see)
-    assert page.count('class="canvas-pic"') == 5 and "Click Course Analytics" in page  # where to click, drawn (step 4: two ways)
+    assert page.count('class="canvas-pic"') == 5 and 'Click</span><span class="touch-only">Tap</span> Course Analytics' in page  # where to click, drawn (step 4: two ways)
     assert "data-canvas-welcome" in page
     # No AI-assistant route for student data (agents' makers advise against using them on pages with
     # others' personal information; school policies restrict which AI tools may see a roster).

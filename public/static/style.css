@@ -854,6 +854,13 @@ input[type="email"]:focus, input[type="search"]:focus, textarea:focus, select:fo
   background: var(--accent-soft);
   color: var(--accent-strong);
 }
+/* Under a finger, with the keyboard up (name-autocomplete.js): no taller
+   than the room the keyboard leaves, and above the box when there's no
+   room for two names under it. */
+@media (pointer: coarse) {
+  .suggestions-list { max-height: min(240px, var(--suggest-room, 240px)); overscroll-behavior: contain; }
+  .suggestions-list.opens-up { top: auto; bottom: 100%; margin: 0 0 6px; }
+}
 .roster-row { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; flex-wrap: wrap; }
 
 .flash-stack { margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
@@ -936,6 +943,13 @@ input[type="email"]:focus, input[type="search"]:focus, textarea:focus, select:fo
   background: var(--card-bg);
   box-shadow: 0 0 0 4px var(--accent-soft);
 }
+/* A new PIN's boxes: dots, as in a password box, without being one (so
+   phones don't offer a "strong password" there). "Show the PIN" sits under
+   them, on the right. */
+.pin-input { -webkit-text-security: disc; }
+.pin-input.is-shown { -webkit-text-security: none; }
+.pin-show { align-self: flex-end; margin-top: -4px; }
+.pin-show[hidden] { display: none; }
 .verify-actions {
   display: flex;
   justify-content: space-between;
@@ -1615,7 +1629,15 @@ fieldset.field { border: none; margin: 0; padding: 0; min-width: 0; }
 .field input[type="text"], .field textarea { width: 100%; }
 .input-short { width: 110px; }
 .choice { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; font-weight: 400; cursor: pointer; }
-.choice input { margin-top: 5px; accent-color: var(--accent); }
+.choice input { flex: 0 0 auto; margin-top: 5px; accent-color: var(--accent); }
+/* Under a finger: a box big enough to see and hit, level with the first
+   line of its sentence (half a line down, less half the box). The whole
+   sentence is part of the target too. */
+@media (pointer: coarse) {
+  .choice > input[type="checkbox"], .choice > input[type="radio"] {
+    width: 22px; height: 22px; margin-top: max(0px, calc(0.775em - 11px));
+  }
+}
 .more-options {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -1765,6 +1787,11 @@ section[id], main[id] { scroll-margin-top: 80px; }
 .dropzone-status:empty { display: none; }
 /* Phones and tablets can't drag a file onto the box: no need to say so. */
 @media (hover: none) and (pointer: coarse) { .dropzone-drag { display: none; } }
+/* Words for the way the page is used, anywhere on the site: "Tap" under a
+   finger (phones, tablets, iPads), "Click" with a mouse or trackpad. No
+   script needed, and the hidden word isn't read out either. */
+@media (pointer: coarse) { .mouse-only { display: none !important; } }
+@media not all and (pointer: coarse) { .touch-only { display: none !important; } }
 .paste-box { margin-top: 10px; }
 .paste-box > summary { cursor: pointer; color: var(--accent-strong); font-size: 0.92rem; padding: 4px 0; }
 .paste-box textarea { width: 100%; margin: 6px 0 8px; }
@@ -1816,7 +1843,10 @@ section[id], main[id] { scroll-margin-top: 80px; }
   .admin-header { flex-wrap: wrap; gap: 10px; }
   .share-row .btn { flex: 1 1 auto; }
 }
-.name-autocomplete input, .stack > input, .center-card .stack input { width: 100%; }
+/* (Fields, full width; never a checkbox, which would float alone in a
+   stretched box with its sentence squeezed beside it.) */
+.name-autocomplete input, .stack > input,
+.center-card .stack input:not([type="checkbox"]):not([type="radio"]) { width: 100%; }
 
 /* Messages float at the top of the window, so they're seen even when an
    action returns you to a section further down the page. */
@@ -1909,6 +1939,11 @@ section[id], main[id] { scroll-margin-top: 80px; }
 .match-new { margin-top: 18px; }
 .choice-stack { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
 .choice-small { font-size: 0.88rem; color: var(--muted); text-align: left; }
+/* (A finger's worth of height; a short sentence beside its box, centred.) */
+@media (pointer: coarse) {
+  .choice-small { min-height: 44px; align-items: center; }
+  .choice-small > input[type="checkbox"] { margin-top: 0; }
+}
 
 .big-email {
   margin: -10px 0 8px;
@@ -2994,7 +3029,9 @@ button.icon-dock-label { border: 0; background: none; font-family: inherit; curs
 }
 .ranking-step { display: block; text-align: center; }
 .ranking-step .tile-art { margin-bottom: 9px; }
-.step-num {
+/* (Only the tiles' numbers sit in a corner: the numbered steps on the
+   ranking page and the empty dashboard keep theirs beside each step.) */
+.tile-art .step-num {
   position: absolute; top: 6px; left: 6px; display: flex; align-items: center; justify-content: center;
   width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--on-accent);
   font-family: var(--font-small); font-size: 0.74rem; font-weight: 700; line-height: 1;
