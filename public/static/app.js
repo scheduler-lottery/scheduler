@@ -58,9 +58,13 @@
   }
 
   // Messages about what just happened: once the page shows, they come up in
-  // the upper part of the window, the page behind blurred for a moment.
-  // Good news fades after a while; problems stay until they're closed.
+  // the upper part of the window, the page behind blurred for a moment. On
+  // a phone, they come up along the bottom of the screen instead (style.css),
+  // with no blur, so the page stays readable. Good news fades after a while
+  // (sooner on a phone, where it sits over the page); problems stay until
+  // they're closed.
   var stack = document.querySelector("[data-flash-stack]");
+  var phoneFlash = window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
   // A problem with a file, back at the box it was chosen in: said under
   // that box, where the professor is looking, not over the page.
   var hashed = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)));
@@ -93,15 +97,17 @@
       document.body.appendChild(stack);
       notes.forEach(function (note) { note.remove(); });
       setTimeout(function () {
-        var veil = document.createElement("div");
-        veil.className = "flash-veil";
-        veil.setAttribute("aria-hidden", "true");
-        document.body.appendChild(veil);
-        veil.addEventListener("animationend", function () { veil.remove(); });
-        setTimeout(function () { veil.remove(); }, 3000);
+        if (!phoneFlash) {
+          var veil = document.createElement("div");
+          veil.className = "flash-veil";
+          veil.setAttribute("aria-hidden", "true");
+          document.body.appendChild(veil);
+          veil.addEventListener("animationend", function () { veil.remove(); });
+          setTimeout(function () { veil.remove(); }, 3000);
+        }
         notes.forEach(function (note) {
           stack.appendChild(note);
-          if (!note.classList.contains("flash-error")) setTimeout(function () { dismiss(note); }, 8000);
+          if (!note.classList.contains("flash-error")) setTimeout(function () { dismiss(note); }, phoneFlash ? 4000 : 8000);
         });
       }, 50);
     };

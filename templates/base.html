@@ -146,8 +146,9 @@
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
       {# What just happened. With scripts on, these come up in the upper part
-         of the window over the page, blurred for a moment (app.js); good
-         news fades after a while, and problems stay until closed. #}
+         of the window over the page, blurred for a moment (app.js), or on a
+         phone along the bottom of the screen; good news fades after a
+         while, and problems stay until closed. #}
       <div class="flash-stack" role="status" data-flash-stack>
       {% for category, message in messages %}
         <div class="flash flash-{{ category }}">
