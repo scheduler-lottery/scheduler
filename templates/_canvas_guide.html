@@ -9,6 +9,12 @@
      only: it hides when another school is chosen on the page).
    On the class-list questions, and, once a sheet has a list, under "Update
    from Canvas" (data-has-list: a list that comes is compared, not added).
+   Scheduler Helper's way is a checklist: 1. add it, 2. import the class
+   list (pick the class, and its students come right in), 3. all done:
+   delete it? (said on the page the list lands on: _helper_remove.html).
+   Which Canvas course the sheet is for is remembered by the professor's
+   browser, not by this site (app.js; _course_now.html says what to
+   remember after a list went in).
    Lines marked data-safari-only/-not-safari, data-phone-only/-desktop-only,
    data-windows-only/-not-windows and data-picker-downloads/-plain are shown
    or hidden by app.js for the professor's computer. `guide_hl`: the level
@@ -19,75 +25,91 @@
 {% set hl = guide_hl or 'h4' %}
 <div class="canvas-guide" data-canvas-guide data-sheet="{{ sheet.id }}" data-sheet-title="{{ sheet.title }}" data-host="{{ canvas_host }}"
      data-list-url="{{ url_for('teach.canvas_list_here', sid=sheet.id) }}"{% if setup %} data-setup="1"{% endif %}{% if has_list %} data-has-list{% endif %}
-     data-canvas-course-id="{{ sheet.canvas_course_id or '' }}" data-canvas-course="{{ sheet.canvas_course or '' }}" data-heading="{{ hl }}"
-     data-used-courses='{{ (used_courses or {}) | tojson }}'{% if request.args.get('pick') %} data-ask-which{% endif %}{% if request.args.get('pick') == 'go' %} data-ask-now{% endif %}{% if canvas_connect %} data-connect-host="{{ canvas_connect_host }}"{% endif %}
-     data-helper-ids="{{ helper_ids }}" data-helper-hosts="{{ helper_hosts }}"
+     data-heading="{{ hl }}"{% if request.args.get('pick') %} data-ask-which{% endif %}{% if request.args.get('pick') == 'go' %} data-ask-now{% endif %}{% if canvas_connect %} data-connect-host="{{ canvas_connect_host }}"{% endif %}
+     data-helper-ids="{{ helper_ids }}" data-helper-hosts="{{ helper_hosts }}"{% if helper_ids and helper_any() %} data-helper-any{% endif %}
      data-helper-store="{{ helper_store_url }}">
   {% if canvas_connect %}
   <section class="canvas-easy canvas-connect" data-connect aria-labelledby="canvas-connect-title-{{ sheet.id }}"{% if not connect_here %} hidden{% endif %}>
     <{{ hl }} class="canvas-easy-title" id="canvas-connect-title-{{ sheet.id }}">Get your class list in one step</{{ hl }}>
-    <a class="btn btn-primary btn-large" href="{{ url_for('teach.canvas_connect', sid=sheet.id, setup=1 if setup else None) }}">Connect Canvas</a>
+    <a class="btn btn-primary btn-large" href="{{ url_for('teach.canvas_connect', sid=sheet.id, setup=1 if setup else None) }}" data-with-course>Connect Canvas</a>
     <ol class="helper-install-steps">
       <li>Canvas opens in this window. Sign in if it asks.</li>
       <li>Canvas says {{ app_name }} is “requesting access to your account”. Canvas says that for every app. Press <strong>Authorize</strong>.</li>
-      <li>{% if sheet.canvas_course_id %}The students in <strong>{{ sheet.canvas_course or "this sheet's Canvas course" }}</strong> come right back here.{% else %}Your students come right back here. (If this sheet's name doesn't say which course it's for, you pick it.){% endif %}</li>
+      <li><span data-if-course hidden>The students in <strong data-course-name></strong> come right back here.</span><span data-if-no-course>Your students come right back here. (If this sheet's name doesn't say which course it's for, you pick it.)</span></li>
     </ol>
     <p class="mini-hint">{{ app_name }} then reads only your list of courses and, for the one you pick, the students' names and email addresses. It can't change anything in Canvas, and it hands the permission back to Canvas as soon as the list is read. Press <strong>Cancel</strong> there instead, and nothing is read. <a href="{{ url_for('privacy') }}#canvas" target="_blank" rel="noopener">More about this</a></p>
-    {% if sheet.canvas_course_id %}<p class="mini-hint"><a href="{{ url_for('teach.canvas_connect', sid=sheet.id, setup=1 if setup else None, pick=1) }}">Use a different Canvas course</a></p>{% endif %}
+    <p class="mini-hint" data-if-course hidden><a href="{{ url_for('teach.canvas_connect', sid=sheet.id, setup=1 if setup else None, pick=1) }}" data-with-course>Use a different Canvas course</a></p>
   </section>
   {% elif helper_ids %}
   <section class="canvas-easy canvas-helper" data-helper aria-labelledby="option-1-{{ sheet.id }}" hidden>
     <p class="option-label" id="option-1-{{ sheet.id }}">Option 1 · Easiest: Scheduler Helper does it for you</p>
-    <div data-helper-ready hidden>
-      <{{ hl }} class="visually-hidden">Scheduler Helper</{{ hl }}>
-      <button type="button" class="btn btn-primary btn-large" data-helper-go>Get my class list from Canvas</button>
-      {% if sheet.canvas_course_id and not request.args.get('pick') %}
-      <p class="mini-hint">Scheduler Helper reads the names and email addresses of the students in <strong>{{ sheet.canvas_course or "this sheet's Canvas course" }}</strong>, this sheet's course in Canvas. If that's the wrong course, you can pick another before anything changes. If Canvas wants you to sign in first, its sign-in page comes up: sign in as usual, and you're brought straight back here.</p>
-      {% else %}
-      <p class="mini-hint">You'll see which course, and check the names, before anything {{ 'changes' if has_list else 'is added' }}. If Canvas asks you to sign in, sign in as usual: you'll come straight back here.</p>
-      {% endif %}
-    </div>
-    <div data-helper-install hidden>
-      {% if has_list and sheet.canvas_course_id %}
-      <{{ hl }} class="canvas-easy-title">Add Scheduler Helper to <span data-browser-name>Chrome</span> again</{{ hl }}>
-      <p class="canvas-easy-lead">Scheduler Helper isn't in <span data-browser-name>Chrome</span> on this computer right now (if you removed it after your last update, that's why). Adding it takes three clicks; then it brings the changes from Canvas.</p>
-      {% else %}
-      <{{ hl }} class="canvas-easy-title">First, add Scheduler Helper to <span data-browser-name>Chrome</span></{{ hl }}>
-      <p class="canvas-easy-lead">Scheduler Helper is a small, free add-on for <span data-browser-name>Chrome</span> (an “extension”). Add it here, and it brings your class list from Canvas by itself: all you do is sign in to Canvas. Afterwards, you can delete it in one click, or keep it for updating the list later.</p>
-      {% endif %}
-      <a class="btn btn-primary btn-large" href="#" target="_blank" rel="noopener" data-helper-add>Add Scheduler Helper to <span data-browser-name>Chrome</span></a>
-      <ol class="helper-install-steps" data-steps-for="chrome">
-        <li>Chrome's web store opens. Click <strong>Add to Chrome</strong>.</li>
-        <li>Chrome says the helper can “read and change your data” on your school's Canvas. It says that about any helper that reads a website; this one only reads. Click <strong>Add extension</strong>.</li>
-        <li>That's all: this page comes back by itself and gets your class list. If Canvas asks you to sign in, sign in as usual. (If this page doesn't come back, click “<span data-page-title>{{ sheet.title }}</span>” at the very top of the window.)</li>
-      </ol>
-      <ol class="helper-install-steps" data-steps-for="edge" hidden>
-        <li>The web store opens. Click <strong>Allow extensions from other stores</strong> at the top, then <strong>Allow</strong>.</li>
-        <li>Click <strong>Get</strong>. Edge says the helper can “read and change your data” on your school's Canvas. It says that about any helper that reads a website; this one only reads. Click <strong>Add extension</strong>.</li>
-        <li>That's all: this page comes back by itself and gets your class list. If Canvas asks you to sign in, sign in as usual. (If this page doesn't come back, click “<span data-page-title>{{ sheet.title }}</span>” at the very top of the window.)</li>
-      </ol>
-      <details class="mini-hint helper-trouble">
-        <summary>Trouble adding it?</summary>
-        <p><strong>Added it already, and this still shows?</strong> <span data-browser-name>Chrome</span> turns add-ons off in private (Incognito) windows, and each <span data-browser-name>Chrome</span> profile has its own: open this page in the <span data-browser-name>Chrome</span> window where you added it.</p>
-        <p><strong><span data-browser-name>Chrome</span> won't add it?</strong> If it says it's blocked, or warns you off it, you don't need it. Use <strong>Option 2</strong> below instead: Canvas's file brings the same names and emails.</p>
-      </details>
-      <p class="mini-hint">Rather not add anything? See Option 2, just below.</p>
-      <p class="mini-hint">It reads only your list of courses and one course's student names and email addresses, and only for this page: right after you add it here, or when you press its button. It never sees your password. <a href="{{ url_for('helper') }}" target="_blank" rel="noopener">What it does, and how to remove it</a></p>
-    </div>
-    <div data-helper-chrome hidden>
-      <{{ hl }} class="canvas-easy-title">Open this page in Google Chrome</{{ hl }}>
-      <p class="canvas-easy-lead">Scheduler Helper works only in Chrome. There, it brings your class list from Canvas by itself: all you do is sign in to Canvas. To open this page in Chrome:</p>
-      <ol class="helper-install-steps">
-        <li><button type="button" class="btn btn-primary" data-copy="#page-link-{{ sheet.id }}">Copy this page's link</button>
-          <span class="mini-hint copy-said" role="status" data-copy-said="Link copied. Now open Google Chrome (step 2)."></span>
-          <input class="visually-hidden" id="page-link-{{ sheet.id }}" data-page-link value="" readonly tabindex="-1" aria-hidden="true"></li>
-        <li>Open <strong>Google Chrome</strong>. Don't have it? <a href="https://www.google.com/chrome/" target="_blank" rel="noopener">Get Chrome</a> (it's free).</li>
-        <li><span data-not-windows>In Chrome, click the address bar at the very top. Then, in the menu bar at the top of the screen, click <strong>Edit</strong>, then <strong>Paste</strong>, and press Return.</span><span data-windows-only hidden>In Chrome, right-click the address bar at the very top and choose <strong>Paste and go</strong>.</span> {{ app_name }} asks you to sign in again there (it emails you a new code), then this page opens with a button to add Scheduler Helper. From then on, all you do is sign in to Canvas.</li>
-      </ol>
-    </div>
+    {# Three steps, each marked done (a check mark), now, or still to come, by app.js. #}
+    <ol class="helper-checklist" data-helper-checklist>
+      <li class="helper-check is-now" data-check="add">
+        <span class="check-mark" aria-hidden="true"><span class="check-num">1</span></span>
+        <div class="check-body">
+          <{{ hl }} class="check-title"><span data-check-title-add>Add Scheduler Helper to <span data-browser-name>Chrome</span></span><span class="visually-hidden" data-check-state></span></{{ hl }}>
+          <p class="check-done-said" data-check-done hidden>It's in <span data-browser-name>Chrome</span> on this computer.</p>
+          <div data-helper-install hidden>
+            {% if has_list %}
+            <p class="canvas-easy-lead">Scheduler Helper isn't in <span data-browser-name>Chrome</span> on this computer right now (if you deleted it after your last update, that's why). Adding it takes three clicks; then it brings the changes from Canvas.</p>
+            {% else %}
+            <p class="canvas-easy-lead">A small, free add-on for <span data-browser-name>Chrome</span> (an “extension”). It brings your class list from Canvas by itself: all you do is sign in to Canvas. Afterwards, it offers to delete itself, in one click.</p>
+            {% endif %}
+            <a class="btn btn-primary btn-large" href="#" target="_blank" rel="noopener" data-helper-add>Add Scheduler Helper to <span data-browser-name>Chrome</span></a>
+            <ol class="helper-install-steps" data-steps-for="chrome">
+              <li>Chrome's web store opens. Click <strong>Add to Chrome</strong>.</li>
+              <li>Chrome says the helper can “read and change your data” on <span data-canvas-named>your school's Canvas</span>. It says that about any helper that reads a website; this one only reads. Click <strong>Add extension</strong>.</li>
+              <li>That's all: this page comes back by itself and checks this step off. (If it doesn't come back, click “<span data-page-title>{{ sheet.title }}</span>” at the very top of the window.)</li>
+            </ol>
+            <ol class="helper-install-steps" data-steps-for="edge" hidden>
+              <li>The web store opens. Click <strong>Allow extensions from other stores</strong> at the top, then <strong>Allow</strong>.</li>
+              <li>Click <strong>Get</strong>. Edge says the helper can “read and change your data” on <span data-canvas-named>your school's Canvas</span>. It says that about any helper that reads a website; this one only reads. Click <strong>Add extension</strong>.</li>
+              <li>That's all: this page comes back by itself and checks this step off. (If it doesn't come back, click “<span data-page-title>{{ sheet.title }}</span>” at the very top of the window.)</li>
+            </ol>
+            <details class="mini-hint helper-trouble">
+              <summary>Trouble adding it?</summary>
+              <p><strong>Added it already, and this still shows?</strong> <span data-browser-name>Chrome</span> turns add-ons off in private (Incognito) windows, and each <span data-browser-name>Chrome</span> profile has its own: open this page in the <span data-browser-name>Chrome</span> window where you added it.</p>
+              <p><strong><span data-browser-name>Chrome</span> won't add it?</strong> If it says it's blocked, or warns you off it, you don't need it. Use <strong>Option 2</strong> below instead: Canvas's file brings the same names and emails.</p>
+            </details>
+            <p class="mini-hint">Rather not add anything? See Option 2, just below. <a href="{{ url_for('helper') }}" target="_blank" rel="noopener">What it does, and how to remove it</a></p>
+          </div>
+          <div data-helper-chrome hidden>
+            <p class="canvas-easy-lead">Scheduler Helper works only in Chrome. There, it brings your class list from Canvas by itself: all you do is sign in to Canvas. To open this page in Chrome:</p>
+            <ol class="helper-install-steps">
+              <li><button type="button" class="btn btn-primary" data-copy="#page-link-{{ sheet.id }}">Copy this page's link</button>
+                <span class="mini-hint copy-said" role="status" data-copy-said="Link copied. Now open Google Chrome (step 2)."></span>
+                <input class="visually-hidden" id="page-link-{{ sheet.id }}" data-page-link value="" readonly tabindex="-1" aria-hidden="true"></li>
+              <li>Open <strong>Google Chrome</strong>. Don't have it? <a href="https://www.google.com/chrome/" target="_blank" rel="noopener">Get Chrome</a> (it's free).</li>
+              <li><span data-not-windows>In Chrome, click the address bar at the very top. Then, in the menu bar at the top of the screen, click <strong>Edit</strong>, then <strong>Paste</strong>, and press Return.</span><span data-windows-only hidden>In Chrome, right-click the address bar at the very top and choose <strong>Paste and go</strong>.</span> {{ app_name }} asks you to sign in again there (it emails you a new code), then this page opens with a button to add Scheduler Helper. From then on, all you do is sign in to Canvas.</li>
+            </ol>
+          </div>
+        </div>
+      </li>
+      <li class="helper-check" data-check="import">
+        <span class="check-mark" aria-hidden="true"><span class="check-num">2</span></span>
+        <div class="check-body">
+          <{{ hl }} class="check-title">{{ 'Bring the changes from Canvas' if has_list else 'Import your class list' }}<span class="visually-hidden" data-check-state></span></{{ hl }}>
+          <p class="check-later" data-check-later>Then press <strong>Import class list</strong>, pick the class, and its students come right into this sheet.</p>
+          <div data-helper-ready hidden>
+            <button type="button" class="btn btn-primary btn-large" data-helper-go>Import class list</button>
+            <p class="mini-hint" data-if-course hidden>It reads the students in <strong data-course-name></strong>, this sheet's course in Canvas{% if has_list %}, and shows you who's new and who's gone before anything changes{% endif %}. Wrong course? You can pick another. If Canvas asks you to sign in, sign in as usual: you'll come straight back here.</p>
+            <p class="mini-hint" data-if-no-course>{% if has_list %}You'll see who's new and who's gone before anything changes.{% else %}Pick the class, and its students come right in. You can fix or remove anyone after.{% endif %} If Canvas asks you to sign in, sign in as usual: you'll come straight back here.</p>
+          </div>
+          <div class="canvas-copy-courses" data-helper-courses role="group" aria-labelledby="helper-courses-q-{{ sheet.id }}" hidden></div>
+        </div>
+      </li>
+      <li class="helper-check" data-check="done">
+        <span class="check-mark" aria-hidden="true"><span class="check-num">3</span></span>
+        <div class="check-body">
+          <{{ hl }} class="check-title">All done: delete it?<span class="visually-hidden" data-check-state></span></{{ hl }}>
+          <p class="check-later">Once your students are in, Scheduler Helper offers to delete itself, in one click. (Or keep it, to update the list from Canvas later.)</p>
+        </div>
+      </li>
+    </ol>
     <p class="helper-said" data-helper-said role="status"></p>
     <button type="button" class="btn btn-secondary" data-helper-settings hidden>Open Scheduler Helper's settings</button>
-    <div class="canvas-copy-courses" data-helper-courses role="group" aria-labelledby="helper-courses-q-{{ sheet.id }}" hidden></div>
+    {% include "_helper_nothing_kept.html" %}
   </section>
   {% endif %}
 

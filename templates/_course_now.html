@@ -1,0 +1,4 @@
+{# After a class list from Canvas went in (or a file or paste replaced
+   one): which Canvas course this sheet is for now, for the professor's own
+   browser to remember (app.js), since this site keeps no Canvas course. #}
+{% if course_now %}<span hidden data-course-now='{{ course_now | tojson }}' data-sheet="{{ sheet.id }}" data-title="{{ sheet.title }}"></span>{% endif %}

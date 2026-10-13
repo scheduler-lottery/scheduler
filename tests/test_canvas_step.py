@@ -67,7 +67,7 @@ def test_connect_canvas_shows_only_for_the_school_whose_key_this_site_has(prof, 
 
 
 def test_connect_canvas_brings_the_course_the_sheet_is_named_for(prof, monkeypatch):
-    from test_app import _authorize, q
+    from test_app import _authorize, q, told_course
 
     canvas, fake = _connectable_canvas(monkeypatch)
     sid = prof.create_sheet(title="LAW 540 Evidence", allow_unlisted=False)
@@ -75,7 +75,7 @@ def test_connect_canvas_brings_the_course_the_sheet_is_named_for(prof, monkeypat
     r = prof.get(back.path + "?" + back.query)
     assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")  # no course to pick: straight to the list
     assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid) == 8
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :sid", sid=sid) == "202"
+    assert told_course(prof.get(r.headers["Location"]))["id"] == "202"  # (for the browser; not kept here)
     assert not fake.TOKENS  # the permission given back
     # A name that doesn't say which course: the list of courses, to pick from.
     other = prof.create_sheet(title="Seminar on Privacy", allow_unlisted=False)
@@ -128,7 +128,9 @@ def test_after_a_list_the_helper_brought_the_report_offers_to_remove_it(prof):
                          "students": [{"name": "Ana Lima", "email": "ana@school.edu"}]})
     r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": listed, "how": "helper", "setup": "1"})
     page = raw(prof.get(r.headers["Location"]))
-    assert "data-helper-remove" in page and "Remove it from Chrome" in text(page) and "Keep it for next time" in page
+    # The checklist, its first two steps done; the last one, "All done: delete it?", in one click.
+    assert "data-helper-remove" in page and "Keep it for next time" in page
+    assert "Delete Scheduler Helper" in text(page) and page.count('class="helper-check is-done"') == 2
     assert "data-helper-remove" not in raw(prof.get(r.headers["Location"]))  # (said once, with its report)
     # A list from Canvas's file: nothing to remove.
     other = prof.create_sheet(allow_unlisted=False)
@@ -166,9 +168,12 @@ def test_the_store_build_is_chromes_alone_and_asks_for_nothing_new(tmp_path, mon
     with zipfile.ZipFile(tmp_path / "scheduler-helper.zip") as z:
         manifest = json.loads(z.read("manifest.json"))
         code = z.read("background.js").decode()
-    assert manifest["version"] == "1.0.6" and manifest["permissions"] == ["scripting"]
+    assert manifest["version"] == "1.1.0" and manifest["permissions"] == ["scripting"]
     assert manifest["action"]["default_popup"] == "popup.html"  # (its own box: "Delete me"; no permission needed)
-    assert manifest["host_permissions"] == ["https://canvas.northwestern.edu/*"]
+    # No website until the professor allows their school's Canvas, in its own window (allow.html): adding it asks
+    # nothing, and no warning names anyone else's Canvas.
+    assert "host_permissions" not in manifest and manifest["optional_host_permissions"] == ["https://*/*"]
+    assert len(manifest["description"]) <= 132  # (the store's limit)
     assert "background" in manifest and list(manifest["background"]) == ["service_worker"]
-    assert "safari" not in code.lower() and "allow.html" not in code
+    assert "safari" not in code.lower() and "allow.html" in code and "chrome.storage" not in code
     assert "uninstallSelf" in code  # (needs no permission of its own)

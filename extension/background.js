@@ -1,12 +1,17 @@
 // Scheduler Helper: brings a course's class list from the professor's own
-// Canvas into Scheduler, when (and only when) Scheduler's page asks.
+// Canvas into Scheduler, when (and only when) Scheduler's page asks. Any
+// school's Canvas, once the professor allows it, the first time, in a small
+// window of its own (allow.html, then Chrome's own "Allow"): it may read no
+// website at all until then, so adding it asks for nothing.
 //
 // Scheduler's page talks to it through externally_connectable (only the
 // Scheduler site listed in the manifest can), over a port. It asks for the
 // professor's courses, then one course's students; the helper reads them
 // from Canvas's own API, signed in as the professor, exactly as Canvas's
 // pages do, and sends back names and emails, nothing else. It never changes
-// anything in Canvas, never sees a password, and keeps nothing. The page can
+// anything in Canvas, never sees a password, and keeps nothing: no class
+// list, no course, nothing about the professor (it has no storage at all;
+// the one thing it remembers, in its toolbar badge, is "done"). The page can
 // also ask it to bring the page's own tab back to the front, and, once the
 // class list is in, to say so in its own box (popup.html: "Delete me"), or,
 // pressed on the page, to remove itself.
@@ -25,13 +30,22 @@
 
 const VERSION = chrome.runtime.getManifest().version;
 // What this helper can do beyond reading Canvas, for the page to know (1.0.0 said none of this).
-const CAN = ["front", "show-signin", "remove", "settings", "done", "kept"];
+// any-canvas (1.1.0): any school's Canvas, allowed by the professor once.
+const CAN = ["front", "show-signin", "remove", "settings", "done", "kept", "any-canvas"];
 const SCHEDULER_ORIGINS = ((chrome.runtime.getManifest().externally_connectable || {}).matches || [])
   .map((pattern) => (pattern.match(/^(https?:\/\/[^/]+)\//) || [])[1])
   .filter(Boolean);
-const CANVAS_HOSTS = (chrome.runtime.getManifest().host_permissions || [])
+// The Canvas sites it may read from the start (none in the store's copy; a
+// test copy's stand-in Canvas), and whether a stand-in Canvas on this
+// computer may be allowed too (only a test copy's manifest says so:
+// tools/build_extension.py dev).
+const BUILT_IN = (chrome.runtime.getManifest().host_permissions || [])
   .map((pattern) => (pattern.match(/^https?:\/\/([^/]+)\/\*$/) || [])[1])
   .filter(Boolean);
+const LOCAL_OK = (chrome.runtime.getManifest().optional_host_permissions || [])
+  .some((pattern) => /^http:\/\/127\.0\.0\.1\//.test(pattern));
+const HOST = /^(?=.{4,120}$)([a-z0-9-]+\.)+[a-z]{2,}$/;
+const LOCAL = /^127\.0\.0\.1:\d{2,5}$/;
 const COURSES = "/api/v1/courses?per_page=100&include[]=term&include[]=total_students";
 const KEEP_AWAKE_MS = 25 * 1000; // a word to the page while Canvas's sign-in waits, so it knows the helper is still there
 const SIGN_IN_WAIT_MS = 10 * 60 * 1000;
@@ -45,14 +59,24 @@ function fromScheduler(sender) {
   }
   return !!origin && SCHEDULER_ORIGINS.indexOf(origin) >= 0;
 }
+// A Canvas site's address, from its host as the page names it ("canvas.x.edu"):
+// any real host, by https; a stand-in on this computer only for a test copy.
 function canvasOrigin(host) {
-  if (CANVAS_HOSTS.indexOf(host) < 0) return null;
-  return (/^(127\.0\.0\.1|localhost)(:\d+)?$/.test(host) ? "http://" : "https://") + host;
+  host = String(host || "").toLowerCase();
+  if (LOCAL.test(host)) return BUILT_IN.indexOf(host) >= 0 || LOCAL_OK ? "http://" + host : null;
+  return HOST.test(host) ? "https://" + host : null;
+}
+// The Canvas sites it may read now: each the professor allowed.
+async function readable() {
+  const all = await chrome.permissions.getAll().catch(() => ({ origins: [] }));
+  return (all.origins || []).map((pattern) => (pattern.match(/^https?:\/\/([^/*]+)\/\*$/) || [])[1]).filter(Boolean);
 }
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 // The Canvas sign-in tab a page is waiting on, by Canvas: a second press of
 // the page's button brings it forward again ("show-signin").
 const signInTabs = new Map();
+// The "allow" window a page is waiting on, by Canvas: a second press brings it forward too.
+const allowWindows = new Map();
 
 // One request from the page: the courses, or one course's students. `say`
 // carries word along the way (a sign-in), where the page can hear it.
@@ -81,9 +105,9 @@ async function handle(msg, say, schedulerTab) {
 chrome.runtime.onMessageExternal.addListener((msg, sender, reply) => {
   if (!fromScheduler(sender) || !msg) return undefined;
   if (msg.type === "hello") { // (done: its box still says "All done!", not yet kept or deleted)
-    chrome.action.getBadgeText({})
-      .then((badge) => reply({ ok: true, v: VERSION, hosts: CANVAS_HOSTS, can: CAN, done: badge === "✓" }),
-        () => reply({ ok: true, v: VERSION, hosts: CANVAS_HOSTS, can: CAN }));
+    Promise.all([readable(), chrome.action.getBadgeText({}).catch(() => "")])
+      .then(([hosts, badge]) => reply({ ok: true, v: VERSION, hosts, can: CAN, done: badge === "✓" }),
+        () => reply({ ok: true, v: VERSION, hosts: BUILT_IN, can: CAN }));
     return true;
   }
   if (msg.type === "front") { // the page's own tab, to the front (just added: the store's tab it opened, closed)
@@ -97,8 +121,14 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, reply) => {
       .then(() => reply({ ok: true }), () => reply({ ok: true }));
     return true;
   }
-  if (msg.type === "show-signin") { // pressed again while Canvas's sign-in waits: that tab, in front again
-    const id = signInTabs.get(canvasOrigin(String(msg.host || "")));
+  if (msg.type === "show-signin") { // pressed again while Canvas's sign-in (or the allow window) waits: in front again
+    const origin = canvasOrigin(String(msg.host || ""));
+    const win = allowWindows.get(origin);
+    if (win) {
+      focusWindow(win).then(() => reply({ ok: true, allow: true }), () => reply({ ok: false }));
+      return true;
+    }
+    const id = signInTabs.get(origin);
     if (!id) { reply({ ok: false }); return undefined; }
     chrome.tabs.get(id).then(toFront).then(() => reply({ ok: true }), () => reply({ ok: false }));
     return true;
@@ -170,17 +200,67 @@ function people(users) {
 // Read these Canvas API paths (each with all its pages), one way or the
 // other (see the top).
 async function read(origin, paths, say, schedulerTab) {
-  // Chrome lets the professor limit where a helper may read (its "site
-  // access"): with Canvas left out, nothing here can work, and the page says
-  // how to let it in.
-  const allowed = await chrome.permissions.contains({ origins: [origin + "/*"] }).catch(() => true);
-  if (!allowed) throw new Error("access");
+  // Not allowed to read this Canvas: the professor allows it, in its own
+  // window (the first time for their school, or again after they limited
+  // where it may read, in Chrome's "site access").
+  const allowed = await chrome.permissions.contains({ origins: [origin + "/*"] }).catch(() => false);
+  if (!allowed) await askToAllow(origin, say, schedulerTab);
   try {
     return await Promise.all(paths.map((path) => direct(origin, path)));
   } catch (err) {
     if (/^(forbidden|missing|offline|down)$/.test(err.message)) throw err;
   }
   return inTab(origin, paths, say, schedulerTab);
+}
+
+// The first class list from a school's Canvas: a small window of the
+// helper's own (allow.html) says which Canvas, and what it reads; its Allow
+// button asks Chrome, which asks the professor ("Allow" once more). Done
+// when Chrome says it's allowed; "denied" if the window is closed first
+// (its "Not now", or Chrome's "Deny"); "allow" after ten minutes; "gone" if
+// the page went away meanwhile. The window closes either way.
+async function askToAllow(origin, say, schedulerTab) {
+  const host = origin.replace(/^https?:\/\//, "");
+  const win = await chrome.windows.create({ url: chrome.runtime.getURL("allow.html?host=" + encodeURIComponent(host)),
+    type: "popup", width: 470, height: 600, focused: true });
+  allowWindows.set(origin, win.id);
+  say({ type: "allow", host });
+  const awake = setInterval(() => say({ type: "wait" }), KEEP_AWAKE_MS);
+  let finish = () => {};
+  try {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => finish(new Error("allow")), SIGN_IN_WAIT_MS);
+      // Allowed? Asked of Chrome itself (it may say the site its own way, without the port), whenever a
+      // permission is added, and every second besides.
+      const allowed = () => chrome.permissions.contains({ origins: [origin + "/*"] }).catch(() => false)
+        .then((ok) => { if (ok) finish(null); });
+      const away = setInterval(() => {
+        if (say.gone && say.gone()) { finish(new Error("gone")); return; }
+        allowed();
+      }, 1000);
+      const added = () => { allowed(); };
+      const closed = (id) => {
+        if (id !== win.id) return;
+        chrome.permissions.contains({ origins: [origin + "/*"] }).catch(() => false)
+          .then((ok) => finish(ok ? null : new Error("denied")));
+      };
+      finish = (err) => {
+        clearTimeout(timer);
+        clearInterval(away);
+        chrome.permissions.onAdded.removeListener(added);
+        chrome.windows.onRemoved.removeListener(closed);
+        finish = () => {};
+        if (err) reject(err); else resolve();
+      };
+      chrome.permissions.onAdded.addListener(added);
+      chrome.windows.onRemoved.addListener(closed);
+    });
+  } finally {
+    clearInterval(awake);
+    allowWindows.delete(origin);
+    chrome.windows.remove(win.id).catch(() => {});
+    toFront(schedulerTab);
+  }
 }
 
 // One Canvas request from here. No connection at all: "offline"; Canvas

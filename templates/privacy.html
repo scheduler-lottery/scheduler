@@ -117,12 +117,13 @@
           soon as the instructor chooses it. Only names and email addresses are kept; everything else in it, such as
           grades, activity and Canvas's grades file beside it, is thrown away as the file is read, and never saved.</li>
         {% if helper_ids %}
-        <li><strong>Scheduler Helper</strong> (a browser extension, if the instructor adds it): when the instructor
-          clicks “Get my class list from Canvas” here, it asks Canvas for their list of courses, then for one course's
-          students, and hands this page each student's name and email address. It reads nothing else, does nothing
-          when not asked, keeps nothing, and sends nothing anywhere but this site. The list is shown to the instructor
-          first, and comes to this site only when they press the button under it.
-          <a href="{{ url_for('helper') }}">More about it</a>.</li>
+        <li><strong>Scheduler Helper</strong> (a Chrome extension, if the instructor adds it): when the instructor
+          presses “Import class list” here, it asks their school's Canvas for their list of courses, then for the
+          students in the course they pick, and hands this page each student's name and email address. The first time,
+          Chrome asks the instructor to let it read their school's Canvas site; until then it can read no website at
+          all. It reads nothing else, does nothing when not asked, and sends nothing anywhere but this page. It keeps
+          nothing: it has no storage at all, so not the class list, not the course, not anyone's Canvas sign-in. Once
+          the list is in, it offers to delete itself. <a href="{{ url_for('helper') }}">More about it</a>.</li>
         {% endif %}
         {% if canvas_connect %}
         <li><strong>Connect Canvas</strong>: Canvas's own sign-in page, then Canvas asks the instructor to allow this
@@ -130,9 +131,13 @@
           each student's name and email address from Canvas, then hands the permission straight back to Canvas. It
           keeps no Canvas password or key.</li>
         {% endif %}
+        <li>Whichever way, this site keeps only the names and email addresses, as the sheet's class list. Not which
+          Canvas course they came from, its number, or which school's Canvas: the instructor's own browser remembers
+          the sheet's Canvas course, so updating the list later is one press, and nothing about it is kept here.</li>
         <li>A sheet's first class list goes straight onto the sheet, where the instructor can fix or remove anyone. A
-          list that would change one the sheet already has waits for them to look it over, and is deleted within a day
-          if they don't. Once added, it's part of the sheet's class list, kept as described here.</li>
+          list that would change one the sheet already has waits for them to look it over (the names and emails here,
+          the course's name only in the instructor's own browser session), and is deleted within a day if they don't.
+          Once added, it's part of the sheet's class list, kept as described here.</li>
       </ul>
     </div>
   </section>

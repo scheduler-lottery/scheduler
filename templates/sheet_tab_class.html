@@ -2,6 +2,7 @@
 {# The Class tab: the class at a glance (what's next, the class list,
    trying it as a student, sharing the link, and who has signed up). #}
 {% block sheet_body %}
+{% include "_course_now.html" %}
 <nav class="page-jump" aria-label="On this page">
   <a href="#class-list">Class list</a>
   <a href="#try-it">See it as a student</a>
@@ -12,7 +13,7 @@
    Canvas, out in the open (app.js: with Scheduler Helper, one press). #}
 {% if counts.roster %}
 <div class="class-glance">
-  <span><strong>{{ counts.roster | plural('student') }}</strong> on your list{% if sheet.canvas_course %}, from <strong>{{ sheet.canvas_course }}</strong> in Canvas{% endif %}.</span>
+  <span><strong>{{ counts.roster | plural('student') }}</strong> on your list<span data-course-said="{{ sheet.id }}" hidden>, from <strong data-course-name></strong> in Canvas</span>.</span>
   <a class="btn btn-secondary btn-small" href="#canvas-update" data-canvas-update-go>Update from Canvas</a>
 </div>
 {% endif %}

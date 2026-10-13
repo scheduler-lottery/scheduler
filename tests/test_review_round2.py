@@ -19,8 +19,8 @@ import settings
 import sheets
 import teach
 from conftest import CANVAS_ROSTER
-from test_app import (NO_HEADINGS, _buttons, _canvas_list, _connect, _connectable_canvas, _pending_id, follow, html, q,
-                      raw, text)
+from test_app import (NO_HEADINGS, NOTHING, _buttons, _canvas_list, _connect, _connectable_canvas, _pending_id, follow,
+                      html, q, raw, text, told_course)
 from util import now, parse_iso
 
 
@@ -239,7 +239,7 @@ def test_wrong_course_on_a_helper_list_goes_back_to_ask_which_course(prof):
     assert "Kept your current class list. Nothing changed." in follow(prof, r)
     assert "data-ask-now" in raw(prof.get(r.headers["Location"]))
     assert not _pending_id(prof.app, sid) and len(_roster(prof.app, sid)) == 4
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=sid) == "111"
+    assert told_course(prof.get(r.headers["Location"])) == NOTHING  # (the browser keeps the course it had)
     # From setup: back to setup, asking.
     r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=5, course_id="111", course="LAW 310"),
                                                   "setup": "1"})
@@ -258,7 +258,7 @@ def test_only_a_helper_list_can_be_turned_down_for_its_course(prof, listed):
 def test_starting_over_a_list_from_canvas_asks_which_course_next(prof):
     sid = prof.create_sheet(title="LAW 310", allow_unlisted=False)
     prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=4, course_id="111", course="LAW 310")})
-    r = prof.post(f"/teach/s/{sid}/roster/clear")
+    r = prof.post(f"/teach/s/{sid}/roster/clear", {"from_canvas": "1"})  # (the browser says it came from Canvas)
     assert r.headers["Location"].endswith(f"/teach/s/{sid}?pick=1#class-list")
     assert "Removed the class list (4 students)" in follow(prof, r)  # its Undo, as before
     # A list from a file: no course to ask about.
@@ -404,11 +404,10 @@ def test_the_helper_s_school_is_named_without_the_directory(prof, monkeypatch):
     asked = []
     monkeypatch.setattr(canvasdir, "_ask", lambda **p: asked.append(p))  # (the directory is down)
     assert canvasdir.name_of("canvas.northwestern.edu") == "Northwestern University" and not asked
-    # So the first list Scheduler Helper brings saves the school by its name, not its address.
+    # A list Scheduler Helper brings saves nothing about the school, and asks the directory nothing.
     sid = prof.create_sheet(allow_unlisted=False)
     prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=2, host="canvas.northwestern.edu")})
-    assert q(prof.app, "SELECT canvas_school FROM instructors WHERE email = :e", e="prof@school.edu") == (
-        "Northwestern University")
+    assert q(prof.app, "SELECT canvas_host FROM instructors WHERE email = :e", e="prof@school.edu") is None
     assert not asked
     assert canvasdir.name_of("canvas.other.edu") == "" and asked  # anywhere else, the directory, as before
 
@@ -443,30 +442,20 @@ def _context(rendered, name):
     return next(context for template, context in reversed(rendered) if template == name)
 
 
-def test_the_pages_know_whether_canvas_was_used_before_and_which_courses_have_sheets(prof, rendered):
+def test_the_pages_know_whether_canvas_was_used_before_from_the_school_chosen(prof, rendered):
     a = prof.create_sheet(title="LAW 540 Evidence", allow_unlisted=False)
     b = prof.create_sheet(title="Seminar on Privacy", allow_unlisted=False)
     prof.get(f"/teach/s/{b}/setup?step=students")
     assert _context(rendered, "teach_setup.html")["canvas_before"] is False
-    assert _context(rendered, "teach_setup.html")["used_courses"] == {}
+    # A list from Canvas tells this site nothing to keep (the browser remembers its course, and so starts at Canvas).
     prof.post(f"/teach/s/{a}/canvas-list", {"list": _canvas_list(n=3, course_id="202", course="2026FA_LAW_540_SEC20")})
     prof.get(f"/teach/s/{b}/setup?step=students")
-    setup = _context(rendered, "teach_setup.html")
-    assert setup["canvas_before"] is True  # the helper's list saved the school
-    assert setup["used_courses"] == {"202": "LAW 540 Evidence"}
+    assert _context(rendered, "teach_setup.html")["canvas_before"] is False
+    assert "used_courses" not in _context(rendered, "teach_setup.html")  # (which courses have sheets: the browser's)
+    # Choosing a school is the professor's own say-so: from then on, the questions start at Canvas.
+    prof.post_json("/teach/canvas/school", {"domain": "canvas.school.edu", "name": "School"})
     prof.get(f"/teach/s/{b}")
-    assert _context(rendered, "sheet_tab_class.html")["used_courses"] == {"202": "LAW 540 Evidence"}
     assert _context(rendered, "sheet_tab_class.html")["canvas_before"] is True
-    prof.get(f"/teach/s/{a}")
-    assert _context(rendered, "sheet_tab_class.html")["used_courses"] == {}  # not its own course
-    # Two sheets with one course: the one changed last.
-    c = prof.create_sheet(title="LAW 540 again", allow_unlisted=False)
-    prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=3, course_id="202", course="2026FA_LAW_540_SEC20")})
-    with prof.app.app_context():
-        db.run("UPDATE sheets SET updated_at = :at WHERE id = :s", at="2000-01-01T00:00:00+00:00", s=a)
-        db.commit()
-    prof.get(f"/teach/s/{b}")
-    assert _context(rendered, "sheet_tab_class.html")["used_courses"] == {"202": "LAW 540 again"}
 
 
 def test_another_professor_s_courses_are_never_listed(prof, browser, rendered):
@@ -474,6 +463,6 @@ def test_another_professor_s_courses_are_never_listed(prof, browser, rendered):
     prof.post(f"/teach/s/{a}/canvas-list", {"list": _canvas_list(n=3, course_id="202")})
     other = browser().sign_in_instructor("other@school.edu")
     sid = other.create_sheet(allow_unlisted=False)
-    other.get(f"/teach/s/{sid}")
-    assert _context(rendered, "sheet_tab_class.html")["used_courses"] == {}
+    page = other.get(f"/teach/s/{sid}")
+    assert "used_courses" not in _context(rendered, "sheet_tab_class.html") and "data-course-now" not in raw(page)
     assert _context(rendered, "sheet_tab_class.html")["canvas_before"] is False

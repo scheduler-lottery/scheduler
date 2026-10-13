@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Allow Scheduler Helper</title>
+<style>
+  body { margin: 0; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         color: #1f1b16; background: #fffdf8; }
+  .box { max-width: 420px; margin: 0 auto; padding: 22px 22px 18px; }
+  h1 { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; font-size: 19px; line-height: 1.3; }
+  h1 img { width: 34px; height: 34px; flex: none; }
+  p { margin: 0 0 12px; }
+  .host { display: block; margin: 4px 0 14px; padding: 9px 12px; border-radius: 9px; background: #f4ece0;
+          font: 600 15px/1.3 ui-monospace, Menlo, Consolas, monospace; word-break: break-all; }
+  button { display: block; width: 100%; margin-top: 10px; padding: 12px; border-radius: 10px; font: inherit;
+           font-weight: 650; cursor: pointer; border: 1px solid #9a5520; }
+  .go { background: #9a5520; color: #fff; font-size: 16px; }
+  .go:hover { background: #7a3f12; }
+  .quiet { background: transparent; color: #7a3f12; border-color: transparent; font-weight: 500; }
+  .kept { margin-top: 16px; padding: 12px 14px; border: 1px solid #eadfce; border-radius: 10px; font-size: 13.5px; }
+  .kept strong { display: block; margin-bottom: 4px; }
+  .kept ul { margin: 0; padding-left: 18px; }
+  .said { font-weight: 600; }
+  .done-mark { color: #2f6b3b; }
+  .foot { margin: 14px 0 0; font-size: 12.5px; color: #6b665c; }
+  .foot a { color: #7a3f12; }
+  [hidden] { display: none; }
+</style>
+</head>
+<body>
+<main class="box">
+  <h1><img src="icon-48.png" alt="">Let Scheduler Helper read your class list from Canvas?</h1>
+  <div data-ask>
+    <p>Your school's Canvas:</p>
+    <span class="host" data-host></span>
+    <p>Press <strong>Allow</strong>, then <strong>Allow</strong> again in the box Chrome shows. You do this once for
+      your school; then your class list comes straight back to Scheduler.</p>
+    <button type="button" class="go" data-allow>Allow</button>
+    <button type="button" class="quiet" data-not-now>Not now</button>
+  </div>
+  <p class="said" data-said role="status"></p>
+  <div class="kept">
+    <strong>What it reads, and what it keeps</strong>
+    <ul>
+      <li>It reads only your list of courses and, for the one you pick, the students' names and email addresses.
+        It changes nothing in Canvas and never sees your password.</li>
+      <li>It keeps nothing: not the class list, not the course, not your Canvas sign-in. It hands the names and emails
+        to Scheduler's page and forgets them.</li>
+    </ul>
+  </div>
+  <p class="foot">Its code is public: <a href="https://github.com/scheduler-lottery/scheduler/tree/main/extension" target="_blank" rel="noopener">github.com/scheduler-lottery/scheduler</a></p>
+</main>
+<script src="allow.js"></script>
+</body>
+</html>

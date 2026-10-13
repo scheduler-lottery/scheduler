@@ -16,6 +16,7 @@
   .go:hover { background: #7a3f12; }
   .quiet { background: transparent; color: #7a3f12; border-color: transparent; font-weight: 500; }
   .done-mark { color: #2f6b3b; }
+  .kept { margin: 12px 0 0; font-size: 12.5px; color: #4d473e; }
   .foot { margin: 14px 0 0; padding-top: 10px; border-top: 1px solid #eadfce; font-size: 12.5px; color: #6b665c; }
   .foot a { color: #7a3f12; }
   [hidden] { display: none; }
@@ -31,12 +32,14 @@
     <button type="button" class="quiet" data-keep>Keep me for next time</button>
   </div>
   <div data-state="ready">
-    <p>I'm ready. On your Scheduler sign-up sheet, I bring your class list over from Canvas: all you do is sign in to
-      Canvas.</p>
+    <p>I'm ready. On your Scheduler sign-up sheet, press <strong>Import class list</strong>: I bring it over from
+      your school's Canvas. All you do is sign in to Canvas.</p>
     <button type="button" class="go" data-open>Open Scheduler</button>
     <button type="button" class="quiet" data-delete>Delete me</button>
   </div>
   <p data-gone hidden>Deleting…</p>
+  <p class="kept">I keep nothing: not your class list, not your course, not your Canvas sign-in. I only carry the
+    names and emails from Canvas to Scheduler's page, when you ask there.</p>
   <p class="foot"><a href="https://scheduler-lottery.vercel.app" target="_blank" rel="noopener">scheduler-lottery.vercel.app</a>
     · <a href="https://github.com/scheduler-lottery/scheduler/tree/main/extension" target="_blank" rel="noopener">its code, in public</a></p>
 </div>

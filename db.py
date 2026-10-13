@@ -21,7 +21,7 @@ from sqlalchemy import create_engine, event, text
 import settings
 from util import iso, new_id
 
-SCHEMA_VERSION = "21"
+SCHEMA_VERSION = "22"
 SCHEMA_PATH = os.path.join(settings.BASE_DIR, "schema.sql")
 # Postgres advisory lock held while one server upgrades the schema (any
 # number, as long as nothing else in the database uses the same one).
@@ -178,6 +178,10 @@ def apply_schema(connection):
         connection.execute(text(statement))
     # Rankings saved before first_at existed: first ranked when last saved (the best there is).
     connection.execute(text("UPDATE submissions SET first_at = updated_at WHERE first_at IS NULL"))
+    # Which Canvas course a sheet's list came from is no longer kept here (the professor's browser remembers
+    # it): what was kept before goes.
+    connection.execute(text("UPDATE sheets SET canvas_course_id = NULL, canvas_course = NULL "
+                            "WHERE canvas_course_id IS NOT NULL OR canvas_course IS NOT NULL"))
     if connection.dialect.name == "postgresql":
         for table in TABLES:
             connection.execute(text(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY"))

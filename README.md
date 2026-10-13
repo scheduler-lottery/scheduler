@@ -32,9 +32,13 @@ Any professor with a school email can use it — no setup on their end:
    Three pretend students (Test Student 1–3, each with the professor's own email) come with
    it, so the professor can sign in as a student and try it.
 3. **Bring in the class list.** Option 1: Scheduler Helper, a Chrome extension, brings it
-   straight from Canvas: add it from the page, sign in to Canvas if asked, pick the course,
-   and then delete the helper with one click. Option 2: by hand, either Canvas's own file of
-   students (step by step, with pictures) or a list pasted from anywhere (or an Excel file).
+   straight from any school's Canvas, as a checklist the page ticks off: add it, press
+   **Import class list** and pick the class (its students come right in; the first time,
+   allow it to read your school's Canvas), then delete the helper with one click. It keeps
+   nothing, and the site keeps only the names and emails (not the Canvas course: the
+   professor's own browser remembers that, for one-press updates). Option 2: by hand,
+   either Canvas's own file of students (step by step, with pictures) or a list pasted
+   from anywhere (or an Excel file).
 4. **See it as a student** with one click.
 5. **Share the link**: a short link (spoo.me, no ads) and a ready-to-paste Canvas announcement.
 6. **Hear how it's going**: emails when half the class has ranked, when 90% have, if a week
@@ -180,7 +184,8 @@ WorkOS can't. Without it, professors download backups instead.
    credit at the foot of every page; set `BUILT_BY` to `-` to hide it), `SOURCE_URL` (where
    the footer says the code is), `SHORT_LINKS` (`0` turns off the spoo.me short links),
    `CANVAS_HELPER_IDS` / `CANVAS_HELPER_STORE_URL` (another copy of Scheduler Helper, for
-   testing), and `CANVAS_OAUTH_HOST` / `CANVAS_OAUTH_CLIENT_ID` / `CANVAS_OAUTH_CLIENT_SECRET`
+   testing), `CANVAS_HELPER_ANY_SCHOOL` (`1`/`0`: offer it for any school's Canvas; unset,
+   once the store has 1.1.0), and `CANVAS_OAUTH_HOST` / `CANVAS_OAUTH_CLIENT_ID` / `CANVAS_OAUTH_CLIENT_SECRET`
    ("Connect Canvas", once a school issues a developer key). `.env.example` lists them all.
 
    The emails to professors about how sign-ups are going, and backups by email, need the
@@ -327,6 +332,7 @@ node tools/e2e_canvas_helper.mjs
 | `settings.py` | Every setting, read from environment variables |
 | `deadlines.py` | Deadlines, and the emails to professors about how sign-ups are going |
 | `shortlink.py` | A class's short link (spoo.me, no ads), checked daily |
+| `helperstore.py` | Which helper version the Chrome Web Store has (Chrome's own update service), so any school is offered it once it reads any |
 | `extension/` | Scheduler Helper, the Chrome extension |
 | `tools/build_extension.py`, `tools/verify_extension.py` | Build the helper's zip (reproducibly), and check any copy against the code |
 | `tools/fake_canvas.py`, `tools/e2e_*.mjs` | The stand-in Canvas and the browser walk-throughs |

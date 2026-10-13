@@ -2,16 +2,16 @@
   "manifest_version": 3,
   "name": "Scheduler Helper",
   "short_name": "Scheduler",
-  "version": "1.0.6",
-  "description": "Brings a course's class list (student names and emails) from your Canvas into Scheduler, when you ask on Scheduler's page.",
+  "version": "1.1.0",
+  "description": "Brings a class list (student names and emails) from your school's Canvas into Scheduler when you ask. Keeps nothing.",
   "background": {
     "service_worker": "background.js"
   },
   "permissions": [
     "scripting"
   ],
-  "host_permissions": [
-    "https://canvas.northwestern.edu/*"
+  "optional_host_permissions": [
+    "https://*/*"
   ],
   "externally_connectable": {
     "matches": [

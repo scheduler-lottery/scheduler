@@ -5,6 +5,9 @@ professor's own Canvas and hands this site's page the list, which the page
 posts here when the professor presses Add; Connect Canvas (canvas_oauth)
 builds the same list server to server. Either way it's read and checked here
 (read), and only names and emails go on (people, for roster.parse_people).
+Nothing else from Canvas is kept: not the course, its number, or which
+Canvas it came from (the professor's own browser remembers the course, for
+the next "Update from Canvas").
 
 canvas_imports held lists sent by the retired "Send to Scheduler" bookmark;
 nothing writes it any more, and sweep clears anything left in it.
@@ -25,6 +28,11 @@ def _text(value, limit):
     be stored), spaces collapsed."""
     text = "".join(ch for ch in str(value or "") if ch >= " " and not 0xD800 <= ord(ch) <= 0xDFFF and ch != "\x7f")
     return " ".join(text.split())[:limit]
+
+
+def clean(value, limit):
+    """Text from a form, as plain text (see _text)."""
+    return _text(value, limit)
 
 
 def read(raw):

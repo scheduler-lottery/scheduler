@@ -5,6 +5,7 @@ import html as html_lib
 import io
 import json
 import re
+import urllib.parse
 import zipfile
 
 import pytest
@@ -41,6 +42,23 @@ def follow(b, response):
 def q(app, sql, **params):
     with app.app_context():
         return db.scalar(sql, **params)
+
+
+NOTHING = "nothing said"
+
+
+def told_course(page):
+    """What a page tells the professor's browser to remember as its sheet's
+    Canvas course (_course_now.html; this site keeps none): {id, name},
+    None (forget it), or NOTHING (no word: it keeps what it had)."""
+    page = page if isinstance(page, str) else raw(page)
+    found = re.search(r"data-course-now='([^']*)'", page)
+    return json.loads(html_lib.unescape(found.group(1)))["course"] if found else NOTHING
+
+
+def remembered(course_id, name):
+    """The form fields a professor's browser adds for the course it remembers (app.js)."""
+    return {"previous_course": course_id, "previous_course_name": name}
 
 
 def db_rows(app, sql, **params):
@@ -3039,8 +3057,11 @@ def test_a_list_the_helper_brings_goes_in(prof):
     sid = prof.create_sheet(allow_unlisted=False)
     r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=5), "how": "helper", "setup": "1"})
     assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students")
-    assert "Added 5 students" in html(prof.get(r.headers["Location"]))
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :sid", sid=sid) == "4242"
+    page = raw(prof.get(r.headers["Location"]))
+    assert "Added 5 students" in html_lib.unescape(page)
+    # The course is for the professor's browser to remember; this site keeps none of it.
+    assert told_course(page) == {"id": "4242", "name": "2026FA_BUSCOM_615_SEC1"}
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :sid", sid=sid) is None
     assert "didn't come through" in follow(prof, prof.post(f"/teach/s/{sid}/canvas-list", {"list": "{}"}))
     # Only from this site's own page (its form token), and only to the instructor's own sheet.
     other = prof.app.test_client()
@@ -3063,57 +3084,64 @@ def test_lists_that_arent_class_lists_are_turned_away_quietly(prof):
         assert db.scalar("SELECT COUNT(*) FROM error_log") == 0
 
 
-def test_a_sheet_keeps_its_canvas_course_and_flags_another(prof):
+def test_a_sheet_s_canvas_course_is_remembered_by_the_browser_and_another_flagged(prof):
     a = prof.create_sheet(title="LAW 310", allow_unlisted=False)
-    prof.post(f"/teach/s/{a}/canvas-list", {"list": _canvas_list(n=3, course_id="111", course="LAW 310")})
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=a) == "111"
-    assert 'data-canvas-course-id="111"' in raw(prof.get(f"/teach/s/{a}"))  # Update from Canvas: no picking
-    # The wrong course for a tied sheet: a second look first, and backing out leaves it tied as it was.
-    r = prof.post(f"/teach/s/{a}/canvas-list", {"list": _canvas_list(n=3, course_id="222", course="BIO 101")})
+    r = prof.post(f"/teach/s/{a}/canvas-list", {"list": _canvas_list(n=3, course_id="111", course="LAW 310")})
+    assert told_course(prof.get(r.headers["Location"])) == {"id": "111", "name": "LAW 310"}
+    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=a) is None  # (not kept here)
+    assert told_course(prof.get(f"/teach/s/{a}")) == NOTHING  # (said once)
+    law = remembered("111", "LAW 310")
+    # The wrong course for the sheet the browser remembers: a second look first; backing out says nothing new.
+    r = prof.post(f"/teach/s/{a}/canvas-list", {"list": _canvas_list(n=3, course_id="222", course="BIO 101"), **law})
     assert "/roster/review/" in r.headers["Location"]
     assert "came from LAW 310 in Canvas; this one is from BIO 101" in text(prof.get(r.headers["Location"]))
-    prof.post(r.headers["Location"], {"action": "cancel"})
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=a) == "111"
+    r = prof.post(r.headers["Location"], {"action": "cancel"})
+    assert told_course(prof.get(r.headers["Location"])) == NOTHING
     # Replacing it with that course's list after all: the sheet is now that course's.
-    r = prof.post(f"/teach/s/{a}/canvas-list", {"list": _canvas_list(n=3, course_id="222", course="BIO 101")})
-    prof.post(r.headers["Location"], {"action": "replace"})
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=a) == "222"
-    # Undo puts the tie back with the list; clearing the list unties it; a file replacing it unties it too.
-    page = raw(prof.get(f"/teach/s/{a}"))
+    r = prof.post(f"/teach/s/{a}/canvas-list", {"list": _canvas_list(n=3, course_id="222", course="BIO 101"), **law})
+    r = prof.post(r.headers["Location"], {"action": "replace"})
+    page = raw(prof.get(r.headers["Location"]))
+    assert told_course(page) == {"id": "222", "name": "BIO 101"}
+    # Undo puts the old list back, from a course nobody knows now: forgotten (the next update asks which).
     undo = re.search(r'action="([^"]*/undo/[^"]*)"', page)
     form = dict(re.findall(r'name="(parts|key)" value="([^"]*)"', page.split(undo.group(1))[1][:600]))
-    prof.post(html_lib.unescape(undo.group(1)), form)
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=a) == "111"
-    prof.post(f"/teach/s/{a}/roster/clear")
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=a) is None
+    r = prof.post(html_lib.unescape(undo.group(1)), form)
+    assert told_course(prof.get(r.headers["Location"])) is None
+    # Clearing the list forgets it; a file replacing a list from Canvas does too.
+    r = prof.post(f"/teach/s/{a}/roster/clear")
+    assert told_course(prof.get(r.headers["Location"])) is None
     prof.post(f"/teach/s/{a}/canvas-list", {"list": _canvas_list(n=3, course_id="111", course="LAW 310")})
+    prof.get(f"/teach/s/{a}")
     prof.upload(a, "Name,Email\nAlex Kim,alex@x.edu\n")
     with prof.app.app_context():
         pid = db.scalar("SELECT id FROM pending_uploads WHERE sheet_id = :s", s=a)
-    prof.post(f"/teach/s/{a}/roster/review/{pid}", {"action": "replace"})
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=a) is None
-    # An empty sheet still tied to an old course just takes the new one.
+    r = prof.post(f"/teach/s/{a}/roster/review/{pid}", {"action": "replace"})
+    assert told_course(prof.get(r.headers["Location"])) is None
+    # An empty sheet the browser still ties to an old course just takes the new one.
     c = prof.create_sheet(title="Seminar", allow_unlisted=False)
-    with prof.app.app_context():
-        db.run("UPDATE sheets SET canvas_course_id = '333', canvas_course = 'SEM 1' WHERE id = :s", s=c)
-        db.commit()
-    r = prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=2, course_id="444")})
+    r = prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=2, course_id="444"), **remembered("333", "SEM 1")})
     assert r.headers["Location"].endswith(f"/teach/s/{c}#class-list")
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=c) == "444"
+    assert told_course(prof.get(r.headers["Location"]))["id"] == "444"
     # Two courses with one name are told apart by number.
-    r = prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=2, course_id="555", course="LAW 1")})
+    r = prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=2, course_id="555", course="LAW 1"),
+                                                **remembered("444", "2026FA_BUSCOM_615_SEC1")})
     prof.post(r.headers["Location"], {"action": "replace"})
-    r = prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=2, course_id="556", course="LAW 1")})
+    r = prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=2, course_id="556", course="LAW 1"),
+                                                **remembered("555", "LAW 1")})
     assert ("came from Canvas course 555; this one is from course 556, which has the same name"
             in text(prof.get(r.headers["Location"])))
 
 
-def test_a_list_from_canvas_teaches_the_site_which_canvas_is_theirs(prof):
-    assert q(prof.app, "SELECT canvas_host FROM instructors WHERE email = 'prof@school.edu'") is None
+def test_a_list_from_canvas_records_nothing_about_canvas(prof):
     sid = prof.create_sheet(allow_unlisted=False)
     prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(host="canvas.myschool.edu"), "how": "helper"})
-    assert q(prof.app, "SELECT canvas_host FROM instructors WHERE email = 'prof@school.edu'") == "canvas.myschool.edu"
-    assert 'data-host="canvas.myschool.edu"' in raw(prof.get(f"/teach/s/{sid}"))
+    # Not which Canvas it came from, nor the course, nor its number: only the names and emails.
+    assert q(prof.app, "SELECT canvas_host FROM instructors WHERE email = 'prof@school.edu'") is None
+    with prof.app.app_context():
+        kept = json.dumps([dict(r) for t in ("sheets", "instructors", "snapshots", "pending_uploads", "app_state")
+                           for r in db.rows(f"SELECT * FROM {t}")], default=str)
+    assert "canvas.myschool.edu" not in kept and "BUSCOM" not in kept
+    assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :s AND is_test = 0", s=sid) == 3
 
 
 def test_canvas_text_that_isnt_a_class_list_never_becomes_students():
@@ -3173,7 +3201,7 @@ def test_scheduler_helper_is_offered_only_once_it_exists(prof, monkeypatch):
     monkeypatch.setattr(settings, "CANVAS_HELPER_IDS", ["abcdefghijklmnopabcdefghijklmnop"])
     monkeypatch.setattr(settings, "CANVAS_HELPER_STORE_URL", "https://chromewebstore.google.com/detail/x")
     page = raw(prof.get(f"/teach/s/{sid}"))
-    assert 'data-helper-ids="abcdefghijklmnopabcdefghijklmnop"' in page and "Get my class list from Canvas" in page
+    assert 'data-helper-ids="abcdefghijklmnopabcdefghijklmnop"' in page and "Import class list" in page
     assert 'data-helper-store="https://chromewebstore.google.com/detail/x"' in page
     assert "Add Scheduler Helper to Chrome" in text(prof.get(f"/teach/s/{sid}"))
     assert "Option 2 · Do it yourself: Canvas's file, or paste your own list" in text(prof.get(f"/teach/s/{sid}"))
@@ -3193,10 +3221,11 @@ def test_the_helper_extension_builds_with_least_permissions():
     build.build("store")
     with zf.ZipFile("dist/scheduler-helper.zip") as z:
         manifest = json.loads(z.read("manifest.json"))
-        assert sorted(z.namelist()) == ["background.js", "icon-128.png", "icon-16.png", "icon-32.png", "icon-48.png",
-                                        "manifest.json", "popup.html", "popup.js"]
+        assert sorted(z.namelist()) == ["allow.html", "allow.js", "background.js", "icon-128.png", "icon-16.png",
+                                        "icon-32.png", "icon-48.png", "manifest.json", "popup.html", "popup.js"]
     assert manifest["permissions"] == ["scripting"] and "key" not in manifest
-    assert manifest["host_permissions"] == ["https://canvas.northwestern.edu/*"]
+    # It may read no website until the professor allows their school's Canvas (allow.html): adding it asks nothing.
+    assert "host_permissions" not in manifest and manifest["optional_host_permissions"] == ["https://*/*"]
     assert manifest["externally_connectable"]["matches"] == ["https://scheduler-lottery.vercel.app/*"]
     assert not any("127.0.0.1" in h or "localhost" in h for h in json.dumps(manifest).split('"'))
 
@@ -3257,11 +3286,14 @@ def test_connect_canvas_reads_the_class_list_with_canvas_permission(prof, monkey
     r = prof.post("/teach/canvas/oauth/pick", {"course_id": "101", "course_name": "2026FA_BUSCOM_615_SEC1 (2026 Fall)"})
     assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")
     assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid) == 57
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :sid", sid=sid) == "101"
-    assert "Who was added (57)" in text(prof.get(f"/teach/s/{sid}"))
+    page = prof.get(f"/teach/s/{sid}")
+    assert "Who was added (57)" in text(page)
+    assert told_course(page) == {"id": "101", "name": "2026FA_BUSCOM_615_SEC1 (2026 Fall)"}  # (for the browser)
     assert not fake.TOKENS  # Canvas's permission given back at once
-    # Next time, no picking: the sheet's course, straight away (nothing changed in Canvas: just said so).
-    back = _authorize(canvas, prof.get(f"/teach/s/{sid}/canvas/connect").headers["Location"])
+    # Next time, no picking: the sheet's course (the browser adds it to the link), straight away (nothing changed
+    # in Canvas: just said so).
+    remembers = urllib.parse.urlencode(remembered("101", "2026FA_BUSCOM_615_SEC1 (2026 Fall)"))
+    back = _authorize(canvas, prof.get(f"/teach/s/{sid}/canvas/connect?{remembers}").headers["Location"])
     r = prof.get(back.path + "?" + back.query)
     assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list") and not fake.TOKENS
     assert "already matches 2026FA_BUSCOM_615_SEC1" in html(prof.get(r.headers["Location"]))
@@ -3310,10 +3342,10 @@ def test_connect_canvas_can_pick_a_different_course(prof, monkeypatch):
     sid = prof.create_sheet(allow_unlisted=False)
     canvas, fake = _connectable_canvas(monkeypatch)
     _connect(prof, canvas, sid)
-    prof.post("/teach/canvas/oauth/pick", {"course_id": "101", "course_name": "2026FA_BUSCOM_615_SEC1 (2026 Fall)"})
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :sid", sid=sid) == "101"
-    # The wrong course: "pick a different one" passes over the one the sheet remembers.
-    r = _connect(prof, canvas, sid, "?pick=1&setup=1")
+    r = prof.post("/teach/canvas/oauth/pick", {"course_id": "101", "course_name": "2026FA_BUSCOM_615_SEC1 (2026 Fall)"})
+    assert told_course(prof.get(r.headers["Location"]))["id"] == "101"
+    # The wrong course: "pick a different one" passes over the one the browser remembers.
+    r = _connect(prof, canvas, sid, "?pick=1&setup=1&" + urllib.parse.urlencode(remembered("101", "2026FA_BUSCOM_615_SEC1")))
     assert r.headers["Location"].endswith("/teach/canvas/oauth/pick")
     page = text(prof.get(r.headers["Location"]))
     assert "Which course is" in page and "2026FA_LAW_540_SEC20" in page and "no longer has" not in page
@@ -3322,7 +3354,7 @@ def test_connect_canvas_can_pick_a_different_course(prof, monkeypatch):
     assert "2026FA_LAW_540_SEC20" in text(prof.get(r.headers["Location"]))
     r = prof.post(r.headers["Location"], {"action": "replace"})
     assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students")
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :sid", sid=sid) == "202"
+    assert told_course(prof.get(r.headers["Location"]))["id"] == "202"
     assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid) == 8
 
 
@@ -3397,46 +3429,40 @@ def test_connect_canvas_asks_again_when_the_sheets_course_is_gone(prof, monkeypa
     taken = []  # (how the list came, the old course it replaces), as handed on
     take = teach._take_canvas_list
 
-    def spy(sheet, data, setup=False, forget=None):
+    def spy(sheet, data, setup=False, forget=None, previous=None):
         taken.append((data.get("via"), forget))
-        return take(sheet, data, setup=setup, forget=forget)
+        return take(sheet, data, setup=setup, forget=forget, previous=previous)
 
     monkeypatch.setattr(teach, "_take_canvas_list", spy)
     canvas, fake = _connectable_canvas(monkeypatch)
-    # Brought back from an old backup: the sheet remembers a course Canvas no longer has.
+    # The browser remembers a course for the sheet that Canvas no longer has (last year's).
     sid = prof.create_sheet(allow_unlisted=False)
-    with prof.app.app_context():
-        db.run("UPDATE sheets SET canvas_course_id = '8823', canvas_course = 'LAW 540 (2025)' WHERE id = :s", s=sid)
-        db.commit()
-    r = _connect(prof, canvas, sid, "?setup=1")
+    r = _connect(prof, canvas, sid, "?setup=1&" + urllib.parse.urlencode(remembered("8823", "LAW 540 (2025)")))
     assert r.headers["Location"].endswith("/teach/canvas/oauth/pick") and len(fake.TOKENS) == 1
     page = text(prof.get(r.headers["Location"]))
     assert "Canvas no longer has the course this list came from" in page and "Which Canvas course is" in page
     r = prof.post("/teach/canvas/oauth/pick", {"course_id": "202", "course_name": "2026FA_LAW_540_SEC20 (2026 Fall)"})
     assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students") and not fake.TOKENS
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :sid", sid=sid) == "202"
+    assert told_course(prof.get(r.headers["Location"]))["id"] == "202"
     assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sid) == 8
     assert taken == [("connect", "8823")]
     # One Canvas won't share any more (they're off the course), with a list in place: what changes, first.
-    with prof.app.app_context():
-        db.run("UPDATE sheets SET canvas_course_id = '404', canvas_course = 'TRAIN' WHERE id = :s", s=sid)
-        db.commit()
-    r = _connect(prof, canvas, sid)
+    r = _connect(prof, canvas, sid, "?" + urllib.parse.urlencode(remembered("404", "TRAIN")))
     assert "no longer has the course" in text(prof.get(r.headers["Location"]))
     r = prof.post("/teach/canvas/oauth/pick", {"course_id": "303", "course_name": "2026FA_LAW_200_TA (2026 Fall)"})
     assert "/roster/review/" in r.headers["Location"] and taken[-1] == ("connect", "404")
-    prof.post(r.headers["Location"], {"action": "replace"})
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :sid", sid=sid) == "303"
+    r = prof.post(r.headers["Location"], {"action": "replace"})
+    assert told_course(prof.get(r.headers["Location"]))["id"] == "303"
     # Its own course, there: straight to the list as always, with nothing to forget.
-    r = _connect(prof, canvas, sid)
+    r = _connect(prof, canvas, sid, "?" + urllib.parse.urlencode(remembered("303", "2026FA_LAW_200_TA (2026 Fall)")))
     assert "/canvas/oauth/pick" not in r.headers["Location"] and taken[-1] == ("connect", None) and not fake.TOKENS
 
 
-def test_the_helper_is_offered_only_for_the_canvas_it_reads():
+def test_the_helper_can_be_allowed_any_school_s_canvas_the_page_offers_it_for():
     with open("extension/manifest.json", encoding="utf-8") as handle:
         manifest = json.load(handle)
-    hosts = [re.match(r"https://([^/]+)/\*$", h).group(1) for h in manifest["host_permissions"]]
-    assert hosts == settings.CANVAS_HELPER_HOSTS  # the page offers it to exactly these schools
+    assert manifest["optional_host_permissions"] == ["https://*/*"]  # any school's, each allowed once
+    assert all(re.fullmatch(r"[a-z0-9.-]+\.[a-z]{2,}", h) for h in settings.CANVAS_HELPER_HOSTS)  # (https hosts)
 
 
 def test_a_file_with_no_names_or_emails_gets_a_look_first(prof):
@@ -3490,13 +3516,16 @@ def test_a_list_that_changes_nothing_just_says_so(prof):
     sid = prof.create_sheet(title="LAW 310", allow_unlisted=False)
     four = ["Ana Lima", "Bo Chen", "Cy Cole", "Di Dunn"]
     prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=4, names=four, course_id="111", course="LAW 310")})
-    # The helper's list again, a week later: no review page, no restore point, the tie kept.
-    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=4, names=four, course_id="111", course="LAW 310")})
+    prof.get(f"/teach/s/{sid}")  # (where it lands: the browser is told the course)
+    # The helper's list again, a week later: no review page, no restore point, the course kept (nothing new to say).
+    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=4, names=four, course_id="111", course="LAW 310"),
+                                                  **remembered("111", "LAW 310")})
     assert r.headers["Location"].endswith(f"/teach/s/{sid}#class-list")
+    page = follow(prof, r)
     assert ("Your class list already matches LAW 310 in Canvas: all 4 students, nobody new and nobody gone. "
-            "Nothing changed.") in follow(prof, r)
+            "Nothing changed.") in page
     assert q(prof.app, "SELECT COUNT(*) FROM snapshots WHERE sheet_id = :s", s=sid) == 0
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=sid) == "111"
+    assert told_course(page) == NOTHING
     # From setup, back to setup; and a review left waiting is dropped.
     prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=5, course_id="111", course="LAW 310")})
     assert _pending_id(prof.app, sid)
@@ -3519,8 +3548,8 @@ def test_a_list_that_changes_nothing_just_says_so(prof):
         {"name": "Alex Johnson", "email": "alex@school.edu"}, {"name": "Sam Lee", "email": "sam@school.edu"},
         {"name": "Riya Patel", "email": "riya@school.edu"}]})
     r = prof.post(f"/teach/s/{b}/canvas-list", {"list": same})
-    assert "already matches SEM in Canvas" in follow(prof, r)
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=b) == "777"
+    page = follow(prof, r)
+    assert "already matches SEM in Canvas" in page and told_course(page) == {"id": "777", "name": "SEM"}
     # Pasted names already on the list.
     r = prof.post(f"/teach/s/{b}/roster", {"pasted": "Alex Johnson, alex@school.edu\nSam Lee, sam@school.edu\n"
                                                       "Riya Patel, riya@school.edu"})
@@ -3534,7 +3563,7 @@ def test_a_list_that_may_not_be_this_class_has_no_highlighted_button(prof):
     # Another course's list on the class page: each answer says what it does, and none is pushed.
     bio = json.loads(_canvas_list(n=3, course_id="222", course="BIO 101"))  # (other students: other emails)
     bio["students"] = [{**p, "email": "bio." + p["email"]} for p in bio["students"]]
-    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": json.dumps(bio)})
+    r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": json.dumps(bio), **remembered("111", "LAW 310")})
     page = raw(prof.get(r.headers["Location"]))
     assert _buttons(page) == [("It’s not my class: keep my current list (nothing changes)", False),
                               ("It’s my class: replace my list with this one", False),
@@ -3566,11 +3595,12 @@ def test_a_list_that_may_not_be_this_class_has_no_highlighted_button(prof):
                                             "setup": "1"})
     torts = json.loads(_canvas_list(n=3, course_id="202", course="TORTS"))  # (other students: other emails)
     torts["students"] = [{**p, "email": "torts." + p["email"]} for p in torts["students"]]
-    r = prof.post(f"/teach/s/{c}/canvas-list", {"list": json.dumps(torts), "setup": "1"})
+    r = prof.post(f"/teach/s/{c}/canvas-list", {"list": json.dumps(torts), "setup": "1", **remembered("505", "BUSCOM")})
     assert _buttons(raw(prof.get(r.headers["Location"])))[0] == ("It’s my class: replace my list with this one", True)
     prof.post(r.headers["Location"], {"action": "replace"})
     # Added anyway, the reason to look stays at the top of the report, in yellow.
-    r = prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=5, course_id="303", course="BIO"), "setup": "1"})
+    r = prof.post(f"/teach/s/{c}/canvas-list", {"list": _canvas_list(n=5, course_id="303", course="BIO"), "setup": "1",
+                                                **remembered("202", "TORTS")})
     page = follow(prof, prof.post(r.headers["Location"], {"action": "add"}))
     report = page.split('class="report report-warn"')[1]
     assert report.index("this one is from BIO") < report.index("</ul>")
@@ -3646,22 +3676,22 @@ def test_two_files_dropped_at_once_use_the_student_one(prof):
 def test_starting_over_in_setup_takes_the_list_off_and_asks_again(prof):
     sid = prof.create_sheet(allow_unlisted=False)
     prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=4, course_id="101", course="BUSCOM"), "setup": "1"})
-    page = text(prof.get(f"/teach/s/{sid}/setup?step=students"))
-    assert "Wrong course? Start over and pick another" in page and "Or replace it with a file" in page
-    assert "Use a different file" not in page
-    assert 'data-confirm="Take these 4 students off, and get your class list again?"' in raw(
-        prof.get(f"/teach/s/{sid}/setup?step=students"))
-    r = prof.post(f"/teach/s/{sid}/roster/clear", {"setup": "1"})
+    page = raw(prof.get(f"/teach/s/{sid}/setup?step=students"))
+    # (The browser, knowing the list came from Canvas, says "Wrong course? Start over and pick another", and says so.)
+    assert f'data-start-over="{sid}"' in page and 'data-canvas-label="Wrong course? Start over and pick another"' in page
+    assert "Or replace it with a file" in text(page) and "Use a different file" not in text(page)
+    assert 'data-confirm="Take these 4 students off, and get your class list again?"' in page
+    r = prof.post(f"/teach/s/{sid}/roster/clear", {"setup": "1", "from_canvas": "1"})
     assert r.headers["Location"].endswith(f"/teach/s/{sid}/setup?step=students&pick=go")  # the courses, at once
-    assert "Took 4 students off your list" in follow(prof, r)
+    page = follow(prof, r)
+    assert "Took 4 students off your list" in page and told_course(page) is None  # (and the course forgotten)
     assert q(prof.app, "SELECT COUNT(*) FROM roster WHERE sheet_id = :s AND is_test = 0", s=sid) == 0
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=sid) is None
     assert q(prof.app, "SELECT COUNT(*) FROM snapshots WHERE sheet_id = :s", s=sid) == 1  # still a restore point
     assert "Removed the class list" not in text(prof.get(f"/teach/s/{sid}"))  # no stray Undo on the class page later
     # The right course now goes straight in.
     r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=3, course_id="202", course="LAW"), "setup": "1"})
     assert r.headers["Location"].endswith("/setup?step=students")
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=sid) == "202"
+    assert told_course(prof.get(r.headers["Location"]))["id"] == "202"
     # A list from a file: "Wrong list? Start over". The class page's button still offers Undo.
     b = prof.create_sheet(title="Other")
     prof.upload(b)
@@ -3675,47 +3705,45 @@ def test_a_course_canvas_no_longer_has_gives_way_to_the_one_picked(prof):
     prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=4, names=four, course_id="8823", course="LAW 310")})
     # Canvas no longer has 8823: the course picked instead isn't "a different course", and Add ties the sheet to it.
     r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=5, names=four + ["Ed Ek"], course_id="202",
-                                                                       course="LAW 310 (new)"), "forget_course": "8823"})
+                                                                       course="LAW 310 (new)"), "forget_course": "8823",
+                                                  **remembered("8823", "LAW 310")})
     page = text(prof.get(r.headers["Location"]))
     assert "Is it the right course?" not in page
-    prof.post(r.headers["Location"], {"action": "add"})
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=sid) == "202"
+    r = prof.post(r.headers["Location"], {"action": "add"})
+    assert told_course(prof.get(r.headers["Location"]))["id"] == "202"
     # Nothing changed, and the old course gone: the new one is remembered.
-    with prof.app.app_context():
-        db.run("UPDATE sheets SET canvas_course_id = '9999' WHERE id = :s", s=sid)
-        db.commit()
     r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=5, names=four + ["Ed Ek"], course_id="202",
-                                                                       course="LAW 310 (new)"), "forget_course": "9999"})
-    assert "already matches" in follow(prof, r)
-    assert q(prof.app, "SELECT canvas_course_id FROM sheets WHERE id = :s", s=sid) == "202"
+                                                                       course="LAW 310 (new)"), "forget_course": "9999",
+                                                  **remembered("9999", "OLD")})
+    page = follow(prof, r)
+    assert "already matches" in page and told_course(page)["id"] == "202"
     # Forgetting a course the sheet isn't tied to changes nothing: another course still gets a look first.
     r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=5, names=four + ["Ed Ek"], course_id="303",
-                                                                       course="BIO"), "forget_course": "8823"})
+                                                                       course="BIO"), "forget_course": "8823",
+                                                  **remembered("202", "LAW 310 (new)")})
     assert "Is it the right course?" in text(prof.get(r.headers["Location"]))
 
 
-def test_a_list_from_connect_canvas_offers_a_different_course(prof):
-    import sheets
-    import teach
-
+def test_a_list_from_connect_canvas_offers_a_different_course(prof, monkeypatch):
     sid = prof.create_sheet(allow_unlisted=False)
     prof.upload(sid)
-    data = {"course": "LAW 310", "course_id": "101", "host": "canvas.test", "via": "connect", "key": "", "v": 2,
-            "students": [{"name": "Alex Johnson", "email": "alex@school.edu"}, {"name": "Ed Ek", "email": "ed@x.edu"}]}
-    with prof.app.test_request_context():
-        r = teach._take_canvas_list(sheets.get_sheet(sid), data, setup=True)
+    canvas, fake = _connectable_canvas(monkeypatch)
+    _connect(prof, canvas, sid, "?setup=1")
+    r = prof.post("/teach/canvas/oauth/pick", {"course_id": "101", "course_name": "LAW 310"})
+    assert "/roster/review/" in r.headers["Location"]
     with prof.app.app_context():
-        pending = json.loads(db.scalar("SELECT data FROM pending_uploads WHERE sheet_id = :s", s=sid))
-    assert pending["canvas"] == {"id": "101", "name": "LAW 310", "via": "connect"}
+        held = db.scalar("SELECT data FROM pending_uploads WHERE sheet_id = :s", s=sid)
+    # While it waits to be looked over, the course is in the professor's session only, not in this site's database.
+    assert "LAW 310" not in held and '"canvas"' not in held
     page = raw(prof.get(r.headers["Location"]))
+    assert "LAW 310" in html_lib.unescape(page)
     link = re.search(r'Wrong course\? <a href="([^"]+)">Pick a different Canvas course</a>', page).group(1)
     assert html_lib.unescape(link) in (f"/teach/s/{sid}/canvas/connect?pick=1&setup=1",
                                        f"/teach/s/{sid}/canvas/connect?setup=1&pick=1")
     # From the helper: "helper", and no such link: its own is a button, back to its list of courses.
     r = prof.post(f"/teach/s/{sid}/canvas-list", {"list": _canvas_list(n=2, course_id="101", course="LAW 310")})
     with prof.app.app_context():
-        pending = json.loads(db.scalar("SELECT data FROM pending_uploads WHERE sheet_id = :s", s=sid))
-    assert pending["canvas"]["via"] == "helper"
+        assert "LAW 310" not in db.scalar("SELECT data FROM pending_uploads WHERE sheet_id = :s", s=sid)
     page = raw(prof.get(r.headers["Location"]))
     assert "/canvas/connect" not in page and 'value="pick" class="btn-link">Pick a different Canvas course' in page
 

@@ -42,6 +42,7 @@ const waiting = new Map();
 const created = [];
 const requests = []; // what pages with Network on asked for
 let helperSession = null; // the helper itself, once the test is attached to it
+let schedulerSession = null; // the professor's Scheduler page
 let refusedHere = 0; // the helper's own reads of Canvas, refused (to make it read in a tab)
 let slowMs = 4000; // how slow Canvas is to say who's signed in, near the end (null: until let go)
 const held = []; // those answers, held while slowMs is null
@@ -67,6 +68,11 @@ chrome.stdio[4].on("data", (chunk) => {
       const session = msg.params.sessionId;
       (msg.params.targetInfo.type === "page" ? send("Fetch.enable", { patterns: [{ urlPattern: "*/api/v1/users/self*" }] }, session) : Promise.resolve())
         .then(() => send("Runtime.runIfWaitingForDebugger", {}, session)).catch(() => {});
+    } else if (msg.method === "Page.javascriptDialogOpening" && msg.sessionId === schedulerSession) {
+      // (None should come up on Scheduler's page: said, and answered, so nothing hangs.)
+      console.log("FAIL a dialog opened: " + msg.params.type + " " + JSON.stringify(msg.params.message));
+      failures++;
+      send("Page.handleJavaScriptDialog", { accept: true }, msg.sessionId).catch(() => {});
     } else if (msg.method === "Fetch.requestPaused") {
       const go = () => send("Fetch.continueRequest", { requestId: msg.params.requestId }, msg.sessionId).catch(() => {});
       if (slowMs === null) held.push(go); else setTimeout(go, slowMs);
@@ -84,8 +90,13 @@ async function attach(targetId) {
   await send("Page.enable", {}, sessionId).catch(() => {});
   return sessionId;
 }
-async function evaluate(session, expression) {
-  const out = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true, userGesture: true }, session);
+async function evaluate(session, expression, ms = 60000) {
+  // (A page that navigates while it's asked, as one does once a class list goes in, may never answer.)
+  let timer;
+  const out = await Promise.race([
+    send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true, userGesture: true }, session),
+    new Promise((_ok, no) => { timer = setTimeout(() => no(new Error("no answer from the page")), ms); }),
+  ]).finally(() => clearTimeout(timer));
   if (out.exceptionDetails) throw new Error(out.exceptionDetails.text + " " + JSON.stringify(out.exceptionDetails.exception));
   return out.result.value;
 }
@@ -169,6 +180,7 @@ try {
 
   // A signed-in instructor and a new sheet.
   const me = await newPage(`${SITE}/teach/login`);
+  schedulerSession = me.session;
   const email = `helper-${Date.now()}@school.edu`;
   await evaluate(me.session, `document.querySelector('input[name=email]').value = ${JSON.stringify(email)}; document.querySelector('input[name=email]').form.submit()`);
   await until(me.session, `location.pathname === "/teach/verify" && document.readyState === "complete"`);
@@ -179,9 +191,9 @@ try {
   const sid = await canvasStep(me.session, "Helper Seminar");
   check(!!sid, "made a sheet");
   check(await until(me.session, `document.querySelector("[data-helper-go]").offsetParent !== null`),
-    "with the helper installed, the step offers one button: Get my class list from Canvas");
+    "with the helper installed, the step offers one button: Import class list");
   check(await evaluate(me.session, `!document.querySelector("[data-canvas-download]").open
-    && [...document.querySelectorAll(".canvas-guide details")].filter((d) => !d.closest("[hidden]") && !d.parentElement.closest("details")).length === 1`),
+    && [...document.querySelectorAll(".canvas-guide details:not(.nothing-kept)")].filter((d) => !d.closest("[hidden]") && !d.parentElement.closest("details")).length === 1`),
     "with only one other way, folded: upload Canvas's student file");
   await shot(me.session, "1-one-button.png", "[data-helper]");
 
@@ -214,19 +226,18 @@ try {
   check(choices.includes("2026FA_BUSCOM_615_SEC1 · 2026 Fall · 57 students") && choices.includes("2026FA_LAW_200_TA")
     && !choices.includes("FACULTY_TRAINING"), "courses they teach or TA, with term and size");
   check(choices.indexOf("2026FA_BUSCOM_615_SEC1") < choices.indexOf("2027SP_LAW_610_LECTURE"), "this term's first");
+  // (What the page sends Scheduler, noted as it goes.)
+  await evaluate(me.session, `(() => { const go = HTMLFormElement.prototype.submit; HTMLFormElement.prototype.submit = function () {
+    const list = this.querySelector("input[name=list]");
+    if (list) sessionStorage.setItem("sent", list.value + " how=" + (this.querySelector("input[name=how]") || {}).value);
+    return go.call(this); }; })()`);
   await press(me.session, "2026FA_BUSCOM_615_SEC1");
-  check(await until(me.session, `!document.querySelector("[data-canvas-arrived]").hidden`, 10000), "one click on the course, and the list is here");
-  await shot(me.session, "3-the-class-list.png", "[data-canvas-arrived]");
-  check(await evaluate(me.session, `!document.querySelector("[data-canvas-download]").open`), "the upload stays folded");
-  const arrived = await evaluate(me.session, `document.querySelector("[data-canvas-arrived]").innerText`);
-  check(arrived.includes("57 students from 2026FA_BUSCOM_615_SEC1 (2026 Fall)") && arrived.includes("All with email addresses"),
-    "57 students, with their emails");
-  const sent = await evaluate(me.session, `document.querySelector("[data-canvas-arrived] input[name=list]").value`);
-  check(!/login_id|sortable_name|"id"/.test(sent) && /"how"|helper/.test(await evaluate(me.session, `document.querySelector("[data-canvas-arrived] form").innerHTML`)),
-    "only names and emails go to Scheduler");
-  await evaluate(me.session, `document.querySelector("[data-canvas-arrived] form").requestSubmit()`);
   check(await until(me.session, `document.readyState === "complete" && /Added 57 students/.test(document.body.innerText)`, 10000),
-    "Add puts them on the sheet");
+    "one click on the course, and its 57 students are on the sheet (no Add to press)");
+  await shot(me.session, "3-the-class-list.png", "[data-helper-remove]");
+  const sent = await evaluate(me.session, `sessionStorage.getItem("sent") || ""`);
+  check(sent.includes("2026FA_BUSCOM_615_SEC1 (2026 Fall)") && !/login_id|sortable_name|"id"/.test(sent) && sent.endsWith("how=helper"),
+    "only names and emails went to Scheduler");
   check(await until(me.session, `document.body.innerText.includes("Who's on your list (57)")`), "and shows who they are");
 
   // Next time (signed in now, and the sheet knows its course): one click, no picking.
@@ -257,13 +268,13 @@ try {
   check(!!(await canvasStep(me.session, "LAW 540 Evidence"))
     && await until(me.session, `document.querySelector("[data-helper-go]").offsetParent !== null`), "a sheet named LAW 540 Evidence");
   await evaluate(me.session, `document.querySelector("[data-helper-go]").click()`);
-  check(await until(me.session, `!document.querySelector("[data-canvas-arrived]").hidden`, 10000)
-    && (await evaluate(me.session, `document.querySelector("[data-canvas-arrived]").innerText`)).includes("8 students from 2026FA_LAW_540_SEC20")
-    && await evaluate(me.session, `document.querySelector("[data-helper-courses]").hidden`),
-    "one click: its course's list (LAW 540), no course question");
-  await evaluate(me.session, `document.querySelector(".arrived-other").click()`);
-  check(await until(me.session, `!document.querySelector("[data-helper-courses]").hidden`, 10000),
-    "and \"Wrong course?\" asks which course after all");
+  check(await until(me.session, `document.readyState === "complete" && /Added 8 students from 2026FA_LAW_540_SEC20/.test(document.body.innerText)`, 10000),
+    "one click: its course's list (LAW 540) goes in, no course question");
+  check(await until(me.session, `[...document.querySelectorAll("[data-start-over] button")].some((b) => b.textContent === "Wrong course? Start over and pick another")`, 5000),
+    "with \"Wrong course? Start over and pick another\" (this browser knows it came from Canvas)");
+  await evaluate(me.session, `window.confirm = () => true; document.querySelector("[data-start-over] button").click()`);
+  check(await until(me.session, `document.readyState === "complete" && !!document.querySelector("[data-helper-courses]") && !document.querySelector("[data-helper-courses]").hidden`, 15000),
+    "which then asks which course after all");
 
   // The same number in another school's course ("LAW 615" isn't "BUSCOM_615"): asked, not guessed.
   check(!!(await canvasStep(me.session, "LAW 615 Privacy"))
@@ -448,22 +459,21 @@ try {
   // Added again: a list it brings, added, and then the offer to remove it
   // from Chrome, which does just that, in one press.
   await send("Extensions.loadUnpacked", { path: HELPER });
-  check(await until(me.session, `!document.querySelector("[data-canvas-arrived]").hidden
-    || !document.querySelector("[data-helper-courses]").hidden
-    || /Getting|sign in/.test(document.querySelector("[data-helper-said]").textContent)`, 15000),
-    "added again: the page notices by itself, and carries on getting the list (said: "
-    + await evaluate(me.session, `document.querySelector("[data-helper-said]").textContent`) + ")");
+  const noticed = await until(me.session, `/Added \\d+ students/.test(document.body.innerText)
+    || (document.querySelector("[data-helper-courses]") && !document.querySelector("[data-helper-courses]").hidden)
+    || /Getting|sign in|Adding/.test((document.querySelector("[data-helper-said]") || {}).textContent || "")`, 15000);
+  const saidThen = await evaluate(me.session, `(document.querySelector("[data-helper-said]") || {}).textContent || document.title`, 5000)
+    .catch(() => "(the page was moving on)");
+  check(noticed, "added again: the page notices by itself, and carries on getting the list (said: " + saidThen + ")");
   check(!!(await canvasStep(me.session, "LAW 540 Remove Seminar"))
     && await until(me.session, `document.querySelector("[data-helper-go]").offsetParent !== null`, 15000), "a new sheet's one button");
   await evaluate(me.session, `document.querySelector("[data-helper-go]").click()`);
-  check(await until(me.session, `!document.querySelector("[data-canvas-arrived]").hidden`, 15000), "its course's list, here");
-  await evaluate(me.session, `document.querySelector("[data-canvas-arrived] button[type=submit]").click()`);
   check(await until(me.session, `document.readyState === "complete" && !!document.querySelector("[data-helper-remove]")
     && !document.querySelector("[data-helper-remove]").hidden`, 15000),
-    "added: the report offers to remove Scheduler Helper from Chrome");
+    "its course's list goes in, and the checklist's last step offers to delete Scheduler Helper");
   await evaluate(me.session, `document.querySelector("[data-helper-remove-go]").click()`);
-  check(await until(me.session, `document.querySelector("[data-helper-remove-said]").textContent.includes("is removed from Chrome")`, 10000),
-    "one press, and it's removed (" + await evaluate(me.session, `document.querySelector("[data-helper-remove-said]").textContent`) + ")");
+  check(await until(me.session, `document.querySelector("[data-helper-remove-said]").textContent.includes("is deleted from Chrome")`, 10000),
+    "one press, and it's deleted (" + await evaluate(me.session, `document.querySelector("[data-helper-remove-said]").textContent`) + ")");
   const after = await evaluate(me.session, `new Promise((done) => {
     if (!window.chrome || !chrome.runtime || !chrome.runtime.sendMessage) { done(null); return; }
     chrome.runtime.sendMessage(${JSON.stringify(DEV_ID)}, { type: "hello" }, (a) => { void chrome.runtime.lastError; done(a || null); });

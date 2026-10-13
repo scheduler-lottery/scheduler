@@ -1133,7 +1133,7 @@ def setup(sid):
         deadline=deadlines.describe(sheet["closes_at"], _zone()) if sheet["closes_at"] else "",
         me=me["email"], mail_default=mail_default, setup=True,
         # Said before that they use Canvas (their school is saved): the questions start at Canvas.
-        canvas_before=bool(me["canvas_host"]) or request.args.get("at") == "canvas", used_courses=_used_courses(me, sid),
+        canvas_before=bool(me["canvas_host"]) or request.args.get("at") == "canvas", course_now=_course_now(sid),
     )
 
 
@@ -1157,13 +1157,32 @@ def _list_back(sheet, setup=None, box=None, pick=None):
     return _back(sheet, box or "class-list")
 
 
-def _used_courses(instructor, sid):
-    """{Canvas course id: title} of the instructor's other sheets that have
-    a Canvas course (the most recently changed one, if two share it), so
-    the list of courses can say which course already has its sheet."""
-    rows = db.rows("SELECT canvas_course_id, title FROM sheets WHERE owner_id = :me AND id != :sid "
-                   "AND canvas_course_id IS NOT NULL ORDER BY updated_at, created_at", me=instructor["id"], sid=sid)
-    return {r["canvas_course_id"]: r["title"] for r in rows}
+def _course_now(sid):
+    """The Canvas course this sheet's class list is from now, for the page
+    to hand the professor's own browser, once, after a list from Canvas went
+    in (or None: a file or paste replaced it, so forget it). Nothing about a
+    Canvas course is kept on this site: the browser remembers it (app.js),
+    so "Update from Canvas" needs no picking on that computer. {} if there's
+    nothing new to say."""
+    told = session.get("canvas_course_now")
+    if not told or told.get("sid") != sid:
+        return {}
+    session.pop("canvas_course_now")
+    return {"course": told.get("course")}
+
+
+def _course_to_page(sheet, canvas, mode):
+    """Which Canvas course the sheet's class list is from now, said to the
+    professor's browser (_course_now): a list that replaces it brings its
+    course (or none, from a file or a paste); one added to it gives its
+    course to a sheet that had none (or one Canvas no longer has)."""
+    if mode == "replace":
+        course = {"id": canvas["id"], "name": canvas["name"]} if canvas else None
+    elif canvas and (not canvas.get("previous") or canvas.get("forget")):
+        course = {"id": canvas["id"], "name": canvas["name"]}
+    else:
+        return
+    session["canvas_course_now"] = {"sid": sheet["id"], "course": course}
 
 
 def _sheet_page(sid, tab):
@@ -1353,7 +1372,7 @@ def _sheet_page(sid, tab):
         stuck=stuck,
         canvas=canvas,
         canvas_before=bool(me["canvas_host"]) or request.args.get("at") == "canvas",
-        used_courses=_used_courses(me, sid) if tab == "class" else {},
+        course_now=_course_now(sid) if tab == "class" else {},
         nudge=nudge,
         deadline={
             "closes_at": sheet["closes_at"], "at_close": sheet["at_close"] or "ask",
@@ -1467,6 +1486,7 @@ def undo(sid, snap_id):
     db.commit()
     if "roster" in allowed:
         listed = sum(1 for r in data["roster"] if not r.get("is_test"))
+        session["canvas_course_now"] = {"sid": sheet["id"], "course": None}  # (which course that list is from isn't known)
         session["roster_report"] = {
             "sid": sheet["id"], "message": f"Your previous class list is back ({plural(listed, 'student')}).",
             "tips": [], "warn": False, "undo": None, "restored": True, "at": int(time.time()),
@@ -1489,8 +1509,17 @@ REPORT_HOURS = 12  # how long a report stays on the class page, unless "OK, got 
 SEND_NEW_MAX = 40
 
 
+# What names the Canvas course a list waiting for review came from: held in
+# the professor's own session (a cookie), never in this site's database.
+CANVAS_PENDING = ("canvas", "source", "source_label", "message", "look_first")
+
+
 def _store_pending(sheet, kind, payload):
     pid = new_id(12)
+    if payload.get("canvas"):
+        payload = dict(payload)
+        session["pending_canvas"] = {"pid": pid, **{k: payload.pop(k) for k in CANVAS_PENDING if k in payload}}
+        payload.update(source="Canvas", source_label="sent from Canvas", message="")
     db.run("DELETE FROM pending_uploads WHERE sheet_id = :sid AND kind = :kind", sid=sheet["id"], kind=kind)
     db.run(
         "INSERT INTO pending_uploads (id, owner_id, sheet_id, kind, created_at, data) "
@@ -1506,7 +1535,13 @@ def _get_pending(sheet, pid, kind):
         "SELECT * FROM pending_uploads WHERE id = :id AND sheet_id = :sid AND owner_id = :owner AND kind = :kind",
         id=pid, sid=sheet["id"], owner=sheet["owner_id"], kind=kind,
     )
-    return json.loads(found["data"]) if found else None
+    if not found:
+        return None
+    data = json.loads(found["data"])
+    held = session.get("pending_canvas")
+    if held and held.get("pid") == pid:  # (the Canvas course's part, from the session: _store_pending)
+        data.update({k: v for k, v in held.items() if k != "pid"})
+    return data
 
 
 def _course_named(title, courses):
@@ -1752,13 +1787,14 @@ def _take_list(sheet, data, source, source_label, pasted=False, setup=False, par
     # was taken off by hand and isn't on it any more is forgotten, so if they
     # enrol again, they're new. (Not from a file of late adds, or a second
     # course added on top.)
-    tied = sheet.get("canvas_course_id")
+    tied = (canvas or {}).get("previous")
     whole = result.students if (canvas and (not tied or canvas["id"] == tied)) or canvas_file else None
     if not current and not look_first:
         _apply_roster(sheet, result.students, "replace", message, tips, warn, source_label, sections)
         _by_helper(canvas)
         sheets.removed_by_hand(sheet["id"], [] if pasted else result.students)  # (a first list: all of it)
-        _tie_to_canvas(sheet, canvas, "replace")
+        db.commit()
+        _course_to_page(sheet, canvas, "replace")
         return _list_back(sheet, setup)
     if current and not look_first:
         # The same students, spelled the same, with the same emails: nothing to
@@ -1771,7 +1807,7 @@ def _take_list(sheet, data, source, source_label, pasted=False, setup=False, par
         if not (diff["adding"] or diff["dropping"] or diff["new_emails"] or diff.get("unsure") or diff["renamed"]) and all(
                 shown[s["name_key"]] == s["display_name"] for s in diff["same"]):
             sheets.removed_by_hand(sheet["id"], whole)  # (anyone Canvas no longer has: new if they enrol again)
-            _tie_to_canvas(sheet, canvas, "add")  # a sheet untied (its list from a file) learns its course
+            _course_to_page(sheet, canvas, "add")  # a sheet with no course (its list from a file) learns its course
             db.run("DELETE FROM pending_uploads WHERE sheet_id = :sid AND kind = 'roster'", sid=sheet["id"])
             db.commit()
             course = canvas["name"] if canvas else source[len("Canvas: "):] if source.startswith("Canvas: ") else ""
@@ -1817,58 +1853,50 @@ def _by_helper(canvas):
         session["roster_report"] = {**report, "helper": True}
 
 
-def _take_canvas_list(sheet, data, setup=False, forget=None):
+def _previous_course(form):
+    """The Canvas course the professor's browser says this sheet's list came
+    from last time (app.js remembers it there; this site doesn't), from a
+    form: {id, name}, or None."""
+    course_id = str(form.get("previous_course") or "")
+    if not re.fullmatch(r"\d{1,15}", course_id):
+        return None
+    return {"id": course_id, "name": canvas_import.clean(form.get("previous_course_name"), 200)}
+
+
+def _take_canvas_list(sheet, data, setup=False, forget=None, previous=None):
     """A class list from Canvas, read for this site's own page (by Scheduler
     Helper, or Connect Canvas: data["via"] == "connect"). One from a
-    different Canvas course than the sheet's last is shown for a second look
-    before it goes in. Once in, the sheet remembers its Canvas course, so
-    next time needs no picking; and the instructor's school's Canvas is the
-    one it came from, if they hadn't said. `forget`: the sheet's course,
+    different Canvas course than the sheet's last (`previous`, as the
+    professor's browser remembers it) is shown for a second look before it
+    goes in. Only the names and emails are kept: not the course, its number,
+    or which Canvas it came from (the browser is told the course, to
+    remember for next time: _course_to_page). `forget`: the sheet's course,
     which Canvas no longer has (deleted, merged, or no longer theirs): the
-    sheet counts as tied to none, and the new course takes its place even
+    sheet counts as having none, and the new course takes its place even
     when the list is added rather than replaced."""
     course = data["course"]
     canvas = {"id": data["course_id"], "name": course,
               "via": "connect" if data.get("via") == "connect" else "helper"} if data.get("course_id") else None
-    tied = sheet.get("canvas_course_id")
+    previous = previous or {}
+    tied = previous.get("id") or None
     if forget and forget == tied:
         tied = None
         if canvas:
             canvas["forget"] = forget
+    if canvas:
+        canvas["previous"] = tied
     look_first = None
     has_list = db.scalar("SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sheet["id"])
     if canvas and has_list and tied and tied != canvas["id"]:
-        before = sheet.get("canvas_course") or "another course"
+        before = previous.get("name") or "another course"
         if before == course:  # two courses with one name: their numbers tell them apart
-            look_first = (f"This sheet's class list came from Canvas course {sheet['canvas_course_id']}; this one is "
+            look_first = (f"This sheet's class list came from Canvas course {tied}; this one is "
                           f"from course {canvas['id']}, which has the same name ({course}). Is it the right course?")
         else:
             look_first = (f"This sheet's class list came from {before} in Canvas; this one is from {course}. "
                           "Is it the right course?")
-    host = canvasdir.clean_host(data.get("host"))
-    if host and not db.scalar("SELECT canvas_host FROM instructors WHERE id = :id", id=sheet["owner_id"]):
-        # (The school's name, if the directory knows it: not the address twice.)
-        db.run("UPDATE instructors SET canvas_host = :host, canvas_school = COALESCE(canvas_school, :name) "
-               "WHERE id = :id AND canvas_host IS NULL", host=host, name=canvasdir.name_of(host) or None,
-               id=sheet["owner_id"])
-        db.commit()
-    return _take_list(sheet, None, f"Canvas: {course}", f"sent from Canvas ({course})", setup=setup,
+    return _take_list(sheet, None, f"Canvas: {course}", "sent from Canvas", setup=setup,
                       parsed=parse_people(canvas_import.people(data)), canvas=canvas, look_first=look_first)
-
-
-def _tie_to_canvas(sheet, canvas, mode):
-    """Which Canvas course the sheet's class list is from, now: a list that
-    replaces it brings its course (or none, from a file or a paste); one
-    added to it ties a sheet that wasn't tied to any, or was tied to a
-    course Canvas no longer has (canvas["forget"])."""
-    if mode == "replace":
-        db.run("UPDATE sheets SET canvas_course_id = :cid, canvas_course = :name WHERE id = :sid",
-               cid=canvas["id"] if canvas else None, name=canvas["name"] if canvas else None, sid=sheet["id"])
-    elif canvas:
-        db.run("UPDATE sheets SET canvas_course_id = :cid, canvas_course = :name "
-               "WHERE id = :sid AND (canvas_course_id IS NULL OR canvas_course_id = :gone)",
-               cid=canvas["id"], name=canvas["name"], sid=sheet["id"], gone=canvas.get("forget") or "")
-    db.commit()
 
 
 @bp.route("/s/<sid>/canvas-list", methods=["POST"])
@@ -1877,14 +1905,15 @@ def canvas_list_here(sid):
     """A class list Scheduler Helper brought this page from Canvas, which
     the instructor then added (the form is this page's own: it carries the
     page's token). `forget_course`: the sheet's course, when Canvas said it
-    no longer has it."""
+    no longer has it; `previous_course` (and its name): the sheet's course
+    as the professor's browser remembers it."""
     sheet = owned_sheet(sid)
     data = canvas_import.read(request.form.get("list"))
     if not data:
-        flash("That class list from Canvas didn't come through. Press Get my class list from Canvas again.", "error")
+        flash("That class list from Canvas didn't come through. Press Import class list again.", "error")
         return _list_back(sheet)
     return _take_canvas_list(sheet, data, setup=bool(request.form.get("setup")),
-                             forget=request.form.get("forget_course") or None)
+                             forget=request.form.get("forget_course") or None, previous=_previous_course(request.form))
 
 
 # ---------------------------------------------------------------------------
@@ -1941,14 +1970,16 @@ def _connect_back(why):
 def canvas_connect(sid):
     """Off to Canvas's own sign-in and Authorize page. `pick`: the professor
     wants to choose the course again (the one the sheet remembers was the
-    wrong one), so the course list shows either way."""
+    wrong one), so the course list shows either way. `previous_course`: the
+    sheet's course, as the professor's browser remembers it (app.js adds it
+    to the link)."""
     sheet = owned_sheet(sid)
     if not canvas_oauth.ready():
         abort(404)
     _give_back(session.get("canvas_connect"))  # a key still waiting from a Connect left part way
     state = secrets.token_urlsafe(24)
     session["canvas_connect"] = {"state": state, "sid": sheet["id"], "setup": bool(request.args.get("setup")),
-                                 "pick": bool(request.args.get("pick"))}
+                                 "pick": bool(request.args.get("pick")), "previous": _previous_course(request.args)}
     return redirect(canvas_oauth.authorize_url(state, url_for("teach.canvas_connected", _external=True)))
 
 
@@ -1980,7 +2011,8 @@ def _from_connected_canvas(token, course_id, course_name, saved=False):
     data = {"course": course_name, "course_id": course_id, "host": host or settings.CANVAS_OAUTH_HOST,
             "students": [{"name": p["name"][:120], "email": p["email"][:254] if "@" in p["email"] else ""} for p in people],
             "key": "", "v": 2, "via": "connect"}
-    return _take_canvas_list(sheet, data, setup=pending.get("setup"), forget=pending.get("forget"))
+    return _take_canvas_list(sheet, data, setup=pending.get("setup"), forget=pending.get("forget"),
+                             previous=pending.get("previous"))
 
 
 @bp.route("/canvas/oauth/callback")
@@ -2002,21 +2034,22 @@ def canvas_connected():
         token = canvas_oauth.exchange(request.args.get("code", ""), url_for("teach.canvas_connected", _external=True))
     except canvas_oauth.CanvasError as err:
         return _connect_back(err.why)
-    return _courses_or_list(sheet, token, settings.CANVAS_OAUTH_HOST, pending.get("setup"), pending.get("pick"))
+    return _courses_or_list(sheet, token, settings.CANVAS_OAUTH_HOST, pending.get("setup"), pending.get("pick"),
+                            pending.get("previous"))
 
 
-def _courses_or_list(sheet, token, host, setup, pick=False):
+def _courses_or_list(sheet, token, host, setup, pick=False, previous=None):
     """With a key for Canvas: the sheet's course's list straight away, or the
     professor's courses to pick from, on a page of their own (the key
-    waiting, sealed, in the session). `pick`: they asked to choose again."""
-    session["canvas_connect"] = {"sid": sheet["id"], "setup": setup, "host": host}
-    if sheet.get("canvas_course_id") and not pick:  # its course from last time: straight to the list
-        taken = _from_connected_canvas(token, sheet["canvas_course_id"], sheet.get("canvas_course") or "your course",
-                                       saved=True)
+    waiting, sealed, in the session). `pick`: they asked to choose again.
+    `previous`: the sheet's course, as the professor's browser remembers it."""
+    session["canvas_connect"] = {"sid": sheet["id"], "setup": setup, "host": host, "previous": previous}
+    if previous and not pick:  # its course from last time: straight to the list
+        taken = _from_connected_canvas(token, previous["id"], previous.get("name") or "your course", saved=True)
         if taken is not None:
             return taken
         # Canvas no longer has it for them: which course is the sheet's now? The pick replaces the old one.
-        session["canvas_connect"]["forget"] = sheet["canvas_course_id"]
+        session["canvas_connect"]["forget"] = previous["id"]
         pick = True
     try:
         found = canvas_oauth.courses(token, host)
@@ -2158,7 +2191,7 @@ def review_roster(sid, pid):
     """Before an uploaded list replaces the current one: what changes, and
     a choice to replace, add, or keep the current list. A list Scheduler
     Helper brought can also be turned down for being the wrong course
-    (`pick`): back to Get my class list, which then asks which course."""
+    (`pick`): back to Import class list, which then asks which course."""
     sheet = owned_sheet(sid)
     pending = _get_pending(sheet, pid, "roster")
     if not pending:
@@ -2170,6 +2203,7 @@ def review_roster(sid, pid):
     if request.method == "POST":
         action = request.form.get("action")
         if action == "cancel" or (action == "pick" and from_helper):
+            session.pop("pending_canvas", None)
             db.run("DELETE FROM pending_uploads WHERE id = :id", id=pid)
             db.commit()
             has_list = db.scalar("SELECT COUNT(*) FROM roster WHERE sheet_id = :sid AND is_test = 0", sid=sheet["id"])
@@ -2187,12 +2221,13 @@ def review_roster(sid, pid):
             flash(said, "success")
             return _list_back(sheet, pending.get("setup"), box)
         if action in ("replace", "add"):
+            session.pop("pending_canvas", None)
             tips, warn = pending["tips"], pending["warn"]
             if pending.get("look_first"):  # put in after all: why it was worth a look stays first, in yellow
                 tips, warn = [pending["look_first"]] + list(tips), True
             students = pending["students"]
             canvas = pending.get("canvas")
-            tied = sheet.get("canvas_course_id")
+            tied = (canvas or {}).get("previous")
             own = bool(canvas) and (not tied or str(canvas["id"]) == str(tied))
             whole = students if not pending.get("pasted") and (action == "replace" or own) else None
             if not pending.get("pasted") and request.form.get("put_back") != "1":  # (taken off by hand: they stay off)
@@ -2203,7 +2238,8 @@ def review_roster(sid, pid):
                           pending["source_label"], pending.get("sections"), setup=bool(pending.get("setup")))
             _by_helper(pending.get("canvas"))
             sheets.removed_by_hand(sheet["id"], whole)
-            _tie_to_canvas(sheet, pending.get("canvas"), action)
+            db.commit()
+            _course_to_page(sheet, pending.get("canvas"), action)
             return _list_back(sheet, pending.get("setup"))
     diff = sheets.compare_rosters(sheets.get_roster(sheet["id"]), pending["students"],
                                   [] if pending.get("pasted") else sheets.removed_by_hand(sheet["id"]))
@@ -2277,18 +2313,18 @@ def dismiss_report(sid):
 @bp.route("/s/<sid>/roster/clear", methods=["POST"])
 @instructor_required
 def clear_roster(sid):
-    """Take the class list off (and forget its Canvas course), with a
-    restore point. From setup ("Wrong course? Start over"), back to the
+    """Take the class list off (and the professor's browser forgets its
+    Canvas course), with a restore point. From setup ("Wrong course? Start over"), back to the
     students step to get the list again; there, no Undo, which would only
     turn up later on the class page. A list from a Canvas course may have
     been the wrong course: next time, the course is asked, not guessed
     again from the sheet's title (pick)."""
     sheet = owned_sheet(sid)
     setup = bool(request.form.get("setup"))
-    had_course = bool(sheet.get("canvas_course_id"))
+    had_course = request.form.get("from_canvas") == "1"  # (app.js says so: the browser knows its course)
     snap_id = sheets.take_snapshot(sheet, "roster", "Before the class list was removed")
     removed = sheets.clear_roster(sheet["id"])  # (who was taken off by hand is kept, for an undo of this)
-    db.run("UPDATE sheets SET canvas_course_id = NULL, canvas_course = NULL WHERE id = :sid", sid=sheet["id"])
+    session["canvas_course_now"] = {"sid": sheet["id"], "course": None}
     auth.end_student_sessions(sheet["id"], removed)
     db.commit()
     session.pop("roster_report", None)
@@ -3361,6 +3397,7 @@ def restore_snapshot(sid, snap_id):
     changed = sheets.restore(sheet["id"], sheet["owner_id"], data, keep_newer=keep_newer)
     auth.end_student_sessions(sheet["id"], changed, reason="list")
     db.commit()
+    session["canvas_course_now"] = {"sid": sheet["id"], "course": None}  # (an earlier list: its Canvas course isn't known)
     zone = _zone()
     flash(f"Your sheet now matches the version from {sheets.file_time(snap['created_at'], zone, seconds=True)}"
           + (", plus rankings made since." if keep_newer else ".")
@@ -3412,6 +3449,7 @@ def confirm_restore_file(sid, pid):
     changed = sheets.restore(sheet["id"], sheet["owner_id"], data, keep_newer=mode != "exact")
     auth.end_student_sessions(sheet["id"], changed)
     db.commit()
+    session["canvas_course_now"] = {"sid": sheet["id"], "course": None}
     flash(f"Restored from the backup taken {sheets.file_time(data['exported_at'], _zone())}.", "success")
     return _back(sheet, "backups")
 

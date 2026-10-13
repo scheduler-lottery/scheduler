@@ -17,6 +17,7 @@
   {% include "_setup_progress.html" %}
   {% endwith %}
 
+  {% include "_course_now.html" %}
   {% if step == 'students' %}
   <section class="setup-step" aria-labelledby="setup-q">
     <h2 class="wizard-q" id="setup-q">Add your students</h2>
@@ -39,11 +40,11 @@
       <a class="btn btn-primary btn-large" href="{{ url_for('teach.setup', sid=sheet.id, step='share') }}">Next: share the link <span aria-hidden="true">→</span></a>
     </div>
     {# The wrong course or list: take it off and answer the same questions again (teach.clear_roster). #}
-    <form method="post" action="{{ url_for('teach.clear_roster', sid=sheet.id) }}" class="replace-list"
+    <form method="post" action="{{ url_for('teach.clear_roster', sid=sheet.id) }}" class="replace-list" data-start-over="{{ sheet.id }}"
           data-confirm="Take {{ 'this student' if counts.roster == 1 else 'these ' ~ counts.roster ~ ' students' }} off, and get your class list again?">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="setup" value="1">
-      <button type="submit" class="btn-link">{{ 'Wrong course? Start over and pick another' if sheet.canvas_course_id else 'Wrong list? Start over' }}</button>
+      <button type="submit" class="btn-link" data-canvas-label="Wrong course? Start over and pick another">Wrong list? Start over</button>
     </form>
     <details class="replace-list">
       <summary>Or replace it with a file</summary>

@@ -39,7 +39,7 @@ SHEET_FIELDS = (
     "id", "title", "note", "rank_by", "capacity_per_day", "algorithm", "bidding_open",
     "allow_unlisted", "show_preview", "include_unranked", "lottery_seed", "last_algorithm",
     "scheduled_at", "schedule_signature", "published_at", "roster_updated_at", "created_at",
-    "updated_at", "canvas_course_id", "canvas_course", "short_code", "progress_emails",
+    "updated_at", "short_code", "progress_emails",
 )
 # What a restore puts back. Whether sign-ups are open, and whether the
 # schedule is published, are left as they are now: going back to an earlier
@@ -1364,9 +1364,7 @@ def restore(sheet_id, owner_id, data, keep_newer=True, parts=None):
             "UPDATE sheets SET roster_updated_at = :rat WHERE id = :sid",
             rat=(saved.get("roster_updated_at") or at) if rows else None, sid=sheet_id,
         )
-        if "canvas_course_id" in saved:  # (restore points from before sheets knew their Canvas course don't say)
-            db.run("UPDATE sheets SET canvas_course_id = :cid, canvas_course = :name WHERE id = :sid",
-                   cid=saved.get("canvas_course_id") or None, name=saved.get("canvas_course") or None, sid=sheet_id)
+        # (Older restore points may name the sheet's Canvas course: no longer kept, so not put back.)
         after = {k: r["email"] for k, r in rows.items() if not r["is_test"]}
         changed = _signin_changes(before, after, pinned)
         _drop_pins(sheet_id, [k for k, email in after.items() if email])

@@ -106,8 +106,8 @@ def build(target):
         sys.exit("build_extension.py: store or dev")
     # (The store's zip is always the repo's own extension/.)
     source = os.environ.get("EXTENSION_SOURCE") or SOURCE if target == "dev" else SOURCE
-    files = ["background.js", "popup.html", "popup.js"]
-    if target == "dev":  # (an earlier helper, EXTENSION_SOURCE: 1.0.0 has no popup)
+    files = ["background.js", "popup.html", "popup.js", "allow.html", "allow.js"]
+    if target == "dev":  # (an earlier helper, EXTENSION_SOURCE: 1.0.0 has no popup, 1.0.6 no allow page)
         files = [f for f in files if os.path.exists(os.path.join(source, f))]
     missing = [f for f in files if not os.path.exists(os.path.join(source, f))]
     if missing:
@@ -126,7 +126,11 @@ def build(target):
             manifest["key"] = handle.read().strip()
         manifest["name"] += " (dev)"
         canvases = os.environ.get("DEV_CANVAS_PORTS", "5077").split(",")  # (another stand-in Canvas: FAKE_CANVAS_PORT)
-        manifest["host_permissions"] += [f"http://127.0.0.1:{p.strip()}/*" for p in canvases]
+        manifest["host_permissions"] = manifest.get("host_permissions", []) + [
+            f"http://127.0.0.1:{p.strip()}/*" for p in canvases]
+        # Any other stand-in Canvas on this computer is one it must be allowed to read first (as another school's).
+        if "optional_host_permissions" in manifest:
+            manifest["optional_host_permissions"] += ["http://127.0.0.1/*"]
         ports = os.environ.get("DEV_SITE_PORTS", "5050").split(",")  # (another local Scheduler: DEV_SITE_PORTS=5050,5066)
         manifest["externally_connectable"]["matches"] += [f"http://{h}:{p.strip()}/*" for p in ports
                                                           for h in ("127.0.0.1", "localhost")]
@@ -134,12 +138,13 @@ def build(target):
         json.dump(manifest, handle, indent=2)
     for file in files:
         shutil.copy(os.path.join(source, file), out)
-    popup = os.path.join(out, "popup.html")
-    if os.path.exists(popup):  # (its code link: this version's tag, helper-v<version>)
-        with open(popup, encoding="utf-8") as handle:
-            page = handle.read().replace("/tree/main/extension", f"/tree/helper-v{manifest['version']}/extension")
-        with open(popup, "w", encoding="utf-8") as handle:
-            handle.write(page)
+    for page_name in ("popup.html", "allow.html"):
+        page_path = os.path.join(out, page_name)
+        if os.path.exists(page_path):  # (its code link: this version's tag, helper-v<version>)
+            with open(page_path, encoding="utf-8") as handle:
+                page = handle.read().replace("/tree/main/extension", f"/tree/helper-v{manifest['version']}/extension")
+            with open(page_path, "w", encoding="utf-8") as handle:
+                handle.write(page)
     for size in sorted(int(k) for k in manifest["icons"]):
         with open(os.path.join(out, f"icon-{size}.png"), "wb") as handle:
             handle.write(_png(size))

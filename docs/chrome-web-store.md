@@ -1,7 +1,7 @@
 # Publishing Scheduler Helper on the Chrome Web Store
 
 Scheduler Helper (the `extension/` folder) is the Chrome extension behind the
-class-list step's **Get my class list from Canvas** button. It's published:
+class-list step's **Import class list** button, for any school's Canvas. It's published:
 <https://chromewebstore.google.com/detail/scheduler-helper/hafmidgmpikkkjphmcbnggidbaeoiapd>,
 and the site knows that id (`settings.CHROME_HELPER_ID`). Edge users can install it from
 the Chrome Web Store too. In other browsers (Safari, Firefox), the step says how to open
@@ -16,20 +16,22 @@ days and can take a couple of weeks for a new developer.
 .venv/bin/python tools/build_extension.py store
 ```
 
-The upload is `dist/scheduler-helper.zip`. It is version **1.0.6**, the one to upload
-now (in place of any earlier one still waiting for review). What changed since 1.0.0:
-- Added from Scheduler's page, it and the page find each other at once: the page comes
-  back to the front (the store's tab closes) and the import starts by itself.
-- After the class list is in, its own box (a toolbar button, opened by itself) says
-  **All done!** with **Delete me**, one click; the page offers the same.
-- It notices a Canvas sign-in made in any tab, and signs in from a fresh Canvas tab when
-  an open one has signed the professor out. Pressing the page's button again brings
-  Canvas's sign-in page back to the front, and Scheduler comes back before the list is read.
-- Canvas offline or down is said as such, never as a sign-in.
-- It can open its own Chrome settings page, for site access.
-- Kept (on the page or in its own box), it goes back to its ordinary toolbar box.
+The upload is `dist/scheduler-helper.zip`. It is version **1.1.0**, the one to upload
+now. The store has 1.0.6 (checked against helper-v1.0.6: it matches). What changed:
+- **Any school's Canvas**, not just Northwestern's. It may read no website at all until
+  the professor allows their school's Canvas, once, the first time they import: the
+  helper opens a small window of its own (`allow.html`) naming that Canvas, and its
+  **Allow** button asks Chrome, which asks the professor. So adding it asks for nothing,
+  and no install warning names another school's Canvas.
+- The page is a checklist (add it, import the class list, all done: delete it?), and a
+  first class list goes straight in once the class is picked.
+- It keeps nothing, and says so in its own box and its allow window.
 
-It asks for no new permissions (the toolbar box needs none).
+Permissions: still only `scripting`; Northwestern's Canvas moves from
+`host_permissions` to `optional_host_permissions` (`https://*/*`, each site granted only
+by the professor's own click). Optional permissions aren't asked for at install or on an
+update, so Chrome updates everyone to 1.1.0 without turning it off. A professor who had
+1.0.x allows their school's Canvas once, on their next import.
 
 The screenshots are in `dist/store/`; the browser test makes them:
 
@@ -57,14 +59,16 @@ Click **New item** and upload `dist/scheduler-helper.zip`. Then fill in each tab
 
 - **Description:**
 
-  > Scheduler Helper brings a course's class list from your Canvas into Scheduler
-  > (scheduler-lottery.vercel.app), the presentation-day sign-up site, with one click.
-  > On a sign-up sheet's Class list step, click "Get my class list from Canvas". The
-  > helper asks your school's Canvas for your courses, then for the students in the
-  > one you pick, signed in as you, and hands Scheduler's page each student's name
-  > and email address. Nothing else is read. Nothing in Canvas changes. It never
-  > sees your password, does nothing until you ask on Scheduler's own site, and
-  > keeps nothing.
+  > Scheduler Helper brings a course's class list from your school's Canvas into
+  > Scheduler (scheduler-lottery.vercel.app), the presentation-day sign-up site, with
+  > one click. On a sign-up sheet's Class list step, press "Import class list" and pick
+  > the class. The first time, it asks you to allow it to read your school's Canvas
+  > site (until then it can read no website at all). It asks Canvas for your courses,
+  > then for the students in the one you pick, signed in as you, and hands Scheduler's
+  > page each student's name and email address. Nothing else is read. Nothing in
+  > Canvas changes. It never sees your password, does nothing until you ask on
+  > Scheduler's own site, and keeps nothing: no class list, no course, no sign-in.
+  > Once your list is in, it offers to delete itself.
 
 - **Category:** Education
 - **Language:** English
@@ -86,11 +90,16 @@ Click **New item** and upload `dist/scheduler-helper.zip`. Then fill in each tab
   > tab (Canvas's own API, as the signed-in user) to get the course list and class
   > list. It runs only when the user clicks the button on Scheduler's site.
 
-- **Why it needs the host permission (canvas.northwestern.edu):**
+- **Why it needs the optional host permission (https://*/*):**
 
-  > To read the user's courses and a chosen course's class list (names and email
-  > addresses) from Canvas's API, signed in as the user, when they ask on
-  > Scheduler's site. It never writes or changes anything.
+  > Schools run Canvas at their own addresses (canvas.myschool.edu), so the helper
+  > can't list them in advance. It has no host access at install. The first time a
+  > user imports a class list, the helper opens its own window naming their school's
+  > Canvas, and only on the user's click there asks Chrome for that one site
+  > (chrome.permissions.request with that origin alone). It then reads only the user's
+  > courses and a chosen course's class list (names and email addresses) from Canvas's
+  > API, signed in as the user, when they ask on Scheduler's site. It never writes or
+  > changes anything, and stores nothing.
 
 - **Remote code:** No, I am not using remote code.
 - **Data usage:** tick **Personally identifiable information** (names and email
@@ -116,8 +125,11 @@ Nothing to do: the site has the item's id and page built in (`settings.py`). Ver
 In Chrome and Edge (Edge installs from Chrome's store after an "Allow
 extensions from other stores" click, and the page says so):
 
-- The class-list step offers **Add Scheduler Helper to Chrome**.
-- Once the helper is added, the step offers **Get my class list from Canvas**.
+- The class-list step offers **Add Scheduler Helper to Chrome** (step 1).
+- Once the helper is added, step 1 is checked off and step 2 offers **Import class list**.
+- For schools other than Northwestern, the site offers it once the store has 1.1.0: it
+  asks Chrome's update service which version the store has (`helperstore.py`, every six
+  hours), so there's nothing to switch on.
 - Uploading Canvas's student file stays as a folded fallback.
 
 ## Updates
@@ -127,16 +139,15 @@ again, upload the new zip under **Package**, and submit. Then tag that version, 
 public build keeps its zip under the repository's Releases for good:
 
 ```bash
-git tag helper-v1.0.6 && git push origin helper-v1.0.6
+git tag helper-v1.1.0 && git push origin helper-v1.1.0
 ```
 
 (`.github/workflows/helper-release.yml` builds the zip from the tag, checks the tag
 matches the manifest's version, and attaches it with its sha256. Anyone can then check the
-store's copy against the code with `tools/verify_extension.py <file> --ref helper-v1.0.6`.) The store has 1.0.0: upload
-1.0.6 now (it is already the version in `extension/manifest.json`, so skip the bump this
-once). It asks for no new permissions, so Chrome updates professors who have the helper
-without asking them anything. Until it's approved, the site works with 1.0.0 too (its
-Remove button then shows the steps to remove it in Chrome's menu).
+store's copy against the code with `tools/verify_extension.py <file> --ref helper-v1.1.0`.)
+Until 1.1.0 is approved, the site works with 1.0.6 and 1.0.0 too, for Northwestern's
+Canvas.
 
-Keep the permissions exactly as they are. An update that adds a permission Chrome
-warns about turns the helper off until each professor approves it again.
+Keep `permissions` exactly as they are (`scripting`). An update that adds a permission
+Chrome warns about turns the helper off until each professor approves it again; optional
+host permissions don't.

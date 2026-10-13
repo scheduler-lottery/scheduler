@@ -105,8 +105,8 @@ CANVAS_HELPER_IDS = [CHROME_HELPER_ID] + [
 # The schools whose Canvas the helper can read, by email domain (a professor
 # at law.northwestern.edu is at northwestern.edu): the school's name and its
 # Canvas. Their professors are taken to be at that school without asking the
-# school directory. The Canvas sites are the manifest's host_permissions (a
-# test keeps the two the same); professors at other schools aren't offered it.
+# school directory. Before the store's helper reads any school's Canvas
+# (1.1.0: CANVAS_HELPER_ANY_SCHOOL below), only these schools are offered it.
 CANVAS_HELPER_SCHOOLS = {"northwestern.edu": ("Northwestern University", "canvas.northwestern.edu")}
 CANVAS_HELPER_HOSTS = [host for _name, host in CANVAS_HELPER_SCHOOLS.values()]
 # Trying it all locally: tools/fake_canvas.py's address (e.g. 127.0.0.1:5077)
@@ -115,6 +115,11 @@ CANVAS_HELPER_HOSTS = [host for _name, host in CANVAS_HELPER_SCHOOLS.values()]
 CANVAS_DEV_HOST = "" if IS_VERCEL else _env("CANVAS_DEV_HOST")
 if not re.fullmatch(r"(127\.0\.0\.1|localhost):\d{2,5}", CANVAS_DEV_HOST):
     CANVAS_DEV_HOST = ""
+# Scheduler Helper for any school's Canvas, not just those above (1.1.0 and
+# later read any, each allowed once by the professor): offered once the
+# Chrome Web Store has 1.1.0 (helperstore.py asks Chrome's update service).
+# CANVAS_HELPER_ANY_SCHOOL=1 or 0 decides outright instead.
+CANVAS_HELPER_ANY_SCHOOL = _env("CANVAS_HELPER_ANY_SCHOOL")
 # Short links for a class (shortlink.py, by spoo.me). SHORT_LINKS=0 turns them off.
 SHORT_LINKS = _env("SHORT_LINKS", "1") != "0"
 CANVAS_HELPER_STORE_URL = _env("CANVAS_HELPER_STORE_URL",

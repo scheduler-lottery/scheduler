@@ -1,0 +1,20 @@
+{# "Is any of this recorded?": what Scheduler Helper and this site keep from
+   Canvas, for the curious, next to the helper wherever it's offered. Each
+   line is true of the code (extension/background.js has no storage at all;
+   teach._take_canvas_list keeps only names and emails). #}
+<details class="nothing-kept">
+  <summary>Is any of this recorded?</summary>
+  <ul>
+    <li><strong>Scheduler Helper keeps nothing.</strong> It has no storage at all: not your class list, not your
+      course, not your Canvas sign-in. It reads Canvas only when you press <strong>Import class list</strong> here,
+      hands the names and emails straight to this page, and forgets them. It sends nothing anywhere else.</li>
+    <li><strong>{{ app_name }} keeps only the names and email addresses you add</strong>, so your students can sign
+      in. Not the Canvas course, its number, grades, your Canvas sign-in, or anything else from Canvas. Delete the list
+      or the sheet, and they go too (a deleted sheet can be brought back for 30 days, then it's gone for good).</li>
+    <li>So that updating the list later is one press, the browser on this computer remembers which Canvas course this
+      sheet is for. {{ app_name }} doesn't.</li>
+    <li>Check for yourself: <a href="{{ source_url }}/tree/main/extension" target="_blank" rel="noopener">the
+      helper's code</a>, <a href="{{ source_url }}" target="_blank" rel="noopener">this site's code</a>, and
+      <a href="{{ url_for('privacy') }}#canvas" target="_blank" rel="noopener">the privacy notes</a>.</li>
+  </ul>
+</details>

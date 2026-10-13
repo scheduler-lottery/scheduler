@@ -94,7 +94,7 @@
   </form>
   {% if diff.current %}<p class="mini-hint">Rankings are never deleted. Before your list changes, a copy of it is saved, so you can put it back with one click.</p>{% endif %}
   {% if from_helper %}
-  {# Nothing changes; back to Get my class list, which then shows the list of courses (teach.review_roster). #}
+  {# Nothing changes; back to Import class list, which then shows the list of courses (teach.review_roster). #}
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <p class="mini-hint">Wrong course? <button type="submit" name="action" value="pick" class="btn-link">Pick a different Canvas course</button></p>

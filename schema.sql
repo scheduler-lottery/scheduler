@@ -57,8 +57,8 @@ CREATE TABLE IF NOT EXISTS sheets (
     archived_at        TEXT,  -- tucked away on the dashboard (still works for students)
     theme              TEXT,  -- the class's look, set by its instructor (NULL = the standard look)
     font               TEXT,
-    canvas_course_id   TEXT,  -- the Canvas course its class list came from, if it did
-    canvas_course      TEXT,
+    canvas_course_id   TEXT,  -- no longer kept (always empty): the professor's browser remembers its Canvas course
+    canvas_course      TEXT,  -- (likewise)
     -- The deadline: sign-ups close by themselves at closes_at (UTC). at_close
     -- says what then: 'ask' (close and make the schedule if everyone ranked,
     -- otherwise ask the instructor), 'schedule' or 'publish'.

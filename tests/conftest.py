@@ -87,6 +87,7 @@ def app(request, tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "INSTRUCTOR_EMAIL_DOMAINS", [".edu"])
     monkeypatch.setattr(settings, "EMAIL_DAILY_LIMIT", 90)
     monkeypatch.setattr(settings, "CRON_SECRET", "cron-secret")
+    monkeypatch.setattr(settings, "CANVAS_HELPER_ANY_SCHOOL", "0")  # (no update service from the tests; a test turns it on)
     monkeypatch.setattr(settings, "SHORT_LINKS", False)  # (no spoo.me from the tests: test_short_links stands it in)
     # No real DNS lookups: every domain looks like it has no mail records.
     monkeypatch.setattr(compose, "lookup", lambda name, kind: [])

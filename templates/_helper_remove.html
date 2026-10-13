@@ -1,20 +1,38 @@
-{# After a class list Scheduler Helper brought (report.helper): an offer to
-   remove it from Chrome. app.js shows it only once the helper answers this
-   page, and not on a computer where "Keep it for next time" was pressed.
-   Helper 1.0.3 removes itself; with 1.0.0, the steps in Chrome's own menu,
-   and the page notices once it's gone. #}
+{# After a class list Scheduler Helper brought (report.helper): the
+   checklist of the Canvas step, its first two steps checked off, and the
+   last, "All done: delete it?", in one click. app.js shows it only once
+   the helper answers this page, and not on a computer where "Keep it for
+   next time" was pressed. Helper 1.0.3 and later delete themselves; with
+   1.0.0, the steps in Chrome's own menu, and the page notices once it's
+   gone. #}
 {% if report and report.helper and helper_ids %}
 <div class="helper-remove" data-helper-remove data-helper-ids="{{ helper_ids }}" data-report="{{ sheet.id }}-{{ report.at or '' }}" hidden>
-  <p data-helper-remove-ask><strong>All done with Scheduler Helper?</strong> Remove it from <span data-browser-name>Chrome</span> now, or keep it if you'll update this list from Canvas later (adding it back takes a few clicks).</p>
-  <div class="helper-remove-buttons">
-    <button type="button" class="btn btn-secondary btn-small" data-helper-remove-go>Remove it from <span data-browser-name>Chrome</span></button>
-    <button type="button" class="btn-link" data-helper-remove-keep>Keep it for next time</button>
-  </div>
-  <p class="mini-hint" data-helper-remove-said role="status"></p>
-  <ol class="helper-remove-steps" data-helper-remove-steps hidden>
-    <li>Click the puzzle piece at the top right of <span data-browser-name>Chrome</span>.</li>
-    <li>Click the three dots next to Scheduler Helper.</li>
-    <li>Click <strong data-remove-word>Remove from Chrome</strong>, then <strong>Remove</strong>.</li>
+  <ol class="helper-checklist">
+    <li class="helper-check is-done">
+      <span class="check-mark" aria-hidden="true"><span class="check-num">1</span></span>
+      <div class="check-body"><p class="check-title">Add Scheduler Helper<span class="visually-hidden"> (done)</span></p></div>
+    </li>
+    <li class="helper-check is-done">
+      <span class="check-mark" aria-hidden="true"><span class="check-num">2</span></span>
+      <div class="check-body"><p class="check-title">{{ 'Check the list against Canvas' if report.unchanged else 'Import your class list' }}<span class="visually-hidden"> (done)</span></p></div>
+    </li>
+    <li class="helper-check is-now" data-check="done">
+      <span class="check-mark" aria-hidden="true"><span class="check-num">3</span></span>
+      <div class="check-body">
+        <p class="check-title" data-helper-remove-ask><strong>All done!</strong> Delete Scheduler Helper from <span data-browser-name>Chrome</span>?<span class="visually-hidden" data-check-state> (next)</span></p>
+        <p class="mini-hint" data-helper-remove-why>One click, and it's gone. Or keep it, if you'll update this list from Canvas later (adding it back takes a few clicks).</p>
+        <div class="helper-remove-buttons">
+          <button type="button" class="btn btn-primary" data-helper-remove-go>Delete Scheduler Helper</button>
+          <button type="button" class="btn-link" data-helper-remove-keep>Keep it for next time</button>
+        </div>
+        <p class="mini-hint" data-helper-remove-said role="status"></p>
+        <ol class="helper-remove-steps" data-helper-remove-steps hidden>
+          <li>Click the puzzle piece at the top right of <span data-browser-name>Chrome</span>.</li>
+          <li>Click the three dots next to Scheduler Helper.</li>
+          <li>Click <strong data-remove-word>Remove from Chrome</strong>, then <strong>Remove</strong>.</li>
+        </ol>
+      </div>
+    </li>
   </ol>
 </div>
 {% endif %}

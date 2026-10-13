@@ -192,12 +192,10 @@ try {
     await until(s, `location.pathname === "/login" && !!document.querySelector("form")`, 10000);
     await evaluate(s, `document.querySelector("form").submit()`);
   }
-  check(await until(me.session, `!document.querySelector("[data-canvas-arrived]").hidden`, 20000)
-    && (await evaluate(me.session, `document.querySelector("[data-canvas-arrived]").innerText`)).includes("8 students from 2026FA_LAW_540_SEC20"),
-    "and back here, LAW 540's list, ready to add: no course to pick");
-  await evaluate(me.session, `document.querySelector("[data-canvas-arrived] form").requestSubmit()`);
-  check(await until(me.session, `document.readyState === "complete" && /Added 8 students/.test(document.body.innerText)`, 10000),
-    "Add: 8 students on the sheet");
+  check(await until(me.session, `document.readyState === "complete" && /Added 8 students from 2026FA_LAW_540_SEC20/.test(document.body.innerText)`, 20000),
+    "and back here, LAW 540's 8 students are on the sheet: no course to pick, nothing more to press");
+  check(await until(me.session, `!!document.querySelector("[data-helper-remove]") && !document.querySelector("[data-helper-remove]").hidden`, 10000),
+    "and the checklist's last step: All done! Delete Scheduler Helper?");
 } catch (err) {
   console.log("FAIL " + err.message);
   failures++;
