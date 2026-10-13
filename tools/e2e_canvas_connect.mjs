@@ -178,7 +178,7 @@ try {
   try { ws && ws.close(); } catch { /* fine */ }
   chrome.kill();
   await sleep(300);
-  rmSync(profile, { recursive: true, force: true });
+  try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 }); } catch { /* (Chrome still closing: the OS clears it) */ }
   console.log(failures ? `${failures} failed` : "all passed");
   process.exit(failures ? 1 : 0);
 }

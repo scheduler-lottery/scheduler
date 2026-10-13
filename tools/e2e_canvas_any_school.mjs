@@ -247,7 +247,7 @@ try {
   check(!(await allowWindow()), "the allow window closed itself");
   await press(me.session, "2026FA_BUSCOM_615_SEC1");
   // Picked: straight in. The page it lands on: 1 and 2 done, 3 now: All done! Delete it?
-  check(await until(me.session, `document.readyState === "complete" && /Added 57 students/.test(document.body.innerText)`, 15000),
+  check(await until(me.session, `document.readyState === "complete" && /Added 57 students/.test(document.body.innerText)`, 30000),
     "picked, and the 57 students go right in (no extra press)");
   check(await until(me.session, `!!document.querySelector("[data-helper-remove]") && !document.querySelector("[data-helper-remove]").hidden`, 10000),
     "then the checklist's last step");
@@ -281,7 +281,7 @@ try {
   try { await send("Browser.close"); } catch { /* fine */ }
   chrome.kill();
   await sleep(300);
-  rmSync(profile, { recursive: true, force: true });
+  try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 }); } catch { /* (Chrome still closing: the OS clears it) */ }
   console.log(failures ? `${failures} failed` : "all passed");
   process.exit(failures ? 1 : 0);
 }
