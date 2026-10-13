@@ -1111,6 +1111,12 @@ body.is-dragging .rank-item:not(.dragging) { pointer-events: none; }
 .tag-danger { background: var(--danger-bg); color: var(--danger); }
 
 .manual-move-row { display: flex; gap: 8px; align-items: center; margin: 12px 0; flex-wrap: wrap; }
+/* A dropdown is as wide as its longest choice ("Maximiliana … (now Tue,
+   Nov 17)"), and a file box as wide as its words: on a phone either one
+   made the whole page wider than the screen, so it opened zoomed out and
+   slid sideways under the thumb. Neither is ever wider than its row. */
+select, input[type="file"] { max-width: 100%; min-width: 0; }
+select { text-overflow: ellipsis; }
 
 @media (max-width: 480px) {
   .card { padding: 20px; border-radius: var(--radius-md); }
