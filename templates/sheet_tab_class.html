@@ -173,14 +173,14 @@
     {% if roster %}
     {% if counts.roster_with_email %}<p class="mini-hint">Student not getting the site's email? Press “Sign-in link” next to their name to send them one from your own email (or read them a code). For the whole class at once: <a href="{{ url_for('teach.email_links', sid=sheet.id) }}">send sign-in links from your own email</a>.</p>{% endif %}
     <div class="table-wrap">
-      <table class="admin-table compact">
+      <table class="admin-table compact roster-table">
         <thead><tr><th>Name</th><th>Email</th><th><span class="visually-hidden">Change</span></th></tr></thead>
         <tbody>
           {% for r in roster %}
           {% set editing = edit_form and edit_form.key == r.name_key %}
           <tr>
-            <td><bdi>{{ r.display_name }}</bdi>{% if r.is_test %} <span class="tag">test</span>{% endif %}{% if r.name_pending %} <span class="tag" title="Added by email alone. This name is made from the address until they sign in and type their own.">name not typed yet</span>{% endif %}</td>
-            <td class="muted">{{ r.email or '—' }}{% if r.name_key in typo_domains %} <span class="tag tag-warn">did you mean …@{{ typo_domains[r.name_key] }}?</span>{% endif %}{% if not r.email and not r.is_test and counts.roster_with_email %} <span class="tag tag-warn" title="Whoever types this name first chooses the PIN">no email — signs in with a PIN</span>{% endif %}</td>
+            <td class="roster-name"><bdi>{{ r.display_name }}</bdi>{% if r.is_test %} <span class="tag">test</span>{% endif %}{% if r.name_pending %} <span class="tag" title="Added by email alone. This name is made from the address until they sign in and type their own.">name not typed yet</span><span class="tag-why touch-only">Added by email alone: the name comes from the address until they sign in and type their own.</span>{% endif %}</td>
+            <td class="muted roster-email"><span class="roster-address">{{ r.email or '—' }}</span>{% if r.name_key in typo_domains %} <span class="tag tag-warn">did you mean …@{{ typo_domains[r.name_key] }}?</span>{% endif %}{% if not r.email and not r.is_test and counts.roster_with_email %} <span class="tag tag-warn" title="Whoever types this name first chooses the PIN">no email — signs in with a PIN</span><span class="tag-why touch-only">Whoever types this name first chooses the PIN.</span>{% endif %}</td>
             <td>
               {% if not r.is_test %}
               <div class="row-actions">
@@ -190,14 +190,16 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="name_key" value="{{ r.name_key }}">
                     <label class="visually-hidden" for="edit-name-{{ loop.index }}">Name</label>
-                    <input type="text" id="edit-name-{{ loop.index }}" name="name" value="{{ edit_form.name if editing else r.display_name }}" maxlength="60" required>
+                    <input type="text" id="edit-name-{{ loop.index }}" name="name" value="{{ edit_form.name if editing else r.display_name }}" maxlength="60" required
+                           autocomplete="off" autocapitalize="words" autocorrect="off" spellcheck="false">
                     <label class="visually-hidden" for="edit-email-{{ loop.index }}">Email</label>
-                    <input type="text" id="edit-email-{{ loop.index }}" name="email" value="{{ edit_form.email if editing else r.email }}" maxlength="254" placeholder="email">
+                    <input type="text" id="edit-email-{{ loop.index }}" name="email" value="{{ edit_form.email if editing else r.email }}" maxlength="254" placeholder="email"
+                           inputmode="email" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
                     <button type="submit" class="btn btn-secondary btn-small" aria-label="Save {{ r.display_name }}'s details">Save</button>
                   </form>
                 </details>
                 {% if r.name_key in submissions | map(attribute='key') | list %}
-                <details class="row-edit">
+                <details class="row-edit row-remove">
                   <summary class="btn btn-ghost btn-small" aria-label="Remove {{ r.display_name }}">Remove</summary>
                   <form method="post" action="{{ url_for('teach.remove_student', sid=sheet.id) }}" class="stack-tight">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -209,7 +211,7 @@
                   </form>
                 </details>
                 {% else %}
-                <form method="post" action="{{ url_for('teach.remove_student', sid=sheet.id) }}" data-confirm="Take {{ r.display_name }} off the class list?">
+                <form method="post" action="{{ url_for('teach.remove_student', sid=sheet.id) }}" class="row-remove" data-confirm="Take {{ r.display_name }} off the class list?">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                   <input type="hidden" name="name_key" value="{{ r.name_key }}">
                   <button type="submit" class="btn btn-ghost btn-small" aria-label="Remove {{ r.display_name }} from the list">Remove</button>
@@ -471,7 +473,7 @@
   <div class="helper-row">
     <label for="find-student" class="visually-hidden">Find a student</label>
     <input type="search" id="find-student" placeholder="Find a student…" data-filter="#signups-table tbody tr" class="input-medium">
-    <a class="btn btn-ghost btn-small" href="{{ url_for('teach.rankings_csv', sid=sheet.id) }}">Download rankings (opens in Excel)</a>
+    <a class="btn btn-ghost btn-small" href="{{ url_for('teach.rankings_csv', sid=sheet.id) }}">Download rankings <span class="mouse-only">(opens in Excel)</span><span class="touch-only">(a spreadsheet file)</span></a>
   </div>
   {% if pins %}<p class="mini-hint">Student forgot their PIN? Press “Reset PIN” next to their name.</p>{% endif %}
   {% if submissions | length > 30 %}
@@ -486,22 +488,24 @@
     <tbody>
       {% for s in submissions %}
       <tr>
-        <td>
+        <td class="signup-name">
           <bdi>{{ s.name }}</bdi>
           {% if s.is_test %}<span class="tag">test</span>{% endif %}
           {% if s.unlisted and counts.roster %}<span class="tag tag-warn">not on class list</span>{% endif %}
-          {% if s.has_pin %}<span class="tag" title="Signed in with a name and PIN, not an emailed code">PIN</span>{% endif %}
+          {% if s.has_pin %}<span class="tag" title="Signed in with a name and PIN, not an emailed code">PIN</span><span class="tag-why touch-only">Signed in with a name and PIN, not an emailed code.</span>{% endif %}
           {% if s.locked %}<span class="tag tag-danger">PIN locked — too many wrong tries</span>{% endif %}
         </td>
-        <td>
-          {% for label in s.ranking %}<span class="chip">{{ label }}</span>{% if not loop.last %} → {% endif %}{% endfor %}
+        {# (Phones show each row as a card: data-label names each part, and
+           the ranking's chips carry their numbers.) #}
+        <td data-label="Ranking (favorite first)">
+          <span class="rank-chips">{% for label in s.ranking %}<span class="chip"><span class="chip-num">{{ loop.index }}</span>{{ label }}</span>{% if not loop.last %}<span class="chip-arrow"> → </span>{% endif %}{% endfor %}</span>
           {% if s.unranked_days %}<span class="mini-hint">not ranked yet: {{ s.unranked_days | join(', ') }}</span>{% endif %}
         </td>
-        <td>{% for label in s.excluded %}<span class="chip chip-danger">{{ label }}</span>{% endfor %}</td>
-        <td>{% for label, text in s.comments %}<div class="comment-note"><strong>{{ label }}:</strong> {{ text }}</div>{% endfor %}</td>
+        <td data-label="Can't do">{% for label in s.excluded %}<span class="chip chip-danger">{{ label }}</span>{% endfor %}</td>
+        <td data-label="Notes">{% for label, text in s.comments %}<div class="comment-note"><strong>{{ label }}:</strong> {{ text }}</div>{% endfor %}</td>
         {% set t = (s.first_at or s.updated_at) if sheet.algorithm == 'first_come' else s.updated_at %}
-        <td class="muted nowrap"><time datetime="{{ t }}" data-local>{{ t[:16] }}</time></td>
-        <td>
+        <td class="muted nowrap signup-saved" data-label="{{ 'First ranked' if sheet.algorithm == 'first_come' else 'Saved' }}"><time datetime="{{ t }}" data-local>{{ t[:16] }}</time></td>
+        <td class="signup-actions">
           <div class="row-actions">
           {% if s.locked %}
           <form method="post" action="{{ url_for('teach.unlock_pin', sid=sheet.id) }}">
@@ -522,7 +526,7 @@
             </form>
           </details>
           {% endif %}
-          <form method="post" action="{{ url_for('teach.delete_submission', sid=sheet.id) }}" data-confirm="Delete {{ s.name }}'s ranking{{ ' and notes' if s.comments }}? You can undo this right after.">
+          <form method="post" action="{{ url_for('teach.delete_submission', sid=sheet.id) }}" class="row-delete" data-confirm="Delete {{ s.name }}'s ranking{{ ' and notes' if s.comments }}? You can undo this right after.">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="name_key" value="{{ s.key }}">
             <button type="submit" class="btn btn-ghost btn-small" aria-label="Delete {{ s.name }}'s ranking">Delete ranking</button>
