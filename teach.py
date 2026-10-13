@@ -1049,7 +1049,7 @@ def _changed_emails(sheet, snap_id, roster_rows):
 # Each class has three tabs: Class (the class at a glance and its sign-ups),
 # Schedule (running the bidding) and Settings (days, backups, deleting).
 # Anchors say which tab a section lives on, for links and redirects.
-SCHEDULE_ANCHORS = {"schedule", "publish", "no-day", "algorithm", "matching", "capacity", "move-who", "move-to"}
+SCHEDULE_ANCHORS = {"schedule", "publish", "no-day", "algorithm", "matching", "capacity", "move", "move-who", "move-to"}
 SETTINGS_ANCHORS = {"settings", "progress-emails", "backups", "danger"}
 TAB_TEMPLATES = {"class": "sheet_tab_class.html", "schedule": "sheet_tab_schedule.html",
                  "settings": "sheet_tab_settings.html"}
@@ -3239,12 +3239,12 @@ def move_student(sid):
     name = _person_name(sheet, key)
     if day_key not in labels or not name:
         flash("Pick a student and a day.", "error")
-        return _back(sheet, "schedule")
+        return _back(sheet, "move")
     current = db.row("SELECT day_key FROM assignments WHERE sheet_id = :sid AND name_key = :key",
                      sid=sheet["id"], key=key)
     if current and current["day_key"] == day_key:
         flash(f"{name} is already on {labels[day_key]}.", "info")
-        return _back(sheet, "schedule")
+        return _back(sheet, "move")
     if current:
         db.run("UPDATE assignments SET day_key = :day, method = :method, assigned_at = :at "
                "WHERE sheet_id = :sid AND name_key = :key",
@@ -3269,7 +3269,7 @@ def move_student(sid):
     if sheet["published_at"]:
         message += f" {name} can see this change now."
     flash(message, "info" if warnings else "success")
-    return _back(sheet, "schedule")
+    return _back(sheet, "move")  # (back at the Move form, ready for the next one)
 
 
 @bp.route("/s/<sid>/publish", methods=["POST"])

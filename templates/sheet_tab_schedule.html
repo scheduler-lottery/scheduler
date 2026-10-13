@@ -4,7 +4,7 @@
 {# The days you picked, as calendar pages, each with its seats: blank
    until there's a schedule, then who's on that day. #}
 {% macro day_board(filled) %}
-<div class="day-board">
+<div class="day-board{{ '' if filled else ' is-blank' }}">
   {% for d in days %}
   {% set people = by_day[d.key] if filled else [] %}
   {% set parts = d.date | day_parts %}
@@ -64,6 +64,13 @@
   {% if not has_schedule %}
   <p class="board-lead">Your {{ days | length | plural('day') }}, with {{ sheet.capacity_per_day | plural('seat') }} each. The seats fill in once you make the schedule.</p>
   {{ day_board(False) }}
+  {# Phones: until there's a schedule, the empty days are one line, not a
+     screenful of blank calendar pages above the buttons. #}
+  <details class="board-fold">
+    <summary>{{ days | length | plural('day') }}, {{ sheet.capacity_per_day | plural('seat') }} each</summary>
+    <ul class="board-days">{% for d in days %}<li>{{ d.label }}</li>{% endfor %}</ul>
+    <p class="mini-hint">The seats fill in once you make the schedule.</p>
+  </details>
   {% endif %}
 
   {% set ranked = counts.listed_submissions + counts.unlisted_submissions %}
@@ -106,7 +113,7 @@
 
   {% if sheet.bidding_open %}
   <div class="run-row">
-    <form method="post" action="{{ url_for('teach.close_and_schedule', sid=sheet.id) }}"
+    <form id="close-make-form" method="post" action="{{ url_for('teach.close_and_schedule', sid=sheet.id) }}"
           data-confirm="{% if counts.waiting > 0 %}{{ counts.waiting }} of {{ counts.roster }} students on your list {{ 'hasn' if counts.waiting == 1 else 'haven' }}'t ranked yet{% if sheet.include_unranked %} — they'll get whatever seats are left{% else %} and won't get a day{% endif %}. {% endif %}{% if counts.unlisted_submissions and counts.roster %}{{ counts.unlisted_submissions | plural('ranking is', 'rankings are') }} from names not on your list. {% endif %}{% if manual_moves %}Your hand-made moves ({{ manual_moves | join(', ') }}) will be replaced — you can undo. {% endif %}Close sign-ups and make the schedule now?">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-primary btn-large" {{ 'disabled' if not counts.submissions and not counts.test_submissions }}>Close sign-ups and make the schedule</button>
@@ -116,7 +123,7 @@
   <p class="mini-hint">A student is never put on a day they marked as one they can't do. If every day they can do fills up (or they marked every day), they're left without a day and listed here for you to place, with their notes — nobody is bumped to make room.</p>
   {% elif not has_schedule %}
   <div class="run-row">
-    <form method="post" action="{{ url_for('teach.run_assignment', sid=sheet.id) }}">
+    <form id="make-form" method="post" action="{{ url_for('teach.run_assignment', sid=sheet.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-primary btn-large">Make the schedule</button>
     </form>
@@ -129,7 +136,7 @@
     {% elif stale and not published %}
     <div class="warn-box">
       <p>Rankings or settings changed after you made this schedule. Nobody has seen it yet, so make it again to use them.</p>
-      <form method="post" action="{{ url_for('teach.run_assignment', sid=sheet.id) }}"
+      <form id="make-again-form" method="post" action="{{ url_for('teach.run_assignment', sid=sheet.id) }}"
             data-confirm="Make the schedule again? Everyone's day is worked out fresh from the rankings{% if manual_moves %}, and your hand-made moves ({{ manual_moves | join(', ') }}) are replaced{% endif %}. You can undo it.">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn btn-primary">Make the schedule again</button>
@@ -183,7 +190,7 @@
         {% endif %}
       </ul>
       {% if fill_count %}
-      <form method="post" action="{{ url_for('teach.give_open_seats', sid=sheet.id) }}">
+      <form id="fill-form" method="post" action="{{ url_for('teach.give_open_seats', sid=sheet.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn btn-primary btn-small">Give them the open seats ({{ fill_count | plural('student gets', 'students get') }} a day)</button>
       </form>
@@ -199,9 +206,10 @@
     {% endif %}
     {% if tests_left_out %}<p class="mini-hint">Test students are left out, because real students have ranked.</p>{% endif %}
 
+    {% if placed | selectattr('choice') | list %}<p class="mini-hint touch-only">“choice #2” means that day was second on the student's own list.</p>{% endif %}
     {{ day_board(True) }}
 
-    <h3 class="move-heading">Move a student</h3>
+    <h3 class="move-heading" id="move">Move a student</h3>
     <form method="post" action="{{ url_for('teach.move_student', sid=sheet.id) }}" class="manual-move-row">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label for="move-who" class="visually-hidden">Student</label>
@@ -217,7 +225,7 @@
       <button type="submit" class="btn btn-secondary">Move</button>
     </form>
 
-    <p><a href="{{ url_for('teach.export_csv', sid=sheet.id) }}" class="btn btn-secondary">Download the schedule (opens in Excel)</a></p>
+    <p><a href="{{ url_for('teach.export_csv', sid=sheet.id) }}" class="btn btn-secondary">Download the schedule <span class="mouse-only">(opens in Excel)</span><span class="touch-only">(a spreadsheet file)</span></a></p>
 
     {% if stale and published and not sheet.bidding_open %}
     <div class="soft-note">
@@ -249,7 +257,7 @@
       <p>Publishing shows each student their own day when they open the class link{% if sheet.show_preview %}, and the whole schedule{% endif %}.</p>
       {% set nobody = (needs_day | map(attribute='name') | list) + (didnt_rank | map(attribute='display_name') | list) %}
       {% if nobody %}<p class="warn-line">{{ nobody | length | plural('student has', 'students have') }} no day yet: {{ nobody[:8] | join(', ') }}{{ ' …' if nobody | length > 8 }}. If you publish now, they'll see that they have no day.</p>{% endif %}
-      <form method="post" action="{{ url_for('teach.publish', sid=sheet.id) }}"
+      <form id="publish-form" method="post" action="{{ url_for('teach.publish', sid=sheet.id) }}"
             {% if stale or nobody %}data-confirm="{% if nobody %}{{ nobody | length | plural('student has', 'students have') }} no day yet ({{ nobody[:5] | join(', ') }}{{ ' …' if nobody | length > 5 }}). {% endif %}{% if stale %}The schedule is out of date (rankings or settings changed). {% endif %}Publish it anyway?"{% endif %}>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <button type="submit" class="btn btn-primary btn-large">Publish: show students their day</button>
@@ -284,4 +292,25 @@
     </form>
   </details>
 </section>
+
+{# Phones: the one step to take next, in a bar pinned to the bottom of the
+   screen, so it's never three screens down. Its button submits that
+   step's own form above (form=), with the same "are you sure?". #}
+{% set next_form, next_label = '', '' %}
+{% if sheet.bidding_open %}
+  {% if counts.submissions or counts.test_submissions %}{% set next_form, next_label = 'close-make-form', 'Close sign-ups and make the schedule' %}{% endif %}
+{% elif not has_schedule %}
+  {% set next_form, next_label = 'make-form', 'Make the schedule' %}
+{% elif stale and not published %}
+  {% set next_form, next_label = 'make-again-form', 'Make the schedule again' %}
+{% elif without_day and fill_count %}
+  {% set next_form, next_label = 'fill-form', 'Give them the open seats' %}
+{% elif not published %}
+  {% set next_form, next_label = 'publish-form', 'Publish: show students their day' %}
+{% endif %}
+{% if next_form %}
+<div class="next-bar">
+  <button type="submit" form="{{ next_form }}" class="btn btn-primary">{{ next_label }}</button>
+</div>
+{% endif %}
 {% endblock %}
