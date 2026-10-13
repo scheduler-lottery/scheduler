@@ -592,14 +592,37 @@
   // Setting up a new sheet: one question at a time, with Back and Next and
   // the setup's progress bar ("Step 2 of 8"); the last question creates the
   // sheet. Without JavaScript it's one form.
+  // Each question is a step in the browser's history, so the phone's Back
+  // (Android's button, the iPhone's swipe from the edge) goes back one
+  // question rather than off the page. The answers so far are kept for this
+  // tab, so a reload, or leaving and coming back, finds them still there.
+  var WIZARD_KEY = "new-sheet-answers";
+  document.querySelectorAll("[data-wizard-cancel]").forEach(function (link) {
+    link.addEventListener("click", function () {
+      try { sessionStorage.removeItem(WIZARD_KEY); } catch (e) { /* fine */ }
+    });
+  });
   document.querySelectorAll("form[data-wizard]").forEach(function (form) {
     var steps = Array.prototype.slice.call(form.querySelectorAll("[data-wizard-step]"));
+    var names = steps.map(function (step) { return step.getAttribute("data-wizard-step"); });
     var progress = form.querySelector("[data-setup-progress]");
     var error = form.querySelector("[data-wizard-error]");
     var back = form.querySelector("[data-wizard-back]");
     var next = form.querySelector("[data-wizard-next]");
     var done = form.querySelector("[data-wizard-done]");
+    var chips = form.querySelector("[data-day-chips]");
+    var phone = window.matchMedia ? window.matchMedia("(max-width: 640px)") : { matches: false };
     var at = 0;
+    var depth = 0; // how many of this page's questions are in the history before this one
+    // On a phone, the question goes near the top of the screen (under the
+    // top bar, if it stays put), with its step of the setup just above it.
+    var place = function () {
+      var bar = document.querySelector(".topbar");
+      var covered = bar && /sticky|fixed/.test(getComputedStyle(bar).position)
+        ? Math.max(0, bar.getBoundingClientRect().bottom) : 0;
+      var top = (progress || steps[at]).getBoundingClientRect().top;
+      window.scrollTo(0, Math.max(0, window.pageYOffset + top - covered - 8));
+    };
     var show = function (i, focus) {
       at = Math.max(0, Math.min(i, steps.length - 1));
       steps.forEach(function (step, n) { step.hidden = n !== at; });
@@ -617,25 +640,119 @@
       done.hidden = at !== steps.length - 1;
       error.hidden = true;
       var question = steps[at].querySelector(".wizard-q");
-      if (focus && question) question.focus();
+      if (focus && question) {
+        if (phone.matches) {
+          question.focus({ preventScroll: true });
+          place();
+        } else {
+          question.focus();
+        }
+      }
     };
     var problem = function (step) {
       var title = step.querySelector("#title");
       if (title && !title.value.trim()) return "Give the class a name. It's what your students will see.";
-      var chips = step.querySelector("[data-day-chips]");
-      if (chips && chips.querySelectorAll(".day-chip").length < 2) {
+      var dayChips = step.querySelector("[data-day-chips]");
+      if (dayChips && dayChips.querySelectorAll(".day-chip").length < 2) {
         return "Pick at least two days on the calendar for students to choose between.";
       }
       var seats = step.querySelector("#capacity");
       if (seats && !(parseInt(seats.value, 10) >= 1)) return "Seats per day should be a whole number, like 4.";
       return "";
     };
+    // The furthest question that can show: none past one still unanswered.
+    var reachable = function (i) {
+      for (var n = 0; n < i; n++) if (problem(steps[n])) return n;
+      return i;
+    };
+    var remember = function (push) {
+      var state = { wizardStep: names[at], wizardDepth: depth };
+      try {
+        if (push) history.pushState(state, "");
+        else history.replaceState(Object.assign({}, history.state, state), "");
+      } catch (e) { /* fine: Back leaves the page, as it would anyway */ }
+    };
+
+    // The answers so far, for this tab only (sessionStorage).
+    var field = function (name) { return form.elements.namedItem(name); };
+    var KEPT = ["title", "capacity", "close_date", "close_time", "at_close", "note", "allow_unlisted"];
+    var sent = false; // (once the sheet is being created, there's nothing in progress to keep)
+    var keep = function () {
+      if (sent) return;
+      var answers = { days: [] };
+      KEPT.forEach(function (name) { if (field(name)) answers[name] = field(name).value; });
+      if (field("show_preview")) answers.show_preview = field("show_preview").checked;
+      if (chips) {
+        chips.querySelectorAll("li").forEach(function (li) {
+          var date = li.querySelector('input[name="day_date"]');
+          var label = li.querySelector('input[name="day_label"]');
+          if (date && date.value) answers.days.push([date.value, label ? label.value : ""]);
+        });
+      }
+      try { sessionStorage.setItem(WIZARD_KEY, JSON.stringify(answers)); } catch (e) { /* fine */ }
+    };
+    var restore = function () {
+      var answers = null;
+      try { answers = JSON.parse(sessionStorage.getItem(WIZARD_KEY) || "null"); } catch (e) { /* fine */ }
+      if (!answers) return;
+      KEPT.forEach(function (name) {
+        var el = field(name);
+        var value = answers[name];
+        if (!el || typeof value !== "string") return;
+        if (el.tagName === "SELECT" && !el.querySelector('option[value="' + value + '"]')) return;
+        el.value = value;
+      });
+      if (field("show_preview") && typeof answers.show_preview === "boolean") field("show_preview").checked = answers.show_preview;
+      // The days, as the list the calendar (calendar.js) starts from.
+      if (chips && answers.days && answers.days.length) {
+        chips.innerHTML = "";
+        answers.days.forEach(function (day) {
+          var li = document.createElement("li");
+          li.className = "day-chip";
+          [["day_key", ""], ["day_date", day[0]], ["day_label", day[1]]].forEach(function (pair) {
+            var input = document.createElement("input");
+            input.type = "hidden";
+            input.name = pair[0];
+            input.value = pair[1];
+            li.appendChild(input);
+          });
+          chips.appendChild(li);
+        });
+      }
+      // (So the Draft pill, the character counts and the deadline's notes follow.)
+      ["title", "note"].forEach(function (name) {
+        if (field(name)) field(name).dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      if (field("close_date")) field("close_date").dispatchEvent(new Event("change", { bubbles: true }));
+    };
+
     next.addEventListener("click", function () {
       var says = problem(steps[at]);
       if (says) { error.textContent = says; error.hidden = false; return; }
       show(at + 1, true);
+      depth += 1;
+      remember(true);
+      keep();
     });
-    back.addEventListener("click", function () { show(at - 1, true); });
+    // Back: the question before, the same way the phone's Back gets there.
+    back.addEventListener("click", function () {
+      if (depth > 0 && history.state && history.state.wizardStep === names[at]) {
+        history.back();
+        return;
+      }
+      show(at - 1, true);
+      remember(false);
+    });
+    window.addEventListener("popstate", function (e) {
+      var state = e.state;
+      var i = state && typeof state.wizardStep === "string" ? names.indexOf(state.wizardStep) : -1;
+      if (i < 0) return; // (some other step, such as a pop-up's)
+      depth = state.wizardDepth || 0;
+      var shown = reachable(i);
+      if (shown === at) return; // (a pop-up closing, back on this question)
+      show(shown, true);
+      if (shown !== i) remember(false);
+    });
     // Enter in a field moves on, rather than creating the sheet half set up.
     form.addEventListener("keydown", function (e) {
       if (e.key === "Enter" && e.target.tagName === "INPUT" && at < steps.length - 1) {
@@ -643,9 +760,29 @@
         next.click();
       }
     });
-    var start = steps.map(function (step) { return step.getAttribute("data-wizard-step"); })
-      .indexOf(form.getAttribute("data-wizard-start"));
+    form.addEventListener("input", keep);
+    form.addEventListener("change", keep);
+    window.addEventListener("pagehide", keep);
+    form.addEventListener("submit", function () {
+      sent = true;
+      try { sessionStorage.removeItem(WIZARD_KEY); } catch (e) { /* fine */ }
+    });
+    window.addEventListener("pageshow", function (e) { if (e.persisted) sent = false; }); // (Back to this very page)
+
+    // Where to start: a blank form gets the answers kept for this tab, and
+    // the question it was on when the page was last here (a reload, or Back
+    // to it), if the ones before it are answered. A form the server sent
+    // back with a problem starts at that problem.
+    var start = names.indexOf(form.getAttribute("data-wizard-start"));
+    var was = history.state && typeof history.state.wizardStep === "string" ? names.indexOf(history.state.wizardStep) : -1;
+    if (was >= 0) depth = history.state.wizardDepth || 0;
+    var blank = field("title") && !field("title").defaultValue && !(chips && chips.querySelector("li"));
+    if (blank) {
+      restore();
+      if (was > 0) start = reachable(was);
+    }
     show(start > 0 ? start : 0, false);
+    remember(false);
     // The first question's box, ready to type in (once the page shows: a
     // page still hidden while its fonts load can't take focus).
     var ready = function () {
