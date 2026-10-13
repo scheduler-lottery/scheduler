@@ -2,7 +2,7 @@
 {% block title %}{{ sheet.title }}{% endblock %}
 {% block content %}
 <div class="card">
-  <p class="eyebrow">{{ sheet.title }}</p>
+  <p class="eyebrow eyebrow-sheet">{{ sheet.title }}</p>
   <h1>Hi <bdi>{{ name }}</bdi></h1>
 
   {% if published %}
@@ -30,6 +30,7 @@
   {% endif %}
 
   {% if has_submitted %}
+  {% if not (published and my_day) %}{# (once their day is out, that's the news) #}
   <div class="status-badge status-done">
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/>
@@ -37,6 +38,7 @@
     </svg>
     {{ 'Your ranking is saved — you can change it until sign-ups close' if sheet.bidding_open else 'Your ranking is saved — sign-ups are closed' }}
   </div>
+  {% endif %}
   {% if new_days and sheet.bidding_open %}
   <div class="disclaimer disclaimer-yellow">
     Your instructor added {{ new_days | join(', ') }} after you ranked. It's at the bottom of your list for now —
@@ -44,11 +46,11 @@
   </div>
   {% endif %}
   {% if summary %}
-  <div class="ranking-summary">
+  {% if published %}<details class="ranking-summary"><summary>Your ranking</summary>{% else %}<div class="ranking-summary">{% endif %}
     <p class="mini-hint">Your ranking, saved <time datetime="{{ summary.saved_at }}" data-local>{{ summary.saved_at[:16] }}</time>:</p>
     <ol class="summary-list">{% for label in summary.ranking %}<li>{{ label }}</li>{% endfor %}</ol>
     {% if summary.cant %}<p class="mini-hint">Can't do: {{ summary.cant | join(' · ') }}</p>{% endif %}
-  </div>
+  {% if published %}</details>{% else %}</div>{% endif %}
   {% endif %}
   {% elif sheet.bidding_open %}
   <div class="status-badge status-pending">
@@ -74,7 +76,7 @@
 
   <div class="action-tiles">
     {% if sheet.bidding_open or has_submitted %}
-    <a href="{{ url_for('student.rank', sid=sheet.id) }}" class="action-tile">
+    <a href="{{ url_for('student.rank', sid=sheet.id) }}" class="action-tile{{ ' home-tile-tabbed' if has_submitted }}">
       <span class="action-tile-icon">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -84,7 +86,7 @@
     </a>
     {% endif %}
     {% if sheet.show_preview and (published or sheet.bidding_open) %}
-    <a href="{{ url_for('student.schedule', sid=sheet.id) }}" class="action-tile">
+    <a href="{{ url_for('student.schedule', sid=sheet.id) }}" class="action-tile home-tile-tabbed">
       <span class="action-tile-icon">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <rect x="3.5" y="5" width="17" height="15" rx="2.5" stroke="currentColor" stroke-width="1.8"/>
@@ -110,7 +112,7 @@
   {% endif %}
 
   <div class="signout-row">
-    <span class="signout-who">Signed in as <strong><bdi>{{ name }}</bdi></strong>{% if shared %} · on a shared computer{% endif %}</span>
+    <span class="signout-who">Not <strong><bdi>{{ name }}</bdi></strong>?{% if shared %} (On a shared computer: sign out when you're done.){% endif %}</span>
     <form method="post" action="{{ url_for('student.logout', sid=sheet.id) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="submit" class="btn btn-ghost">
@@ -122,7 +124,6 @@
     </button>
     </form>
   </div>
-  <p class="mini-hint">On a shared computer? Sign out when you're done.</p>
   {% if other_classes > 0 %}
   <form method="post" action="{{ url_for('student.logout_all', sid=sheet.id) }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

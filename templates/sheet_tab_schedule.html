@@ -40,9 +40,10 @@
 
 {% block sheet_body %}
 <p class="tab-lead">
-  {% if counts.roster %}<strong>{{ counts.listed_submissions }} of {{ counts.roster }}</strong> on your list {{ 'has' if counts.listed_submissions == 1 else 'have' }} ranked{% else %}<strong>{{ counts.submissions | plural('person has', 'people have') }}</strong> ranked{% endif %},
-  and sign-ups are <strong>{{ 'open' if sheet.bidding_open else 'closed' }}</strong>.
-  <a href="{{ tab_href(sheet.id, 'signups') }}">See who has signed up</a>
+  {# (While sign-ups are open, the Next step card above says how many have ranked.) #}
+  {% if not sheet.bidding_open %}{% if counts.roster %}<strong>{{ counts.listed_submissions }} of {{ counts.roster }}</strong> on your list {{ 'has' if counts.listed_submissions == 1 else 'have' }} ranked{% else %}<strong>{{ counts.submissions | plural('person has', 'people have') }}</strong> ranked{% endif %},
+  and sign-ups are <strong>closed</strong>.{% endif %}
+  <a href="{{ tab_href(sheet.id, 'signups') }}">See who has ranked</a>
 </p>
 
 {# -------------------------------------------------------------- schedule #}
@@ -75,7 +76,7 @@
 
   {% set ranked = counts.listed_submissions + counts.unlisted_submissions %}
   <details class="modify-days" id="capacity">
-    <summary>Modify this</summary>
+    <summary>Change days or seats</summary>
     {% if ranked %}
     <div class="warn-box">
       <p><strong>{{ ranked | plural('student has', 'students have') }} already ranked these days.</strong> Changing the
@@ -240,8 +241,8 @@
     {% if not sheet.bidding_open %}
     <div class="publish-box" id="publish">
       {% if published %}
-      <h3>Published — students can see their day</h3>
-      <p>Each student sees their day when they open the class link. Post this to let them know:</p>
+      <h3>Published! Let your class know</h3>
+      <p>Post this message:</p>
       <label for="publish-message" class="visually-hidden">Message for students</label>
       <textarea id="publish-message" rows="5" class="announcement">{{ publish_announcement }}</textarea>
       <div class="helper-row">
@@ -298,7 +299,7 @@
    step's own form above (form=), with the same "are you sure?". #}
 {% set next_form, next_label = '', '' %}
 {% if sheet.bidding_open %}
-  {% if counts.submissions or counts.test_submissions %}{% set next_form, next_label = 'close-make-form', 'Close sign-ups and make the schedule' %}{% endif %}
+  {% if (counts.submissions or counts.test_submissions) and not (counts.roster and counts.waiting) %}{% set next_form, next_label = 'close-make-form', 'Close sign-ups and make the schedule' %}{% endif %}
 {% elif not has_schedule %}
   {% set next_form, next_label = 'make-form', 'Make the schedule' %}
 {% elif stale and not published %}

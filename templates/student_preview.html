@@ -2,7 +2,7 @@
 {% block title %}{{ 'Draft schedule' if mode == 'draft' else 'Schedule' }} — {{ sheet.title }}{% endblock %}
 {% block content %}
 <div class="card">
-  <p class="eyebrow">{{ sheet.title }}</p>
+  <p class="eyebrow eyebrow-sheet">{{ sheet.title }}</p>
   {% if mode == 'final' %}
     <h1>The schedule</h1>
     {% if my_day %}
@@ -74,6 +74,6 @@
     {% endif %}
   {% endif %}
 
-  <p><a class="btn btn-secondary" href="{{ url_for('student.home', sid=sheet.id) }}">← Back</a></p>
+  <p class="back-link-tabbed"><a class="btn btn-secondary" href="{{ url_for('student.home', sid=sheet.id) }}">← Back</a></p>
 </div>
 {% endblock %}

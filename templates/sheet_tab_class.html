@@ -6,7 +6,6 @@
 <nav class="page-jump" aria-label="On this page">
   <a href="#class-list">Class list</a>
   <a href="#try-it">See it as a student</a>
-  <a href="#share">Share</a>
   <a href="#signups">Sign-ups</a>
 </nav>
 {# The class list at a glance, and the way to bring it up to date from
@@ -102,7 +101,7 @@
     <label for="quick-add-people" class="field-label">Add students</label>
     <p class="field-help">Their school emails, with names if you have them: one per line, or separated by commas. Anyone added by email alone types their name the first time they sign in.</p>
     <div class="quick-add-row">
-      <textarea id="quick-add-people" name="people" rows="2" placeholder="e.g., alex.johnson@school.edu, Sam Lee &lt;sam@school.edu&gt;"></textarea>
+      <textarea id="quick-add-people" name="people" rows="2" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="e.g., alex.johnson@school.edu, Sam Lee &lt;sam@school.edu&gt;"></textarea>
       <button class="btn btn-secondary" type="submit">Add them</button>
     </div>
   </form>
@@ -281,7 +280,7 @@
 {# ----------------------------------------------------------------- share #}
 {% set alert = False %}
 <details class="card fold-card" id="share" data-fold="share-{{ sheet.id }}"{% if alert %} open data-fold-alert{% endif %}>
-  <summary class="fold-summary"><h2 class="card-heading">Share with your class</h2></summary>
+  <summary class="fold-summary"><h2 class="card-heading">Share the link</h2></summary>
   {% if published %}
   <p>The schedule is published. To tell your class, post this in Canvas:</p>
   <label for="announcement-published" class="visually-hidden">Message for students</label>

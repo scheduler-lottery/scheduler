@@ -218,6 +218,8 @@ select,
   justify-content: space-between;
   gap: 10px;
   padding: 10px 16px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
   flex-wrap: nowrap;
 }
 
@@ -366,6 +368,13 @@ select,
    each with a word under it.
    --------------------------------------------------------------- */
 .topbar-title, .dock-word, .word-more { display: none; }
+/* The phone tab bar's More: its window says "More", and leaves out what the
+   tab bar under it already goes to. */
+.window-more { display: none; }
+@media (max-width: 640px) {
+  body.has-tabbar .window-settings, body.has-tabbar #account [data-in-tabbar] { display: none; }
+  body.has-tabbar .window-more { display: inline; }
+}
 @media (pointer: coarse) and (min-width: 641px) {
   .topbar-inner { padding-top: 7px; padding-bottom: 7px; }
   .icon-dock { gap: 4px; }
@@ -374,7 +383,7 @@ select,
   /* (signed in: the words need the brand name's room) */
   .topbar:has([data-dock="fold"]) .brand-name { display: none; }
 }
-@media (pointer: coarse) and (min-width: 641px) and (max-width: 800px) {
+@media (pointer: coarse) and (min-width: 641px) and (max-width: 960px) {
   .icon-dock [data-dock="fold"], .word-settings { display: none; }
   .word-more { display: inline; }
 }
@@ -385,7 +394,13 @@ select,
 html.kb-open .topbar { position: static; }
 @media (max-width: 640px) {
   .topbar { position: static; backdrop-filter: none; -webkit-backdrop-filter: none; }
-  .topbar-inner { min-height: 51px; padding: 3px 12px; gap: 8px; }
+  .topbar-inner {
+    min-height: 51px; padding: 3px 12px; gap: 8px;
+    padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px));
+  }
+  /* The class's name is in the top bar: not again just under it. */
+  body:has(.topbar-title:not(:empty)) .eyebrow-sheet { display: none; }
+  .center-card { margin-top: 0; }
   .brand { flex: 0 0 auto; padding: 5px; margin: 0 -5px; }
   .brand-name { display: none; }
   .topbar-title {
@@ -724,6 +739,9 @@ html.kb-open .modal-dialog > .dialog-actions { position: static; }
     content: ""; display: block; height: calc(20px + env(safe-area-inset-bottom, 0px));
   }
   .modal-overlay > .modal-dialog:has(> .appearance-foot, > .dialog-actions)::after { content: none; }
+  /* The calendars fill the screen: no handle, and no band under their Done. */
+  #day-calendar .modal-dialog::before, #deadline-calendar .modal-dialog::before,
+  #day-calendar .modal-dialog::after, #deadline-calendar .modal-dialog::after { content: none; }
 }
 @keyframes sheet-in { from { transform: translateY(100%); } }
 
@@ -752,6 +770,8 @@ html.kb-open .modal-dialog > .dialog-actions { position: static; }
   max-width: 760px;
   margin: 0 auto;
   padding: 28px 16px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 
 .card {
@@ -774,7 +794,10 @@ h3 { margin: 0 0 8px; font-size: 1rem; font-weight: 650; }
 .move-heading { margin-top: 24px; }
 
 .subtitle { color: var(--muted); margin: 0 0 20px; line-height: 1.5; }
-.subtitle.locked { color: var(--danger); }
+.subtitle.locked { color: var(--muted); } /* (closed is how it should be: nothing wrong) */
+/* On a phone the tab bar goes to My ranking and Schedule: home's own tiles
+   for them, and the schedule's Back, would say it twice. */
+@media (max-width: 640px) { body.has-tabbar .home-tile-tabbed, body.has-tabbar .back-link-tabbed { display: none; } }
 .mini-hint { color: var(--muted); font-size: 0.88rem; margin: 12px 0 0; }
 .hint { color: var(--muted); font-size: 0.88rem; margin-top: 16px; }
 .muted { color: var(--muted); }
@@ -784,6 +807,7 @@ h3 { margin: 0 0 8px; font-size: 1rem; font-weight: 650; }
 input[type="text"], input[type="password"], input[type="number"], input[type="email"], input[type="search"],
 input[type="file"], select, textarea {
   font: inherit;
+  font-size: max(16px, 1em);
   padding: 10px 14px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
@@ -1333,12 +1357,6 @@ html.kb-open .save-row { position: static; }
 /* The moment between pressing a row and it lifting off. */
 .rank-item.pressing { box-shadow: 0 0 0 3px var(--accent-soft); }
 
-/* Words for the reader's own pointer: tap and press-and-hold, or click and drag. */
-.rank-mouse-words { display: none; }
-@media (hover: hover) and (pointer: fine) {
-  .rank-touch-words { display: none; }
-  .rank-mouse-words { display: inline; }
-}
 
 /* ---------------------------------------------------------------
    Rank page on phones (and phones on their side): compact rows
@@ -1371,9 +1389,10 @@ html.kb-open .save-row { position: static; }
   cursor: pointer;
   touch-action: pan-y pinch-zoom;
 }
-.day-toggle-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.day-toggle-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 0 1 auto; }
 .rank-compact .day-label { font-size: 1rem; line-height: 1.25; overflow-wrap: anywhere; }
-.day-toggle-chevron { width: 16px; height: 16px; flex-shrink: 0; margin-left: auto; color: var(--muted); transition: transform 0.15s ease; }
+.day-toggle-chevron { width: 16px; height: 16px; flex-shrink: 0; margin-left: 6px; color: var(--muted); transition: transform 0.15s ease; }
+@media (max-width: 400px) { .rank-compact .day-label { white-space: nowrap; overflow-wrap: normal; } }
 .rank-item.open .day-toggle-chevron { transform: rotate(180deg); }
 .rank-flags { display: flex; flex-wrap: wrap; gap: 4px 8px; }
 .rank-flags[hidden], .rank-flag[hidden] { display: none; }
@@ -1396,7 +1415,7 @@ html.kb-open .save-row { position: static; }
 .rank-drawer-help { margin: 0; font-family: var(--font-small); font-size: 0.85rem; line-height: 1.45; color: var(--muted); }
 .rank-compact .comment-wrap { margin: 0; }
 .rank-deadline-chip {
-  display: inline-block; margin: 0 0 4px; padding: 3px 12px; border-radius: var(--radius-full);
+  width: fit-content; max-width: 100%; margin: 0 0 4px; padding: 3px 12px; border-radius: var(--radius-full);
   background: var(--accent-soft); color: var(--accent-strong); font-size: 0.88rem;
 }
 .rank-howto { margin-top: 12px; }
@@ -1432,9 +1451,14 @@ html.kb-open .save-row { position: static; }
     display: inline-flex; align-items: center; min-height: 36px; padding: 4px 12px; font-size: 0.8rem;
     border-radius: var(--radius-full); border: 1px solid var(--border);
     background: var(--card-bg); box-shadow: var(--shadow-md);
-    pointer-events: auto; text-align: center;
+    pointer-events: none; text-align: center; /* (nothing on it to press: the row under it keeps its taps) */
+    max-width: calc(100vw - 32px); overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    transition: opacity 0.3s ease, transform 0.3s ease;
   }
+  .save-row.saved .save-status-short { font-size: min(1em, 17px); }
+  .save-row.saved.quiet .save-status { opacity: 0; transform: translateY(8px); }
 }
+@media (prefers-reduced-motion: reduce) { .save-row.saved.quiet .save-status { transform: none; } }
 
 /* Admin */
 .admin-card { max-width: 100%; }
@@ -1491,6 +1515,42 @@ html.kb-open .save-row { position: static; }
 }
 .chip-danger { background: var(--danger-bg); color: var(--danger); margin-right: 4px; }
 .comment-note { font-size: 0.85rem; color: var(--muted); margin-bottom: 4px; }
+/* A ranking's chips carry their place (1 = favorite) only as cards, below;
+   a wide table already reads left to right, with arrows. */
+.chip-num { display: none; }
+.tag-why { display: block; margin-top: 3px; font-size: 0.82rem; font-weight: 400; color: var(--muted); }
+@media (min-width: 761px) { .tag-why { display: none; } }
+@media (max-width: 760px) {
+  /* Sign-ups and the class list as one card per student: each part named
+     (data-label), its buttons in a row underneath, Delete last. */
+  .table-wrap:has(#signups-table), .table-wrap:has(.roster-table) { overflow: visible; }
+  #signups-table thead, .roster-table thead { display: none; }
+  #signups-table, #signups-table tbody, #signups-table tr, #signups-table td,
+  .roster-table, .roster-table tbody, .roster-table tr, .roster-table td { display: block; width: auto; }
+  #signups-table tr, .roster-table tr { padding: 12px 0; border-bottom: 1px solid var(--border); }
+  #signups-table tbody tr:hover, .roster-table tbody tr:hover { background: none; }
+  #signups-table td, .roster-table td { border: 0; padding: 4px 0; }
+  #signups-table td[data-label]:empty { display: none; }
+  #signups-table td[data-label]::before {
+    content: attr(data-label); display: block; margin-bottom: 4px; font-size: 0.8rem; font-weight: 650; color: var(--muted);
+  }
+  .signup-name, .roster-name { font-size: 1.02rem; font-weight: 650; overflow-wrap: anywhere; }
+  .rank-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .rank-chips .chip { white-space: nowrap; }
+  .chip-arrow { display: none; }
+  .chip-num {
+    display: inline-grid; place-items: center; min-width: 1.4em; height: 1.4em; margin-right: 6px; border-radius: 999px;
+    background: var(--accent-strong); color: var(--card-bg); font-size: 0.75em; font-weight: 700;
+  }
+  .signup-saved { white-space: normal; }
+  .roster-address { display: block; overflow: hidden; text-overflow: ellipsis; }
+  .signup-actions .row-actions, .roster-table .row-actions { gap: 12px; margin-top: 4px; }
+  .row-actions .row-delete { margin-left: auto; padding-left: 16px; } /* (Delete apart from the rest) */
+  .roster-table details.row-edit[open] { display: block; width: 100%; }
+  .roster-table details.row-edit[open] form { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+  .roster-table details.row-edit input { width: 100%; }
+}
+.admin-table input { font-size: max(16px, 1rem); } /* (iOS zooms in on a smaller field) */
 
 .day-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-top: 16px; }
 .day-column { background: var(--surface-soft); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; }
@@ -1623,7 +1683,9 @@ select { text-overflow: ellipsis; }
   border: 1px solid var(--border-strong);
   color: var(--muted);
 }
-.btn-ghost:hover { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
+/* (Only under a real pointer: a phone keeps :hover on what was tapped, which would leave it red.) */
+@media (hover: hover) { .btn-ghost:hover { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); } }
+.btn-ghost:active { background: var(--surface-strong); }
 .btn-ghost svg { width: 16px; height: 16px; }
 
 /* Admin — per-row delete + the delete-everything block */
@@ -1949,6 +2011,8 @@ section[id], main[id] { scroll-margin-top: 80px; }
 /* Words for the way the page is used, anywhere on the site: "Tap" under a
    finger (phones, tablets, iPads), "Click" with a mouse or trackpad. No
    script needed, and the hidden word isn't read out either. */
+/* Words for a touch screen or a mouse ("tap" or "click", "a spreadsheet
+   file" where a download doesn't open in Excel): the site's one pair. */
 @media (pointer: coarse) { .mouse-only { display: none !important; } }
 @media not all and (pointer: coarse) { .touch-only { display: none !important; } }
 .paste-box { margin-top: 10px; }
@@ -2125,6 +2189,7 @@ section[id], main[id] { scroll-margin-top: 80px; }
 .day-card-warn { margin: 8px 0 0; color: var(--danger); font-weight: 600; }
 
 .ranking-summary { margin: 12px 0 4px; }
+details.ranking-summary > summary { cursor: pointer; font-weight: 650; color: var(--accent-strong); }
 .summary-list { margin: 6px 0 0; padding-left: 24px; }
 .summary-list li { margin-bottom: 2px; }
 .save-status.warn { color: var(--amber); font-weight: 600; }
@@ -2134,7 +2199,9 @@ section[id], main[id] { scroll-margin-top: 80px; }
 
 .sheet-row { display: flex; gap: 8px; align-items: stretch; }
 .sheet-row .sheet-item { flex: 1 1 auto; }
-.sheet-actions { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; justify-content: flex-end; }
+.sheet-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.sheet-actions > [data-popover-target^="delete-"] { margin-left: 12px; } /* (Delete apart from the rest) */
+.sheet-next { display: block; margin-top: 4px; font-size: 0.86rem; color: var(--muted); }
 .sheet-actions form { margin: 0; }
 @media (max-width: 560px) {
   .sheet-row { flex-direction: column; }
@@ -2172,7 +2239,7 @@ section[id], main[id] { scroll-margin-top: 80px; }
    wherever the page scrolled to, until they're closed. */
 .toast-dock {
   position: fixed;
-  bottom: 16px;
+  bottom: calc(16px + var(--tabbar-h, 0px) + var(--safe-bottom, 0px)); /* (above the phone tab bar and home bar) */
   left: 50%;
   transform: translateX(-50%);
   width: min(760px, calc(100% - 32px));
@@ -2296,6 +2363,15 @@ details.guide:not([open]) { padding-bottom: 20px; }
   font-size: 1.1rem; line-height: 1; padding: 2px 6px; border-radius: 999px;
 }
 .chip-remove:hover, .chip-remove:focus-visible { background: var(--surface-strong); }
+/* On a touch screen, everything tapped is at least 44px across, looking
+   just as it does: buttons grow to 44px tall, and links and small x's get
+   a bigger target around them (padding that doesn't move the text). */
+@media (pointer: coarse) {
+  .btn, .btn-small { min-height: 44px; }
+  .chip-remove { min-width: 44px; min-height: 44px; margin: -10px -8px -10px -4px; font-size: 1.3rem; }
+  a.link-muted, .btn-link, .page-jump a, .quiz-back { padding-top: 12px; padding-bottom: 12px; margin-top: -12px; margin-bottom: -12px; }
+  .flash-close, .toast-close, .modal-close { min-width: 44px; min-height: 44px; }
+}
 .noscript-day { display: inline-block; margin: 0 8px 8px 0; }
 .modal-calendar { max-width: 640px; }
 /* Each calendar pop-up: a header, a middle that scrolls, and a footer with
@@ -2333,10 +2409,6 @@ details.guide:not([open]) { padding-bottom: 20px; }
   border-color: transparent; color: var(--on-accent); font-weight: 700;
 }
 .cal-summary { margin: 14px 0 6px; color: var(--muted); line-height: 1.5; }
-/* Words for the way days are picked: "tap" on a touch screen, "click" and
-   "drag" with a mouse. */
-@media (pointer: coarse) { .when-mouse { display: none; } }
-@media not all and (pointer: coarse) { .when-touch { display: none; } }
 
 /* Touch: every date at least 44px tall, with no grey flash on a tap. */
 @media (pointer: coarse) {
@@ -2344,12 +2416,7 @@ details.guide:not([open]) { padding-bottom: 20px; }
   .cal-day { aspect-ratio: auto; min-height: 44px; height: 48px; -webkit-tap-highlight-color: transparent; }
   .cal-nav .btn, .cal-sheet-foot .btn { min-height: 44px; }
 }
-/* (Without a mouse, a tapped Earlier or Later doesn't stay lit up red.) */
-@media (hover: none) {
-  .cal-nav .btn-ghost:hover, .cal-sheet-foot .btn-ghost:hover {
-    background: var(--card-bg); border-color: var(--border-strong); color: var(--muted);
-  }
-}
+
 /* Tablets and unfolded foldables: a wider pop-up, so the two months fit
    side by side with dates that size; where they can't, one month at a
    time. */
@@ -3741,10 +3808,6 @@ input[type="date"] {
   padding: 3px 10px; border-radius: var(--radius-full); background: var(--accent-soft); color: var(--accent-strong);
   font-family: var(--font-small); font-size: 0.88rem; white-space: nowrap;
 }
-/* Words for a touch screen or a mouse: "(a spreadsheet file)" on a phone
-   or tablet, where a download doesn't open in Excel. */
-@media (pointer: coarse) { .mouse-only { display: none; } }
-@media (pointer: fine) { .touch-only { display: none; } }
 @media (min-width: 641px) and (max-width: 1023px) {
   .day-board { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 }
@@ -3987,7 +4050,8 @@ details.guide:not([open]) { padding-bottom: 20px; }
 /* Back from Canvas: one press to choose its file, pinned to the bottom of
    the window (the page itself doesn't move). */
 .came-back {
-  position: fixed; z-index: 60; left: 16px; right: 16px; bottom: max(16px, env(safe-area-inset-bottom));
+  position: fixed; z-index: 60; left: 16px; right: 16px;
+  bottom: calc(16px + var(--tabbar-h, 0px) + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
   max-width: 640px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
   padding: 12px 16px; border: 1.5px solid var(--accent); border-radius: 14px; background: var(--card-bg);
   box-shadow: var(--shadow-lg);

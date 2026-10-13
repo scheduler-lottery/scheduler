@@ -119,7 +119,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       {% if setup %}<input type="hidden" name="setup" value="1">{% endif %}
       <label for="quiz-pasted" class="field-help">Their school emails, with names if you have them: one per line, or separated by commas. Anyone added by email alone types their name the first time they sign in. Names without emails sign in with a PIN instead of an emailed code.</label>
-      <textarea id="quiz-pasted" name="pasted" rows="8" placeholder="e.g., alex.johnson@school.edu&#10;Sam Lee, sam.lee@school.edu"></textarea>
+      <textarea id="quiz-pasted" name="pasted" rows="8" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="e.g., alex.johnson@school.edu&#10;Sam Lee, sam.lee@school.edu"></textarea>
       <button class="btn btn-primary" type="submit">Add these students</button>
     </form>
   </section>

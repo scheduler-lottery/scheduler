@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Your sign-up sheets — {{ app_name }}{% endblock %}
+{% block title %}My sheets — {{ app_name }}{% endblock %}
 {% block content %}
 <div class="card">
   <div class="admin-header">
-    <h1>Your sign-up sheets</h1>
+    <h1>My sheets</h1>
     {% if sheets %}<a class="btn btn-primary" href="{{ url_for('teach.new_sheet') }}">＋ New sign-up sheet</a>{% endif %}
   </div>
   <p class="mini-hint">Signed in as {{ instructor.email }}. Only you can see these sheets.</p>
@@ -22,19 +22,27 @@
             {% if s.same_title %}· link code <code>{{ s.id }}</code>{% endif %}
           </span>
         </span>
-        {# One short word; hovering (or focusing the row) says why, and what's next. #}
+        {# A few words, the same as the sheet's own page; hovering (or focusing
+           the row) says what's next, and a touch screen prints it under them. #}
         {% if s.bidding_open and not s.roster_count and not s.allow_unlisted %}
-        <span class="status-pill pending status-tip">Pending<span class="tip-bubble" role="tooltip" id="status-{{ s.id }}">Waiting for your class list, so students can't sign in yet. You're on setup step 7 of 8: add your students. The last step is sharing the link.</span></span>
+        {% set next = "Add your students so they can sign in." %}
+        <span class="status-pill pending status-tip">Needs students<span class="tip-bubble" role="tooltip" id="status-{{ s.id }}">{{ next }}</span></span>
         {% elif s.bidding_open %}
-        <span class="status-pill open status-tip">Open<span class="tip-bubble" role="tooltip" id="status-{{ s.id }}">Students can rank their days now{% if s.roster_count %}: {{ s.listed_count }} of {{ s.roster_count }} have{% endif %}. Once everyone has, close sign-ups and make the schedule.</span></span>
+        {% set next = "When everyone's ranked, close sign-ups and make the schedule." %}
+        <span class="status-pill open status-tip">Sign-ups open<span class="tip-bubble" role="tooltip" id="status-{{ s.id }}">{{ next }}</span></span>
+        {% elif s.published_at %}
+        {% set next = "Done: each student can see their day." %}
+        <span class="status-pill open status-tip">Schedule published<span class="tip-bubble" role="tooltip" id="status-{{ s.id }}">{{ next }}</span></span>
         {% else %}
-        <span class="status-pill closed status-tip">Closed<span class="tip-bubble" role="tooltip" id="status-{{ s.id }}">Sign-ups are closed, so rankings can't change. {% if s.published_at %}The schedule is published.{% elif s.assigned_count %}The schedule is made: publish it so students see their day.{% else %}Next: make the schedule.{% endif %}</span></span>
+        {% set next = "Next: publish the schedule, so students see their day." if s.assigned_count else "Next: make the schedule." %}
+        <span class="status-pill closed status-tip">Sign-ups closed<span class="tip-bubble" role="tooltip" id="status-{{ s.id }}">{{ next }}</span></span>
         {% endif %}
+        <span class="sheet-next touch-only" aria-hidden="true">{{ next }}</span>
       </a>
       <span class="sheet-actions">
         <form method="post" action="{{ url_for('teach.duplicate_sheet', sid=s.id) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn btn-ghost btn-small" title="Same days and settings, no students — for next term">Copy for next term</button>
+          <button type="submit" class="btn btn-ghost btn-small" title="Same days and settings, no students — for next term">Copy for next term<span class="visually-hidden"> (same days and settings, no students)</span></button>
         </form>
         <form method="post" action="{{ url_for('teach.archive_sheet', sid=s.id) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

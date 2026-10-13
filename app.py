@@ -218,7 +218,8 @@ def _has_sheets(instructor):
 
 def _dock_share(instructor):
     """On one of the instructor's own sheet pages: its link for students, for
-    the top bar's copy button."""
+    the top bar's (and the phone tab bar's) Share. Not before there's anyone
+    to share it with: no class list, and students can't sign themselves up."""
     sid = (request.view_args or {}).get("sid") if request.blueprint == "teach" else None
     if not (instructor and sid):
         return None
@@ -227,6 +228,9 @@ def _dock_share(instructor):
     except Exception:  # noqa: BLE001 - no button, then
         return None
     if not sheet or sheet["owner_id"] != instructor["id"]:
+        return None
+    if not sheet["allow_unlisted"] and not db.scalar(
+            "SELECT 1 FROM roster WHERE sheet_id = :sid AND is_test = 0 LIMIT 1", sid=sheet["id"]):
         return None
     return url_for("student.signin", sid=sheet["id"], _external=True)
 

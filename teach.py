@@ -873,13 +873,13 @@ def _next_step(sheet, counts, has_schedule, stale, published, without_day=0, stu
         return {"title": f"{plural(len(stuck['people']), 'student')} couldn't get a sign-in email today",
                 "anchor": "stuck", "text": stuck["summary"]}
     if not sheet["shared_at"] and not counts["submissions"]:
-        return {"title": "Share the link with your class", "anchor": "share",
+        return {"title": "Share the link", "anchor": "share",
                 "text": "Copy the ready-made message below and post it in Canvas."}
     if sheet["bidding_open"]:
         if counts["roster"] and counts["waiting"]:
             return {"title": f"Wait for rankings — {counts['listed_submissions']} of {counts['roster']} so far",
                     "anchor": "signups",
-                    "text": "When everyone's in (or your deadline passes), close sign-ups and make the schedule."}
+                    "text": "When everyone's in (or your deadline passes), the Schedule tab makes the schedule in one press."}
         return {"title": "Close sign-ups and make the schedule", "anchor": "schedule",
                 "text": ("Everyone on your list has ranked." if counts["roster"] else
                          f"{plural(counts['submissions'], 'person has', 'people have')} ranked so far.")
@@ -909,9 +909,8 @@ def _next_step(sheet, counts, has_schedule, stale, published, without_day=0, stu
     if not published:
         return {"title": "Check the schedule, then publish it", "anchor": "schedule",
                 "text": "Publishing shows each student their day on the class page."}
-    return {"title": "All done — students can see their day", "anchor": "schedule",
-            "text": "Everyone has a day. Download the schedule for your records. You can still move people; "
-                    "they'll see changes right away."}
+    return {"title": "All done! Everyone has a day.", "anchor": "schedule",
+            "text": "Download the schedule for your records."}
 
 
 def _seat_warning(sheet, days, counts):
@@ -1293,12 +1292,11 @@ def _sheet_page(sid, tab):
          "hint": "From Canvas, a spreadsheet, or typed in: a few quick questions walk you through it."},
         {"title": "See it as a student", "done": bool(sheet["tested_at"] or sheet["shared_at"]), "anchor": "try-it",
          "optional": True, "hint": "Opens in a new tab; this page stays open."},
-        {"title": "Share the link with your class", "done": bool(sheet["shared_at"]),
+        {"title": "Share the link", "done": bool(sheet["shared_at"]),
          "anchor": "share", "hint": "Copy a ready-made message for Canvas."},
         {"title": "Close sign-ups and make the schedule", "done": has_schedule and not sheet["bidding_open"],
-         "anchor": "schedule", "hint": "When everyone's in."},
-        {"title": "Publish the schedule", "done": published and not sheet["bidding_open"], "anchor": "schedule",
-         "hint": "Each student sees their day."},
+         "anchor": "schedule"},
+        {"title": "Publish the schedule", "done": published and not sheet["bidding_open"], "anchor": "schedule"},
     ]
     # Once the list is in, point straight at what comes next.
     list_next = next((step for step in steps[2:] if not step["done"]), None) if counts["roster"] else None
@@ -3288,8 +3286,7 @@ def publish(sid):
     rankers, didnt_rank = sheets.unplaced(sheets.get_assignments(sheet["id"]), inputs.rows,
                                           sheets.get_roster(sheet["id"]), inputs.days, inputs.tests_counted)
     nobody = [r["display_name"] for r in rankers + didnt_rank]
-    message = ("Published. Each student now sees their day when they open the class link. Post the message below "
-               "to let them know.")
+    message = "Published! Post the message below to let your class know."
     if nobody:
         message += (f" {plural(len(nobody), 'student has', 'students have')} no day yet and will see that: "
                     f"{_names(nobody)}. Give them a day under Schedule — nobody else has to move.")

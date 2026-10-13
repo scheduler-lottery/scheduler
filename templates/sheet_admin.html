@@ -6,11 +6,11 @@
 
 {# ------------------------------------------------------------------ header #}
 <section class="card sheet-head">
-  <p class="eyebrow"><a href="{{ url_for('teach.dashboard') }}" class="link-muted">← All your sheets</a></p>
+  <p class="eyebrow"><a href="{{ url_for('teach.dashboard') }}" class="link-muted">← My sheets</a></p>
   <div class="admin-header">
     <h1>{{ sheet.title }}</h1>
     {% if waiting_for_list %}
-    <span class="status-pill pending status-tip" tabindex="0" aria-describedby="status-why">Pending<span class="tip-bubble" role="tooltip" id="status-why">Waiting for your class list, so students can't sign in yet. You're on setup step 7 of 8: add your students. The last step is sharing the link.</span></span>
+    <span class="status-pill pending status-tip" tabindex="0" aria-describedby="status-why">Needs students<span class="tip-bubble" role="tooltip" id="status-why">Add your students so they can sign in.</span></span>
     {% elif sheet.bidding_open %}
     <span class="status-pill open">Sign-ups open</span>
     {% elif published %}
@@ -22,11 +22,10 @@
   {# On phones and touch screens there's no hovering: what the pill means
      is printed under it instead (style.css .status-say). #}
   {% if waiting_for_list %}
-  <p class="status-say" aria-hidden="true">Waiting for your class list, so students can't sign in yet. You're on setup step 7 of 8: add your students.</p>
+  <p class="status-say" aria-hidden="true">Add your students so they can sign in.</p>
   {% elif sheet.bidding_open %}
-  <p class="status-say">Students can rank their days now{% if counts.roster %}: {{ counts.listed_submissions }} of {{ counts.roster }} have{% endif %}.{% if deadline.closes_at and not deadline.waiting %} Sign-ups close <time datetime="{{ deadline.closes_at }}" data-local="deadline">{{ deadline.text }}</time>.{% endif %}</p>
+  <p class="status-say">Students can rank their days now.{% if deadline.closes_at and not deadline.waiting %} Sign-ups close <time datetime="{{ deadline.closes_at }}" data-local="deadline">{{ deadline.text }}</time>.{% endif %}</p>
   {% elif published %}
-  <p class="status-say">Each student can see their day on the class page.</p>
   {% else %}
   <p class="status-say">Rankings can't change now. {{ 'The schedule is made: publish it so students see their day.' if has_schedule else 'Next: make the schedule.' }}</p>
   {% endif %}

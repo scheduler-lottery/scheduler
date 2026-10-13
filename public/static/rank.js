@@ -42,6 +42,7 @@
   let compact = !!(compactMQ && compactMQ.matches);
   let openDay = null; // the day whose drawer is open (one at a time)
   let lastPointerType = ""; // what pressed the last button: "mouse", "touch" or "pen"
+  let quietTimer = null; // (the phone's "Saved" pill, faded a moment after it shows)
 
   // Wide screens get the whole sentence; phones, where the Save bar has to
   // stay small, a short version of it (`short`, when there is one).
@@ -62,8 +63,14 @@
       saveStatus.appendChild(brief);
     }
     // Once something is saved, changes save by themselves, so on a phone the
-    // bar shrinks to a small status pill. A problem brings the button back.
-    if (saveRow) saveRow.classList.toggle("saved", hasSubmitted && !stopped && cls !== "error");
+    // bar shrinks to a small status pill, which fades once it's been read. A
+    // problem brings the button back.
+    if (saveRow) {
+      saveRow.classList.toggle("saved", hasSubmitted && !stopped && cls !== "error");
+      clearTimeout(quietTimer);
+      saveRow.classList.remove("quiet");
+      if (cls === "success") quietTimer = setTimeout(() => saveRow.classList.add("quiet"), 2500);
+    }
   }
 
   function markDirty() {
@@ -138,7 +145,7 @@
     listEl.querySelectorAll(".tip.tip-open").forEach(placeTip);
   });
 
-  function makeIcon(d, size) {
+  function makeIcon(d, size, filled) {
     const svg = document.createElementNS(SVG_NS, "svg");
     svg.setAttribute("viewBox", "0 0 24 24");
     svg.setAttribute("fill", "none");
@@ -146,16 +153,21 @@
     if (size) svg.setAttribute("class", size);
     const path = document.createElementNS(SVG_NS, "path");
     path.setAttribute("d", d);
-    path.setAttribute("stroke", "currentColor");
-    path.setAttribute("stroke-width", "2.2");
-    path.setAttribute("stroke-linecap", "round");
-    path.setAttribute("stroke-linejoin", "round");
+    if (filled) {
+      path.setAttribute("fill", "currentColor");
+    } else {
+      path.setAttribute("stroke", "currentColor");
+      path.setAttribute("stroke-width", "2.2");
+      path.setAttribute("stroke-linecap", "round");
+      path.setAttribute("stroke-linejoin", "round");
+    }
     svg.appendChild(path);
     return svg;
   }
 
+  // ▲ and ▼, solid, as the page's words call them (the chevron is for opening a day).
   function makeArrow(up) {
-    return makeIcon(up ? "M5 15l7-7 7 7" : "M5 9l7 7 7-7");
+    return makeIcon(up ? "M12 6.5l6.5 10h-13z" : "M12 17.5l6.5-10h-13z", "", true);
   }
 
   function positionLabel(idx, total) {
@@ -508,6 +520,7 @@
           excludeLabel.classList.toggle("on", excludeCb.checked);
           if (excludeCb.checked) {
             commentWrap.hidden = false;
+            noteBtn.setAttribute("aria-expanded", "true");
             commentBox.placeholder = "Why can't you do this day? (only your instructor sees this)";
           }
           updateFlags();
@@ -533,10 +546,12 @@
         noteBtn.textContent = hasNote ? "Edit note" : "＋ Add a note";
         if (hasNote) noteBtn.classList.add("has-note");
         noteBtn.setAttribute("aria-expanded", String(!commentWrap.hidden));
+        // (A box opened by ticking "can't do", still empty: a tap opens it for typing, not closed.)
         noteBtn.addEventListener("click", () => {
-          commentWrap.hidden = !commentWrap.hidden;
-          noteBtn.setAttribute("aria-expanded", String(!commentWrap.hidden));
-          if (!commentWrap.hidden) commentBox.focus();
+          const open = commentWrap.hidden || (document.activeElement !== commentBox && !commentBox.value.trim());
+          commentWrap.hidden = !open;
+          noteBtn.setAttribute("aria-expanded", String(open));
+          if (open) commentBox.focus();
         });
         actions.appendChild(noteBtn);
         if (!drawers) {
@@ -585,8 +600,8 @@
           help.className = "rank-drawer-help";
           help.textContent = "“Can't do” is for a real conflict: you won't get that day unless you mark " +
             "every day. Only your instructor sees notes; they don't change who gets which day.";
+          drawer.appendChild(commentWrap); // (right under its button)
           drawer.appendChild(help);
-          drawer.appendChild(commentWrap);
           li.appendChild(drawer);
           if (openDay === dayKey) setDrawer(li, true);
         } else {
@@ -946,10 +961,10 @@
     return isNaN(when) ? "" : when.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
 
-  // "Saved 7:44 PM · changes save by themselves", for the phone's pill.
+  // "Saved 7:44 PM · saves by itself", for the phone's pill.
   function savedPill(iso) {
     const at = iso ? formatTime(iso) : "";
-    return "Saved" + (at ? " " + at : "") + " · changes save by themselves";
+    return "Saved" + (at ? " " + at : "") + " · saves by itself";
   }
 
   function scheduleSave(delay) {

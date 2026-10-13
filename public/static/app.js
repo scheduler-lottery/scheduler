@@ -679,11 +679,6 @@
   // question rather than off the page. The answers so far are kept for this
   // tab, so a reload, or leaving and coming back, finds them still there.
   var WIZARD_KEY = "new-sheet-answers";
-  document.querySelectorAll("[data-wizard-cancel]").forEach(function (link) {
-    link.addEventListener("click", function () {
-      try { sessionStorage.removeItem(WIZARD_KEY); } catch (e) { /* fine */ }
-    });
-  });
   document.querySelectorAll("form[data-wizard]").forEach(function (form) {
     var steps = Array.prototype.slice.call(form.querySelectorAll("[data-wizard-step]"));
     var names = steps.map(function (step) { return step.getAttribute("data-wizard-step"); });
@@ -759,6 +754,13 @@
     var field = function (name) { return form.elements.namedItem(name); };
     var KEPT = ["title", "capacity", "close_date", "close_time", "at_close", "note", "allow_unlisted"];
     var sent = false; // (once the sheet is being created, there's nothing in progress to keep)
+    // Cancel: nothing to keep, now or as the page goes.
+    document.querySelectorAll("[data-wizard-cancel]").forEach(function (link) {
+      link.addEventListener("click", function () {
+        sent = true;
+        try { sessionStorage.removeItem(WIZARD_KEY); } catch (e) { /* fine */ }
+      });
+    });
     var keep = function () {
       if (sent) return;
       var answers = { days: [] };

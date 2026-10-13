@@ -12,7 +12,7 @@
 {% macro f_days() %}
     <fieldset class="field" id="days-field" data-day-field data-max="{{ max_days }}">
       <legend>Days students can pick from</legend>
-      <p class="field-help">Pick them on a calendar: <span class="when-mouse">click a date, or drag across several.</span><span class="when-touch">tap a date, or press and hold one and slide across several.</span></p>
+      <p class="field-help">Pick them on a calendar: <span class="mouse-only">click a date, or drag across several.</span><span class="touch-only">tap a date, or press and hold one and slide across several.</span></p>
       <ul class="day-chips" data-day-chips>
         {% for d in form.days %}
         <li class="day-chip">
@@ -236,7 +236,7 @@
       <h2 id="day-calendar-title" class="modal-title">Pick the presentation days</h2>
     </div>
     <div class="cal-sheet-body">
-      <p class="modal-body"><span class="when-mouse">Click a date to add it, and click it again to take it off. To add a run of days, press on the first one and drag to the last.</span><span class="when-touch">Tap a date to add it, and tap it again to take it off. To add a run of days, press and hold the first one, then slide to the last.</span></p>
+      <p class="modal-body"><span class="mouse-only">Click a date to add it, and click it again to take it off. To add a run of days, press on the first one and drag to the last.</span><span class="touch-only">Tap a date to add it, and tap it again to take it off. To add a run of days, press and hold the first one, then slide to the last.</span></p>
       <div class="cal-nav">
         <button type="button" class="btn btn-ghost btn-small" data-cal-prev aria-label="Earlier months">‹ Earlier</button>
         <button type="button" class="btn btn-ghost btn-small" data-cal-next aria-label="Later months">Later ›</button>

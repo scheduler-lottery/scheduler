@@ -267,7 +267,7 @@ def test_new_sheets_are_private_by_default_and_point_at_the_next_step(prof):
     assert sheet["allow_unlisted"] == 0 and sheet["show_preview"] == 0 and sheet["lottery_seed"] > 0
     page = html(prof.get(f"/teach/s/{sid}"))
     assert "Next step" in page and "Add your class list" in page
-    assert "Waiting for your class list" in page
+    assert "Add your students so they can sign in" in page
     assert "Add your class list first" in page  # no announcement to copy yet
 
 
@@ -1736,7 +1736,7 @@ def test_giving_out_open_seats_on_a_published_schedule_moves_nobody(prof, browse
     shown = text(page)
     assert "Gave 1 student a day" in shown and "Nobody else moved" in shown
     assert "Copy their emails (1)" in shown
-    assert "All done — students can see their day" in shown
+    assert "All done! Everyone has a day." in shown
     assert "out of date" not in shown and "Make the schedule again" not in shown
     assert "See what a fresh schedule would change" in shown  # optional, never pushed
 
@@ -2349,8 +2349,9 @@ def test_instructor_pages_are_framed_and_student_pages_are_not(prof, browser):
     prof.upload(sid)
     for page in (raw(prof.get("/teach/")), raw(prof.get(f"/teach/s/{sid}")), raw(browser().get("/teach/login"))):
         assert 'class="mode-frame"' in page and '<p class="mode-label" aria-hidden="true">Instructor</p>' in page
-    assert "Instructor sign-in" in text(browser().get("/teach/login"))
-    assert "you don't sign in here" in text(browser().get("/teach/login"))
+    login = text(browser().get("/teach/login"))
+    assert "Sign in or get started" in login and "Students: no need to sign in here" in login
+    assert login.count("nstructor") <= 2  # (the frame's label, and the footer's credit at most: said once)
     for page in (raw(browser().get("/")), raw(browser().get(f"/c/{sid}")), raw(browser().get("/privacy"))):
         assert "mode-frame" not in page
 
@@ -2543,7 +2544,7 @@ def test_each_class_has_class_schedule_and_settings_tabs(prof, browser):
     page = text(prof.get(f"/teach/s/{sid}"))
     assert "Class list" in page and "Sign-ups" in page and "Seats per day:" not in page
     page = text(prof.get(f"/teach/s/{sid}/schedule"))
-    assert "Seats per day:" in page and "0 of 3 on your list have ranked" in page and "Backups" not in page
+    assert "Seats per day:" in page and "See who has ranked" in page and "Backups" not in page
     page = text(prof.get(f"/teach/s/{sid}/settings"))
     assert "Days & settings" in page and "Backups" in page and "Copy or delete" in page
     assert 'id="signups"' not in raw(prof.get(f"/teach/s/{sid}/settings"))
@@ -2700,32 +2701,32 @@ def test_the_professor_hears_once_when_everyone_has_ranked(prof, browser):
 def test_my_sheets_is_greyed_out_until_there_is_a_sheet(browser):
     newcomer = browser().sign_in_instructor("new@school.edu")
     page = raw(newcomer.get("/teach/"))
-    assert re.search(r'class="icon-dock-btn dock-tip dock-empty" data-tip="My sign-up sheets \(none yet\)"[^>]*'
+    assert re.search(r'class="icon-dock-btn dock-tip dock-empty" data-tip="My sheets \(none yet\)"[^>]*'
                      r'data-popover-target="no-sheets"', page)
     assert "No sheets yet" in page and "Make my first sheet" in page
     assert "You're making your first one" in html(newcomer.get("/teach/new"))
     newcomer.create_sheet()
     page = raw(newcomer.get("/teach/"))
     assert "No sheets yet" not in page
-    assert re.search(r'data-tip="My sign-up sheets" aria-label="My sign-up sheets" aria-current="page"', page)  # you're on it
+    assert re.search(r'data-tip="My sheets" aria-label="My sheets" aria-current="page"', page)  # you're on it
     page = raw(newcomer.get("/teach/new"))
     assert page.split('<nav class="tabbar"')[0].count('aria-current="page"') == 1 and re.search(r'aria-label="New sign-up sheet" aria-current="page"', page)
 
 
 def test_settings_is_a_window_with_who_you_are_and_sign_out(prof, browser):
     page = raw(prof.get("/teach/"))
-    window = page[page.index('<div id="settings"'):page.index('<div id="ranking-help"')]
+    window = page[page.index('<div id="account"'):page.index('<div id="ranking-help"')]
     assert 'role="dialog"' in window and "Signed in as" in window
     assert "prof<wbr>@school.edu" in window  # long addresses break at the @
     assert 'action="/teach/logout"' in window and "Sign out" in window and "Make my first sheet" in window
     assert "Site owner page" not in window
     sid = prof.create_sheet()
-    assert "My sign-up sheets" in raw(prof.get("/teach/"))
+    assert "My sheets" in raw(prof.get("/teach/"))
     student = browser().sign_in_student(sid, "Pat Doe")
     page = raw(student.get(f"/c/{sid}/home"))
-    window = page[page.index('<div id="settings"'):page.index('<div id="ranking-help"')]
+    window = page[page.index('<div id="account"'):page.index('<div id="ranking-help"')]
     assert "Pat Doe" in window and f'action="/c/{sid}/logout"' in window and "prof@school.edu" not in window
-    assert 'id="settings"' not in raw(browser().get("/"))  # nobody to be signed in as
+    assert 'id="account"' not in raw(browser().get("/"))  # nobody to be signed in as
     owner = browser().sign_in_instructor("owner@gmail.com")
     assert "Site owner page" in raw(owner.get("/teach/"))
 
@@ -2750,12 +2751,12 @@ def test_how_ranking_works_is_a_word_button_with_its_own_window(browser):
 def test_a_sheet_waiting_for_its_list_says_pending_and_why(prof):
     sid = prof.create_sheet(allow_unlisted=False)
     page = html(prof.get("/teach/"))
-    assert ">Pending<" in page and "Waiting for class list" not in page
-    assert "You're on setup step 7 of 8: add your students" in page  # as the setup's progress bar counts
+    assert ">Needs students<" in page and "Waiting for class list" not in page
+    assert "Add your students so they can sign in" in page and "step 7 of 8" not in page  # (no wizard numbering)
     assert f'aria-describedby="status-{sid}"' in page and f'id="status-{sid}"' in page
     prof.upload(sid)
     page = html(prof.get("/teach/"))
-    assert ">Open<" in page and "Students can rank their days now: 0 of 3 have" in page
+    assert ">Sign-ups open<" in page and "When everyone's ranked, close sign-ups and make the schedule." in page
 
 
 # -- the owner's "Delete everything" -------------------------------------------
@@ -3014,8 +3015,8 @@ def test_the_schedule_tab_shows_the_days_and_seats_and_warns_before_changing_ran
     sid = prof.create_sheet(days=("Mon", "Tue", "Wed"), capacity=2)
     page = raw(prof.get(f"/teach/s/{sid}/schedule"))
     assert page.count('class="day-sheet"') == 3 and page.count('class="slot open"') == 6  # 3 days × 2 seats, blank
-    assert "<summary>Modify this</summary>" in page and "Nobody has ranked yet" in page
-    assert "data-confirm-click" not in page.split("Modify this")[1].split("</details>")[0]
+    assert "<summary>Change days or seats</summary>" in page and "Nobody has ranked yet" in page
+    assert "data-confirm-click" not in page.split("Change days or seats")[1].split("</details>")[0]
     browser().sign_in_student(sid, "Pat Doe").rank(sid, day_keys(sid))
     page = html(prof.get(f"/teach/s/{sid}/schedule"))
     assert "1 student has already ranked these days" in page

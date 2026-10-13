@@ -48,7 +48,7 @@
       <p><a href="{{ url_for('how_it_works') }}">More about how days are assigned →</a></p>
 {% endset %}
 <div class="card">
-  <p class="eyebrow">{{ sheet.title }}</p>
+  <p class="eyebrow eyebrow-sheet">{{ sheet.title }}</p>
   <div class="rank-header">
     <div>
       <h1>{{ 'Rank the days' if bidding_open else 'Your ranking' }}</h1>
@@ -61,8 +61,8 @@
           top. You'll get a day as high on your list as possible.
         </p>
         <p class="subtitle rank-intro-short">Favorite on top.
-          <span class="rank-touch-words">Press and hold a day to move it, or use ▲ ▼. Tap a day for can't-do and notes.</span>
-          <span class="rank-mouse-words">Drag a day by ⠿, or use ▲ ▼. Click a day for can't-do and notes.</span>
+          <span class="touch-only">Press and hold a day to move it, or use ▲ ▼. Tap a day for can't-do and notes.</span>
+          <span class="mouse-only">Drag a day by ⠿, or use ▲ ▼. Click a day for can't-do and notes.</span>
         </p>
         {% if sheet.closes_at and not sheet.deadline_asked_at %}
         <div class="rank-intro-long">{% include "_deadline_note.html" %}</div>
@@ -118,7 +118,7 @@
     <details class="explainer rank-howto">
       <summary>How this works, and why the order matters</summary>
       <div class="explainer-body">
-        {% call rank_steps('open it by its name, then ') %}<span class="rank-touch-words">Press and hold a day and slide it up or down (or use the ▲ ▼ buttons) so your favorite is at the top.</span><span class="rank-mouse-words">Drag a day by ⠿ (or use the ▲ ▼ buttons) so your favorite is at the top.</span>{% endcall %}
+        {% call rank_steps('open it by its name, then ') %}<span class="touch-only">Press and hold a day and slide it up or down (or use the ▲ ▼ buttons) so your favorite is at the top.</span><span class="mouse-only">Drag a day by ⠿ (or use the ▲ ▼ buttons) so your favorite is at the top.</span>{% endcall %}
         <p class="rank-howto-heading">Why does the order matter?</p>
         {{ why_order_matters }}
       </div>

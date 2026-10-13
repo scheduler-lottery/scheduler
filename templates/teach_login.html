@@ -1,16 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Instructors: get started or sign in — {{ app_name }}{% endblock %}
+{% block title %}Sign in — {{ app_name }}{% endblock %}
 {% block content %}
 <div class="card center-card">
-  <p class="eyebrow">For instructors</p>
-  <h1>Instructor sign-in</h1>
+  <h1>Sign in or get started</h1>
   <p class="subtitle">
-    Make sign-up sheets for your classes. Type your school email and we'll send you a 6-digit code — no
-    password to remember. <strong>First time here?</strong> That's all it takes to make your account.
+    Type your school email and we'll send you a 6-digit code. No password, and the first time, that's all it
+    takes to make your account.
   </p>
   <div class="note-box students-elsewhere">
-    <p><strong>Students:</strong> you don't sign in here, and you don't need an account. Open the link your
-      instructor shared with you.</p>
+    <p><strong>Students:</strong> no need to sign in here. Use the link from your class.</p>
   </div>
   {% if error %}<div class="form-error" role="alert">{{ error | local_times }}</div>{% endif %}
   <form method="post" class="stack">
@@ -23,9 +21,10 @@
     <button class="btn btn-primary" type="submit">Email me a code</button>
   </form>
   {% if domains and '*' not in domains %}
-  <p class="hint">Instructor accounts are for school addresses ending in {{ domains | join(', ') }}.</p>
+  <p class="hint">For school addresses ending in {{ domains | join(', ') }}. Been here before? Use the same email.</p>
+  {% else %}
+  <p class="hint">Been here before? Use the same email.</p>
   {% endif %}
-  <p class="hint">Already made a sheet? Sign in with the same email you used then.</p>
-  <p class="hint">No other instructor or student can see your sheets. <a href="{{ url_for('privacy') }}">Privacy</a></p>
+  <p class="hint">No one else can see your sheets. <a href="{{ url_for('privacy') }}">Privacy</a></p>
 </div>
 {% endblock %}

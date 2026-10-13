@@ -173,7 +173,7 @@ def test_the_top_bar_has_a_home_button(prof):
     prof.create_sheet()
     page = raw(prof.get("/teach/"))
     assert re.search(r'<a href="/" class="icon-dock-btn dock-tip" data-tip="Home" aria-label="Home"', page)
-    for tip in ("My sign-up sheets", "New sign-up sheet", "Sign-ups at a glance", "How ranking works",
+    for tip in ("My sheets", "New sign-up sheet", "Sign-ups at a glance", "How ranking works",
                 "Appearance: contrast, colors, text size", "Settings and sign out"):
         assert re.search(f'data-tip="{re.escape(tip)}"[^>]*aria-label="{re.escape(tip)}"', page), tip
 

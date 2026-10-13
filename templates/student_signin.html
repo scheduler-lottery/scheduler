@@ -2,7 +2,7 @@
 {% block title %}{{ sheet.title }} — sign in{% endblock %}
 {% block content %}
 <div class="card center-card">
-  <p class="eyebrow">{{ sheet.title }}</p>
+  <p class="eyebrow eyebrow-sheet">{{ sheet.title }}</p>
   {% if not_ready %}
   <h1>Not open yet</h1>
   <div class="disclaimer disclaimer-yellow">
@@ -12,7 +12,7 @@
   {% else %}
   {% if sheet.bidding_open %}
   <h1>Welcome</h1>
-  <p class="subtitle">Type your name to rank the presentation days.</p>
+  <p class="subtitle">Rank the presentation days for this class. It takes a minute.</p>
   {% elif published %}
   <h1>The schedule is out</h1>
   <p class="subtitle">Sign in to see your presentation day.</p>
@@ -29,9 +29,9 @@
       {% if not sheet.bidding_open and not counts.roster %}
       Type the name you signed up with, then your PIN. (Only people who already signed up can sign in now.)
       {% elif counts.roster_with_email %}
-      Start typing and pick your name from the list, or type your school email address. We'll email that address a 6-digit code to confirm it's you.
+      Pick your name as you type, or type your school email. We'll email you a 6-digit code to confirm it's you.
       {% elif counts.roster %}
-      Start typing and pick your name from the list. The first time, you'll choose a PIN (a number only you know).
+      Pick your name as you type. The first time, you'll choose a PIN (a number only you know).
       {% else %}
       Type your first and last name. The first time, you'll choose a PIN (a number only you know).
       {% endif %}

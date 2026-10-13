@@ -109,7 +109,7 @@
       var auto = e.target.value === "auto";
       applyTheme(e.target.value);
       remember("theme", auto ? null : e.target.value);
-      if (!auto) saveForClass();
+      saveForClass(); // (Automatic too: the class is back on the standard look, which follows each device)
     } else if (e.target.name === "appearance-font") {
       applyFont(e.target.value);
       remember("font", e.target.value);

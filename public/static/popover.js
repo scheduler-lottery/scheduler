@@ -60,10 +60,12 @@
       // opens the window instead.
       if (trigger.tagName === "A") e.preventDefault();
       var wasOpen = el.classList.contains("open");
+      var from = trigger.closest(".modal-overlay.open") ? opener : null; // (opened from inside another window)
       opener = null;
       closeDropdowns();
       closeModals();
       if (!wasOpen) show(el, trigger);
+      if (from) opener = from;
       e.stopPropagation();
       return;
     }

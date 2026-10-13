@@ -3,7 +3,7 @@
   "short_name": "Scheduler",
   "description": "Presentation days: rank the days you can do, and get a fair schedule.",
   "scope": "/",
-  "display": "standalone",
+  "display": "browser",
   "theme_color": "#7d4317",
   "background_color": "#faf8f3",
   "icons": [

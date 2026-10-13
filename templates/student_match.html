@@ -2,7 +2,7 @@
 {% block title %}Find your name — {{ sheet.title }}{% endblock %}
 {% block content %}
 <div class="card center-card">
-  <p class="eyebrow">{{ sheet.title }}</p>
+  <p class="eyebrow eyebrow-sheet">{{ sheet.title }}</p>
   {% if suggestions %}
   <h1>Did you mean…?</h1>
   <p class="subtitle">We couldn't find “<bdi>{{ typed }}</bdi>” exactly on the class list. {{ 'Is this you?' if suggestions | length == 1 else 'Is one of these you?' }}</p>

@@ -81,8 +81,12 @@
   </svg>
   {%- endif -%}
 {%- endmacro %}
-{# The class or page you're on, beside the brand mark on phones. #}
-{% set topbar_title = sheet.title if (sheet is defined and sheet and sheet.title) else (nav_sheet.title if nav_sheet else self.title().split(' — ')[0]) %}
+{# Beside the brand mark on phones: the class a student is in (each class
+   page then leaves its own eyebrow out there, so it's said once). Other
+   pages' headings say what they are, so nothing is repeated beside it.
+   The sheet's name, for sharing its link. #}
+{% set share_title = sheet.title if (sheet is defined and sheet and sheet.title) else (nav_sheet.title if nav_sheet else '') %}
+{% set topbar_title = nav_sheet.title if nav_sheet else '' %}
 <header class="topbar">
   <div class="topbar-inner">
     <a class="brand" href="{{ brand_url }}" aria-label="{{ app_name }} home">
@@ -96,7 +100,7 @@
       <span class="brand-name">{{ app_name }}</span>
     </a>
 
-    <span class="topbar-title">{{ topbar_title }}</span>
+    {% if topbar_title %}<span class="topbar-title">{{ topbar_title }}</span>{% else %}<span class="topbar-title" aria-hidden="true"></span>{% endif %}
 
     {% set has_settings = nav_student or instructor %}
     {# Icon buttons, each named in a tip that shows right under it (on hover
@@ -123,13 +127,13 @@
         {% endif %}
       {% elif instructor %}
         {% if has_sheets %}
-        <a href="{{ url_for('teach.dashboard') }}" class="icon-dock-btn dock-tip" data-tip="My sign-up sheets" aria-label="My sign-up sheets"{% if request.endpoint == 'teach.dashboard' %} aria-current="page"{% endif %} data-dock="nav">
+        <a href="{{ url_for('teach.dashboard') }}" class="icon-dock-btn dock-tip" data-tip="My sheets" aria-label="My sheets"{% if request.endpoint == 'teach.dashboard' %} aria-current="page"{% endif %} data-dock="nav">
           {{ nav_icon('sheets') }}<span class="dock-word" aria-hidden="true">{{ nav_words.sheets }}</span>
         </a>
         {% else %}
         {# Nothing to list yet: greyed out, and a click says so. #}
         <div class="popover-wrap" data-dock="nav">
-          <button type="button" class="icon-dock-btn dock-tip dock-empty" data-tip="My sign-up sheets (none yet)" aria-label="My sign-up sheets (none yet)" data-popover-target="no-sheets" aria-haspopup="true" aria-expanded="false">
+          <button type="button" class="icon-dock-btn dock-tip dock-empty" data-tip="My sheets (none yet)" aria-label="My sheets (none yet)" data-popover-target="no-sheets" aria-haspopup="true" aria-expanded="false">
             {{ nav_icon('sheets') }}<span class="dock-word" aria-hidden="true">{{ nav_words.sheets }}</span>
           </button>
           <div id="no-sheets" class="popover-dropdown no-sheets-pop">
@@ -154,7 +158,7 @@
         {% if dock_share %}
         {# On one of a sheet's own pages: its link for students, in one tap
            (the share sheet on a phone or tablet) or one click (copied). #}
-        <button type="button" class="icon-dock-btn dock-tip" data-tip="Copy the link for students" aria-label="Copy or share the link for students" data-share-url="{{ dock_share }}" data-share-title="{{ topbar_title }}" data-dock="nav">
+        <button type="button" class="icon-dock-btn dock-tip" data-tip="Copy the link for students" aria-label="Copy or share the link for students" data-share-url="{{ dock_share }}" data-share-title="{{ share_title }}" data-share-text="Rank your presentation days for {{ share_title }}:" data-mark-shared="{{ url_for('teach.mark_shared', sid=request.view_args.sid) }}" data-dock="nav">
           {{ nav_icon('share') }}<span class="dock-word" aria-hidden="true">{{ nav_words.share }}</span>
         </button>
         {% endif %}
@@ -170,7 +174,7 @@
         {{ nav_icon('look') }}<span class="dock-word" aria-hidden="true">{{ nav_words.look }}</span>
       </button>
       {% if has_settings %}
-      <button type="button" class="icon-dock-btn dock-tip tip-end" data-tip="Settings and sign out" data-popover-target="settings" aria-haspopup="dialog" aria-expanded="false" aria-label="Settings and sign out">
+      <button type="button" class="icon-dock-btn dock-tip tip-end" data-tip="Settings and sign out" data-popover-target="account" aria-haspopup="dialog" aria-expanded="false" aria-label="Settings and sign out">
         {{ nav_icon('settings') }}<span class="dock-word" aria-hidden="true"><span class="word-settings">{{ nav_words.settings }}</span><span class="word-more">{{ nav_words.more }}</span></span>
       </button>
       {% endif %}
@@ -240,10 +244,10 @@
   <a class="tabbar-item" href="{{ url_for('teach.stats') }}" aria-label="Stats: sign-ups at a glance"{% if request.endpoint == 'teach.stats' %} aria-current="page"{% endif %}><span class="tabbar-icon">{{ nav_icon('stats') }}</span><span class="tabbar-label">{{ nav_words.stats }}</span></a>
   {% endif %}
   {% if dock_share %}
-  <button type="button" class="tabbar-item" aria-label="Share the link for students" data-share-url="{{ dock_share }}" data-share-title="{{ topbar_title }}"><span class="tabbar-icon">{{ nav_icon('share') }}</span><span class="tabbar-label" data-share-label>{{ nav_words.share }}</span></button>
+  <button type="button" class="tabbar-item" aria-label="Share the link for students" data-share-url="{{ dock_share }}" data-share-title="{{ share_title }}" data-share-text="Rank your presentation days for {{ share_title }}:" data-mark-shared="{{ url_for('teach.mark_shared', sid=request.view_args.sid) }}"><span class="tabbar-icon">{{ nav_icon('share') }}</span><span class="tabbar-label" data-share-label>{{ nav_words.share }}</span></button>
   {% endif %}
   {% endif %}
-  <button type="button" class="tabbar-item" aria-label="More: settings and sign out" data-popover-target="settings" aria-haspopup="dialog" aria-expanded="false"><span class="tabbar-icon">{{ nav_icon('settings') }}</span><span class="tabbar-label">{{ nav_words.more }}</span></button>
+  <button type="button" class="tabbar-item" aria-label="More: settings and sign out" data-popover-target="account" aria-haspopup="dialog" aria-expanded="false"><span class="tabbar-icon">{{ nav_icon('settings') }}</span><span class="tabbar-label">{{ nav_words.more }}</span></button>
 </nav>
 {% endif %}
 
@@ -258,7 +262,7 @@
   <span aria-hidden="true">·</span>
   <a href="{{ source_url }}{% if commit %}/tree/{{ commit }}{% endif %}" target="_blank" rel="noopener">Open source{% if commit %} (this version: {{ commit[:7] }}){% endif %}</a>
   {% endif %}
-  {% if not instructor and not nav_sheet %}
+  {% if not instructor and not nav_sheet and request.endpoint not in ('landing', 'teach.login', 'teach.verify', 'teach.resend') %}
   <span aria-hidden="true">·</span>
   <a href="{{ url_for('teach.login') }}">Instructors: get started or sign in</a>
   {% endif %}
@@ -348,12 +352,12 @@
 {% if has_settings %}
 {# Settings: who you're signed in as, where to go, and "Sign out", in a
    window laid out like Appearance. #}
-<div id="settings" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+<div id="account" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="settings-title">
   <div class="modal-dialog appearance-dialog settings-dialog">
     <button type="button" class="modal-close" data-popover-close aria-label="Close">
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
     </button>
-    <h2 id="settings-title" class="modal-title">Settings</h2>
+    <h2 id="settings-title" class="modal-title"><span class="window-settings">Settings</span><span class="window-more">More</span></h2>
 
     <section class="appearance-group" aria-labelledby="settings-who">
       <h3 class="group-label" id="settings-who">Signed in as</h3>
@@ -380,21 +384,21 @@
       <h3 class="group-label" id="settings-go">Go to</h3>
       <div class="settings-tiles">
         {% if nav_sheet and nav_student %}
-        <a class="settings-tile" href="{{ url_for('student.home', sid=nav_sheet.id) }}">
+        <a class="settings-tile" data-in-tabbar href="{{ url_for('student.home', sid=nav_sheet.id) }}">
           <span class="tile-art"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M4 11l8-6.5 8 6.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 9.5v10h11v-10" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M10 19.5v-5h4v5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></span>
           <span class="choice-name">This class's home page</span>
         </a>
         {% else %}
-        <a class="settings-tile" href="{{ url_for('teach.dashboard') if has_sheets else url_for('teach.new_sheet') }}">
+        <a class="settings-tile" data-in-tabbar href="{{ url_for('teach.dashboard') if has_sheets else url_for('teach.new_sheet') }}">
           <span class="tile-art"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="5" y="3.5" width="14" height="17" rx="2.2" stroke="currentColor" stroke-width="1.7"/><path d="M8.5 8h7M8.5 11.5h7M8.5 15h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
-          <span class="choice-name">{{ 'My sign-up sheets' if has_sheets else 'Make my first sheet' }}</span>
+          <span class="choice-name">{{ 'My sheets' if has_sheets else 'Make my first sheet' }}</span>
         </a>
         {% if has_sheets %}
-        <a class="settings-tile" href="{{ url_for('teach.stats') }}">
+        <a class="settings-tile" data-in-tabbar href="{{ url_for('teach.stats') }}">
           <span class="tile-art"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M4 20h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><rect x="5.5" y="11" width="3" height="6.5" rx="1" stroke="currentColor" stroke-width="1.6"/><rect x="10.5" y="6.5" width="3" height="11" rx="1" stroke="currentColor" stroke-width="1.6"/><rect x="15.5" y="9" width="3" height="8.5" rx="1" stroke="currentColor" stroke-width="1.6"/></svg></span>
           <span class="choice-name">Sign-ups at a glance</span>
         </a>
-        <a class="settings-tile" href="{{ url_for('teach.new_sheet') }}">
+        <a class="settings-tile" data-in-tabbar href="{{ url_for('teach.new_sheet') }}">
           <span class="tile-art"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg></span>
           <span class="choice-name">New sign-up sheet</span>
         </a>
